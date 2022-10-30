@@ -203,12 +203,12 @@ class DetectionSettings(BaseModel):
             path: Path = Field(
                 Path(gettempdir()) / "zm_ml/training"
             )
-
         pull_method: PullMethod = Field(default=PullMethod)
         debug: Debug = Field(default=Debug)
         annotation: Annotations = Field(default=Annotations)
         training: Training = Field(default=Training)
 
+    models: Dict = Field(default_factory=dict)
     import_zones: bool = Field(False)
     match_origin_zone: bool = Field(False)
     images: ImageSettings = Field(ImageSettings)

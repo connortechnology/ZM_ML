@@ -217,7 +217,7 @@ class ZMDB:
         # Get Monitor capturing FPS
         ms_select: select = select(
             [self.meta.tables["Monitor_Status"].c.CaptureFPS]
-        ).where(self.meta.tables["Monitors"].c.Id == mid)
+        ).where(self.meta.tables["Monitor_Status"].c.MonitorId == mid)
         select_result: CursorResult = self.connection.execute(ms_select)
         for mons_row in select_result:
             mon_fps = float(mons_row[0])

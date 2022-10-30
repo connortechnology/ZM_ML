@@ -1,3 +1,4 @@
+import json
 import logging
 import logging.handlers
 import sys
@@ -263,7 +264,14 @@ class ZMDetect:
         # TODO add support for changing model options
 
         url_end = ''
-        models = self.config.monitors.get(self.mid).models
+        models: Optional[Dict] = None
+        if self.mid in self.config.monitors:
+            models = self.config.monitors.get(self.mid).models
+        if not models:
+            if self.config.detection_settings.models:
+                models = self.config.detection_settings.models
+            else:
+                models = {"yolov4": {}}
         model_names = list[models.keys()]
         models_str = ",".join(model_names)
         url_end = 'group'
@@ -275,10 +283,10 @@ class ZMDetect:
         detections = {}
         for route in self.routes:
             if route.enabled:
-                logger.info(f"Sending image to {route.name}")
+                logger.info(f"MLAPI route is enabled! Sending image to {route.name}")
                 url = f"{route.host}:{route.port}/detect/group"
                 fields = {
-                    "model_hints": (None, models_str, "application/json"),
+                    "model_hints": (None, json.dumps(models_str), "application/json"),
                     "image": (image_name, image, "image/jpeg"),
                 }
                 multipart_data = requests_toolbelt.multipart.encoder.MultipartEncoder(

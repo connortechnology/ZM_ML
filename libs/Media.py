@@ -1,9 +1,21 @@
-from contextlib import contextmanager
 from decimal import Decimal
+import mmap
+import struct
+from _ctypes import Structure
+from collections import namedtuple
+from ctypes import c_long, c_uint64
+from decimal import Decimal
+from enum import IntEnum
 from logging import getLogger
+from sys import maxsize as sys_maxsize
 from time import sleep
-from typing import Optional, Set, Any
+from typing import Optional, IO
+from typing import Set, Tuple
 
+IS_64BITS = sys_maxsize > 2**32
+# This will compensate for 32/64 bit
+struct_time_stamp = r"l"
+TIMEVAL_SIZE: int = struct.calcsize(struct_time_stamp)
 import requests
 
 from main import get_global_config
@@ -170,8 +182,7 @@ class APIImagePipeLine:
                     and isinstance(response, requests.Response)
                     and response.status_code == 200
                 ):
-                    img = bytearray(response.content)
-                    return self._process_frame(image=img)
+                    return self._process_frame(image=bytearray(response.content))
                 # response code not 200 or no response
                 else:
                     resp_msg = ""
@@ -217,7 +228,7 @@ class APIImagePipeLine:
         image: bytearray = None,
         skip: bool = False,
         end: bool = False,
-    ):
+    ) -> Tuple[Optional[bytearray], Optional[str]]:
         """Process the frame, increment counters, and return the image if there is one"""
         lp = f"{LP}processed_frame:"
         self.last_fid_read = self.current_frame
@@ -287,94 +298,26 @@ class APIImagePipeLine:
         return len(self._processed_fids) or 0
 
 
-class SHMImagePipeLine:
-    offset = None
-
-
 class ZMUImagePipeLine:
     offset = None
-
-
-
-#! /usr/bin/python3
-import mmap
-import struct
-from _ctypes import Structure, Union as CUnion
-from ctypes import c_long, c_uint64, c_int64, sizeof
-from argparse import ArgumentParser
-from collections import namedtuple
-from typing import Optional, IO, Union
-from sys import maxsize as sys_maxsize
-
-from sqlalchemy import MetaData
-from sqlalchemy.engine import CursorResult
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.future import Engine, create_engine, Connection, select
-
-
-IS_64BITS = sys_maxsize > 2**32
-IMAGE_BUFFER_COUNT: int = 5
-MID: Union[str, int] = "1"
-WIDTH: int = 0
-HEIGHT: int = 0
-COLORSPACE: int = 4
-DB_ENGINE: Optional[Engine] = None
-ENV: str = ".env"
-# This will compensate for 32/64 bit
-struct_time_stamp = r"l"
-TIMEVAL_SIZE: int = struct.calcsize(struct_time_stamp)
 
 
 # Dynamically create timeval Struct to calculate size / 32 == 8 bytes // 64 == 16 bytes
 def create_timeval():
     tv_usec = c_long
-    # print("BEFORE CHECKING 64 BITNESS -> tv_usec: ", tv_usec)
+    # logger.debug("BEFORE CHECKING 64 BITNESS -> tv_usec: ", tv_usec)
     if IS_64BITS:
-        # print("64 BITS is TRUE")
+        # logger.debug("64 BITS is TRUE")
         tv_usec = c_uint64
-    # print("AFTER CHECKING 64 BITNESS -> tv_usec: ", tv_usec)
+    # logger.debug("AFTER CHECKING 64 BITNESS -> tv_usec: ", tv_usec)
     _fields = (("tv_sec", c_long,), ("tv_usec", tv_usec,))
     _class = type("timeval", (Structure,), {"_fields_": _fields})
     return _class()
-
 # timeval = create_timeval()
 # TIMEVAL_SIZE = sizeof(timeval)
 
 
-def _db_create() -> Engine:
-    lp: str = "ZM-DB:"
-    db_config = {
-        "dbuser": "zmuser",
-        "dbpassword": "zmpass",
-        "dbhost": "localhost",
-        "dbname": "zm",
-        "driver": "mysql+mysqlconnector",
-    }
-    connection_str = (
-        f"{db_config['driver']}://{db_config['dbuser']}"
-        f":{db_config['dbpassword']}@{db_config['dbhost']}"
-        f"/{db_config['dbname']}"
-    )
-
-    try:
-        engine: Optional[Engine] = create_engine(connection_str, pool_recycle=3600)
-        meta: MetaData = MetaData(engine)
-        # New reflection method, only reflect the Events and Monitors tables
-        meta.reflect(only=["Monitors"])
-        conn: Optional[Connection] = engine.connect()
-    except SQLAlchemyError as e:
-        conn = None
-        engine = None
-        print(f"DB configs - {connection_str}")
-        print(f"Could not connect to DB, message was: {e}")
-    else:
-
-
-        conn.close()
-        return engine
-
 def zm_version(ver: str, minx: Optional[int] = None, patchx: Optional[int] = None) -> int:
-
     maj, min, patch = "", "", ""
     x = ver.split(".")
     x_len = len(x)
@@ -384,7 +327,7 @@ def zm_version(ver: str, minx: Optional[int] = None, patchx: Optional[int] = Non
     elif x_len == 3:
         maj, min, patch = x
     else:
-        print("come and fix me!?!?!")
+        logger.debug("come and fix me!?!?!")
     maj = int(maj)
     min = int(min)
     patch = int(patch)
@@ -403,36 +346,35 @@ def zm_version(ver: str, minx: Optional[int] = None, patchx: Optional[int] = Non
             return 0
 
 
-class ZMMemory:
+class ZMAlarmStateChanges(IntEnum):
+    STATE_IDLE = 0
+    STATE_PREALARM = 1
+    STATE_ALARM = 2
+    STATE_ALERT = 3
+    STATE_TAPE = 4
+    ACTION_GET = 5
+    ACTION_SET = 6
+    ACTION_RELOAD = 7
+    ACTION_SUSPEND = 8
+    ACTION_RESUME = 9
+    TRIGGER_CANCEL = 10
+    TRIGGER_ON = 11
+    TRIGGER_OFF = 12
+
+
+class SHMImagePipeLine:
     def __init__(
-        self, path: Optional[str] = None, mid: Optional[Union[int, str]] = None
+        self
     ):
-        global MID
-        if mid:
-            MID = mid
-        if path is None:
-            path = f"/dev/shm"
+        global g
+        g = get_global_config()
+        path = "/dev/shm"
 
-        self.alarm_state_stages = {
-            "STATE_IDLE": 0,
-            "STATE_PREALARM": 1,
-            "STATE_ALARM": 2,
-            "STATE_ALERT": 3,
-            "STATE_TAPE": 4,
-            "ACTION_GET": 5,
-            "ACTION_SET": 6,
-            "ACTION_RELOAD": 7,
-            "ACTION_SUSPEND": 8,
-            "ACTION_RESUME": 9,
-            "TRIGGER_CANCEL": 10,
-            "TRIGGER_ON": 11,
-            "TRIGGER_OFF": 12,
-        }
-        self.fhandle: Optional[IO] = None
-        self.mhandle: Optional[mmap.mmap] = None
+        self.alarm_state_stages = ZMAlarmStateChanges
+        self.file_handle: Optional[IO] = None
+        self.mem_handle: Optional[mmap.mmap] = None
 
-        self.fname = f"{path}/zm.mmap.{mid}"
-        self.reload()
+        self.file_name = f"{path}/zm.mmap.{g.mid}"
 
     def reload(self):
         """Reloads monitor information. Call after you get
@@ -444,17 +386,17 @@ class ZMMemory:
         # close file handler
         self.close()
         # open file handler in read binary mode
-        self.fhandle = open(self.fname, "r+b")
+        self.file_handle = open(self.file_name, "r+b")
         # geta rough size of the memory consumed by object (doesn't follow links or weak ref)
         from os.path import getsize
-        sz = getsize(self.fname)
+        sz = getsize(self.file_name)
         if not sz:
-            raise ValueError(f"Invalid size: {sz} of {self.fname}")
+            raise ValueError(f"Invalid size: {sz} of {self.file_name}")
 
-        self.mhandle = mmap.mmap(self.fhandle.fileno(), 0, access=mmap.ACCESS_READ)
+        self.mem_handle = mmap.mmap(self.file_handle.fileno(), 0, access=mmap.ACCESS_READ)
         self.sd = None
         self.td = None
-        self._read()
+        self.get_image()
 
     def is_valid(self):
         """True if the memory handle is valid
@@ -463,21 +405,22 @@ class ZMMemory:
             bool: True if memory handle is valid
         """
         try:
-            d = self._read()
+            d = self.get_image()
             return not d["shared_data"]["size"] == 0
         except Exception as e:
-            print(f"ERROR!!!! =-> Memory: {e}")
+            logger.debug(f"ERROR!!!! =-> Memory: {e}")
             return False
 
-    def _read(self):
-        self.mhandle.seek(0)  # goto beginning of file
-        SharedData = namedtuple(
-            "SharedData",
-            "size last_write_index last_read_index state capture_fps analysis_fps last_event_id action brightness "
-            "hue colour contrast alarm_x alarm_y valid capturing analysing recording signal format imagesize "
-            "last_frame_score audio_frequency audio_channels startup_time zmc_heartbeat_time last_write_time "
-            "last_read_time last_viewed_time control_state alarm_cause video_fifo_path audio_fifo_path",
-        )
+    def get_image(self):
+        self.mem_handle.seek(0)  # goto beginning of file
+        # import proper class that contains mmap data
+        from shm_data import Dot3725
+        x = Dot3725()
+        sd_model = x.shared_data
+        td_model = x.trigger_data
+        vs_model = x.video_store_data
+
+        SharedData = sd_model.named_tuple
 
         # old_shared_data = r"IIIIQIiiiiii????IIQQQ256s256s"
         # I = uint32 - i = int32 == 4 bytes ; int
@@ -487,150 +430,95 @@ class ZMMemory:
         # s = char[] == n bytes ; string
         # B = uint8 - b = int8 == 1 byte; char
 
-        # shared data bytes is now aligned as of commit 590697b (1.37.19) -> SEE
+        # shared data bytes is now aligned at 776 as of commit 590697b (1.37.19) -> SEE
         # https://github.com/ZoneMinder/zoneminder/commit/590697bd807ab9a74d605122ef0be4a094db9605
         # Before it was 776 for 64bit and 772 for 32 bit
-        ZM_VER = "1.37.19"
 
-        shared_data_bytes = 776  # bytes in SharedData
-        struct_shared_data = r"I 2i I 2d Q I 6i 6B 4I 5L 256s 256s 64s 64s"  # July 2022
 
-        TriggerData = namedtuple(
-            "TriggerData",
-            "size trigger_state trigger_score padding trigger_cause trigger_text trigger_showtext",
-        )
-        struct_trigger_data = r"IIII32s256s256s"
-        trigger_data_bytes = 560  # bytes in TriggerData - 32/64 bit SAME
+        TriggerData = td_model.named_tuple
 
-        VideoStoreData = namedtuple(
-            "VideoStoreData",
-            "size padding current_event event_file recording",
-        )
-        struct_video_store = r"IIQ4096sq"
-        video_store_bytes = 4120 if IS_64BITS else 4116  # bytes in VideoStoreData for 64bit / 32bit = 4116 - July 2022
-
-        TimeStampData = namedtuple(
-            "TimeStampData",
-            "timeval",
-        )
-        # struct_time_stamp = r"lq" if IS_64BITS else r"ll"
-        # time_stamp_bytes = TIMEVAL_SIZE  # bytes in TimeStampData
+        VideoStoreData = vs_model.named_tuple
 
         s = SharedData._make(
-            struct.unpack(struct_shared_data, self.mhandle.read(shared_data_bytes))
+            struct.unpack(sd_model.struct_str, self.mem_handle.read(sd_model.bytes))
         )
         t = TriggerData._make(
-            struct.unpack(struct_trigger_data, self.mhandle.read(trigger_data_bytes))
+            struct.unpack(td_model.struct_str, self.mem_handle.read(td_model.bytes))
         )
         v = VideoStoreData._make(
-            struct.unpack(struct_video_store, self.mhandle.read(video_store_bytes))
+            struct.unpack(vs_model.struct_str, self.mem_handle.read(vs_model.bytes))
         )
 
-        ts = TimeStampData._make(
-            struct.unpack(struct_time_stamp, self.mhandle.read(TIMEVAL_SIZE))
-        )
         written_images = s.last_write_index + 1
-
-        self.images_offset = self.mhandle.tell()
-        print(f"{written_images = } - {self.images_offset = }")
-        print(f"\nSharedData = {s}\n")
-        # grab available images? - make context manager to yield images form the ring buffer?
-        sh_img_data = self.mhandle.read(written_images * s.imagesize)
+        timestamp_offset = s.size + t.size + v.size
+        images_offset = timestamp_offset + g.mon_image_buffer_count * TIMEVAL_SIZE
+        # align to nearest 64 bytes
+        images_offset = images_offset + 64 - (images_offset % 64)
+        # images_offset = images_offset + s.imagesize * s.last_write_index
+        # Read timestamp data
+        ts_str = " "
+        if s.last_write_index <= g.mon_image_buffer_count >= 0:
+            for loop in range(written_images):
+                ts_str = f"image{loop + 1}_ts"
+        self.mem_handle.seek(timestamp_offset)
+        TimeStampData = namedtuple(
+            "TimeStampData",
+            ts_str,
+        )
+        ts = TimeStampData._make(
+            struct.unpack(struct_time_stamp, self.mem_handle.read(g.mon_image_buffer_count * TIMEVAL_SIZE))
+        )
+        logger.debug(f"{written_images = } - {images_offset = }")
+        logger.debug(f"\nSharedData = {s}\n")
+        self.mem_handle.seek(images_offset)
+        # only need 1 image, not the recent buffers worth
+        image_buffer = self.mem_handle.read(int(s.imagesize))
+        # image_buffer = self.mem_handle.read(written_images * s.imagesize)
         import cv2
         import numpy as np
-        print(f"Converting images into cv2")
-        self.shared_images = []
+        img: Optional[np.ndarray] = None
+        logger.debug(f"Converting images into ndarray")
         # grab total image buffer
-        image_buffer = self.mhandle.read(s.imagesize * written_images)
         # convert bytes to numpy array to cv2 images
-        for i in range(written_images):
-            img = np.frombuffer(image_buffer[i * s.imagesize : (i + 1) * s.imagesize], dtype=np.uint8)
-            if img.size == s.imagesize:
-                print(f"Image index {i} is of the correct size, reshaping and converting")
-                img = img.reshape((HEIGHT, WIDTH, COLORSPACE))
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                self.shared_images.append(img)
-            else:
-                print(f"Invalid image size: {img.size}")
+        # for i in range(written_images):
+            # img = np.frombuffer(image_buffer[i * s.imagesize : (i + 1) * s.imagesize], dtype=np.uint8)
+        img = np.frombuffer(image_buffer, dtype=np.uint8)
+        if img.size == s.imagesize:
+            logger.debug(f"Image is of the correct size, reshaping and converting")
+            img = img.reshape((g.mon_height, g.mon_width, g.mon_colorspace))
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        else:
+            logger.debug(f"Invalid image size: {img.size}")
         # show images
-        for img in self.shared_images:
-            cv2.imshow("img", img)
-            cv2.waitKey(2000)
-
         self.sd = s._asdict()
         self.td = t._asdict()
         self.vsd = v._asdict()
         self.tsd = ts._asdict()
 
-        self.sd["alarm_cause"] = self.sd["alarm_cause"].split(b"\0", 1)[0].decode()
-        self.sd["control_state"] = self.sd["control_state"].split(b"\0", 1)[0].decode()
-        self.td["trigger_cause"] = self.td["trigger_cause"].split(b"\0", 1)[0].decode()
-        self.td["trigger_text"] = self.td["trigger_text"].split(b"\0", 1)[0].decode()
-        self.td["trigger_showtext"] = (
-            self.td["trigger_showtext"].split(b"\0", 1)[0].decode()
-        )
+        self.sd["video_fifo_path"] = self.sd["video_fifo_path"].decode("utf-8").strip("\x00")
+        self.sd["audio_fifo_path"] = self.sd["audio_fifo_path"].decode("utf-8").strip("\x00")
+        self.sd["janus_pin"] = self.sd["janus_pin"].decode("utf-8").strip("\x00")
+        self.vsd["event_file"] = self.vsd["event_file"].decode("utf-8").strip("\x00")
+        self.td["trigger_text"] = self.td["trigger_text"].decode("utf-8").strip("\x00")
+        self.td["trigger_showtext"] = self.td["trigger_showtext"].decode("utf-8").strip("\x00")
+        self.td["trigger_cause"] = self.td["trigger_cause"].decode("utf-8").strip("\x00")
+        self.sd["alarm_cause"] = self.sd["alarm_cause"].decode("utf-8").strip("\x00")
+        self.sd["control_state"] = self.sd["control_state"].decode("utf-8").strip("\x00")
+
         return {
             "shared_data": self.sd,
             "trigger_data": self.td,
             "video_store_data": self.vsd,
             "time_stamp_data": self.tsd,
-            "shared_images": self.shared_images,
+            "image": img,
         }
 
     def close(self):
         """Closes the handle"""
         try:
-            if self.mhandle:
-                self.mhandle.close()
-            if self.fhandle:
-                self.fhandle.close()
+            if self.mem_handle:
+                self.mem_handle.close()
+            if self.file_handle:
+                self.file_handle.close()
         except Exception:
             pass
-
-
-def parse_cli_args():
-    """Parse CLI arguments into a dict"""
-    global MID, ENV
-    ap = ArgumentParser()
-
-    ap.add_argument(
-        "-m",
-        "--mid",
-        "--monitor-id",
-        type=int,
-        dest="mid",
-        help="monitor id - For use by the PERL script (Automatically found)",
-    )
-    ap.add_argument(
-        "-e",
-        "--env-file",
-        dest="ENV",
-        help="environment file to parse"
-    )
-    args, u = ap.parse_known_args()
-    args = vars(args)
-    print(f"{args = }")
-    if not args.get("mid"):
-        print(f'MONITOR ID not passed via CLI, using {MID}')
-    else:
-        MID = args["mid"]
-        print(f'MONITOR ID passed via CLI, using {MID}')
-    if not args.get("ENV"):
-        print(f'ENVIRONMENT FILE not passed via CLI, using {ENV}')
-    else:
-        ENV = args["ENV"]
-        print(f'ENVIRONMENT FILE passed via CLI, using {ENV}')
-    if not args:
-        print(f"ERROR-FATAL -> no args!")
-        exit(1)
-    return args
-
-
-if __name__ == "__main__":
-    print('script started')
-    args = parse_cli_args()
-    print(f"About to do DB stuff")
-    engine = _db_create()
-    print(f"{TIMEVAL_SIZE = }")
-    print('doing shm stuff')
-    zm_mem = ZMMemory(mid=MID)
