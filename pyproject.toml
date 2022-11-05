@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "zoneminder_mlapi_client_baudneo"
+version = "0.0.1"
+dependencies = [
+    "requests",
+    "requests-toolbelt",
+    "sqlalchemy",
+    "pydantic",
+    "numpy",
+    'urllib3; python_version=="3.9"',
+]
+authors = [
+  { name="baudneo", email="baudneo@protonmail.com" },
+]
+description = "A client that allows to interact with the ZoneMinder Machine Learning API"
+readme = "README.md"
+requires-python = ">=3.7,<3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/baudneo/zm_ml"
+"Bug Tracker" = "https://github.com/baudneo/zm_ml/issues"

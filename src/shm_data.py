@@ -10,18 +10,6 @@ class SharedData(BaseModel):
     struct_str: str = None
 
 
-class TriggerData(BaseModel):
-    bytes: int = None
-    named_tuple: namedtuple = None
-    struct_str: str = None
-
-
-class VideoStoreData(BaseModel):
-    bytes: int = None
-    named_tuple: namedtuple = None
-    struct_str: str = None
-
-
 class Dot3725:
     """Data Structure for 1.37.25"""
     def __init__(self):
@@ -35,7 +23,7 @@ class Dot3725:
                 "last_read_time last_viewed_time control_state alarm_cause video_fifo_path audio_fifo_path, janus_pin",),
             struct_str=r"I 2i I 2d Q I 6i 6B 4I 5L 256s 256s 64s 64s 64s"
         )
-        self.trigger_data: TriggerData = TriggerData(
+        self.trigger_data: SharedData = SharedData(
             bytes=560,
             named_tuple=namedtuple(
                 "TriggerData",
@@ -43,7 +31,7 @@ class Dot3725:
                 ),
             struct_str=r"4I 32s 256s 256s"
         )
-        self.video_store_data: VideoStoreData = VideoStoreData(
+        self.video_store_data: SharedData = SharedData(
             bytes=4120,
             named_tuple=namedtuple(
                 "VideoStoreData",

@@ -11,9 +11,9 @@ from sqlalchemy import MetaData, create_engine, select
 from sqlalchemy.engine import Engine, Connection, CursorResult
 from sqlalchemy.exc import SQLAlchemyError
 
-from main import get_global_config
+from src.main import get_global_config
 
-logger = getLogger("zm_ml")
+logger = getLogger("src")
 lp = "ZMDB:"
 
 

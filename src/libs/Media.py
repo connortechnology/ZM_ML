@@ -1,4 +1,3 @@
-from decimal import Decimal
 import mmap
 import struct
 from _ctypes import Structure
@@ -12,16 +11,17 @@ from time import sleep
 from typing import Optional, IO
 from typing import Set, Tuple
 
-IS_64BITS = sys_maxsize > 2**32
+import requests
+
+from config import APIPullMethod
+from src.main import get_global_config
+
+IS_64BITS = sys_maxsize > 2 ** 32
 # This will compensate for 32/64 bit
 struct_time_stamp = r"l"
 TIMEVAL_SIZE: int = struct.calcsize(struct_time_stamp)
-import requests
 
-from main import get_global_config
-from models.config import APIPullMethod
-
-logger = getLogger("zm_ml")
+logger = getLogger("src")
 LP = "API Images:"
 g = get_global_config()
 
@@ -33,8 +33,8 @@ class APIImagePipeLine:
             yield self.get_image()
 
     def __init__(
-        self,
-        options: APIPullMethod,
+            self,
+            options: APIPullMethod,
     ):
         lp = f"images:init:"
         if not options:
@@ -136,9 +136,9 @@ class APIImagePipeLine:
             logger.debug(f"{lp} checking snapshot ids enabled!")
             # Check if event data available or get data for snapshot fid comparison
             if (not g.past_event) and (
-                (self.frames_processed >= 0 and self.last_snapshot_id >= 0)
-                and self.frames_processed % self.options.snapshot_frame_skip
-                == 0  # Only run every <x> frames
+                    (self.frames_processed >= 0 and self.last_snapshot_id >= 0)
+                    and self.frames_processed % self.options.snapshot_frame_skip
+                    == 0  # Only run every <x> frames
             ):
                 _grab_event_data(msg=f"grabbing data for snapshot comparisons...")
                 if curr_snapshot := int(g.Event.get("MaxScoreFrameId", 0)):
@@ -178,9 +178,9 @@ class APIImagePipeLine:
                 )
                 response = g.api.make_request(fid_url)
                 if (
-                    response
-                    and isinstance(response, requests.Response)
-                    and response.status_code == 200
+                        response
+                        and isinstance(response, requests.Response)
+                        and response.status_code == 200
                 ):
                     return self._process_frame(image=bytearray(response.content))
                 # response code not 200 or no response
@@ -224,10 +224,10 @@ class APIImagePipeLine:
         return self.frames_processed < self.total_max_frames
 
     def _process_frame(
-        self,
-        image: bytearray = None,
-        skip: bool = False,
-        end: bool = False,
+            self,
+            image: bytearray = None,
+            skip: bool = False,
+            end: bool = False,
     ) -> Tuple[Optional[bytearray], Optional[str]]:
         """Process the frame, increment counters, and return the image if there is one"""
         lp = f"{LP}processed_frame:"
@@ -313,6 +313,8 @@ def create_timeval():
     _fields = (("tv_sec", c_long,), ("tv_usec", tv_usec,))
     _class = type("timeval", (Structure,), {"_fields_": _fields})
     return _class()
+
+
 # timeval = create_timeval()
 # TIMEVAL_SIZE = sizeof(timeval)
 
@@ -364,7 +366,7 @@ class ZMAlarmStateChanges(IntEnum):
 
 class SHMImagePipeLine:
     def __init__(
-        self
+            self
     ):
         global g
         g = get_global_config()
@@ -414,7 +416,7 @@ class SHMImagePipeLine:
     def get_image(self):
         self.mem_handle.seek(0)  # goto beginning of file
         # import proper class that contains mmap data
-        from shm_data import Dot3725
+        from src.shm_data import Dot3725
         x = Dot3725()
         sd_model = x.shared_data
         td_model = x.trigger_data
@@ -433,7 +435,6 @@ class SHMImagePipeLine:
         # shared data bytes is now aligned at 776 as of commit 590697b (1.37.19) -> SEE
         # https://github.com/ZoneMinder/zoneminder/commit/590697bd807ab9a74d605122ef0be4a094db9605
         # Before it was 776 for 64bit and 772 for 32 bit
-
 
         TriggerData = td_model.named_tuple
 
@@ -481,7 +482,7 @@ class SHMImagePipeLine:
         # grab total image buffer
         # convert bytes to numpy array to cv2 images
         # for i in range(written_images):
-            # img = np.frombuffer(image_buffer[i * s.imagesize : (i + 1) * s.imagesize], dtype=np.uint8)
+        # img = np.frombuffer(image_buffer[i * s.imagesize : (i + 1) * s.imagesize], dtype=np.uint8)
         img = np.frombuffer(image_buffer, dtype=np.uint8)
         if img.size == s.imagesize:
             logger.debug(f"Image is of the correct size, reshaping and converting")

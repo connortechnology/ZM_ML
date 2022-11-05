@@ -19,7 +19,7 @@ from libs.api import ZMApi
 from models.config import ConfigFileModel, MLAPIRoute
 from zmdb import ZMDB
 
-logger = logging.getLogger("zm_ml")
+logger = logging.getLogger("src")
 formatter = logging.Formatter(
     "%(asctime)s.%(msecs)04d %(name)s[%(process)s] %(levelname)s %(module)s:%(lineno)d -> %(message)s",
     "%m/%d/%y %H:%M:%S",
@@ -186,6 +186,7 @@ class ZMDetect:
     def check_detections(self, detections: Dict) -> bool:
         """Check if any detections were successful"""
         _ret = False
+
         for route_name, detection in detections.items():
             if detection["success"]:
                 _ret = True
@@ -329,11 +330,6 @@ class ZMDetect:
         if inc_file := substitutions.get("IncludeFile"):
             inc_file = Path(inc_file)
             # If not absolute, assume relative to the config file
-            if not inc_file.is_absolute():
-                logger.debug(
-                    f"model_config_parser: Relative path to IncludeFile: {inc_file}"
-                )
-                inc_file = cfg_file.parent / inc_file
             if inc_file.is_file():
                 inc_vars = yaml.safe_load(inc_file.read_text())
                 logger.debug(

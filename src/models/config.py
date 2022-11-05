@@ -4,9 +4,9 @@ from typing import Dict, List, Tuple, Pattern, Union, Any
 
 from pydantic import BaseModel, Field, AnyUrl, validator
 
-from models.validators import percentage_and_pixels_validator
+from validators import percentage_and_pixels_validator
 
-logger = logging.getLogger("zm_ml")
+logger = logging.getLogger("src")
 
 
 class DefaultEnabled(BaseModel):
@@ -26,7 +26,7 @@ class LoggingSettings(BaseModel):
     console: bool = Field(True)
     integrate_zm: bool = Field(False)
     dir: Path = Field(Path("/var/log/zm"))
-    file_name: str = Field(default="zm_ml.log")
+    file_name: str = Field(default="src.log")
     user: str = Field(default="www-data")
     group: str = Field(default="www-data")
 
@@ -201,7 +201,7 @@ class DetectionSettings(BaseModel):
 
             enabled: bool = Field(False)
             path: Path = Field(
-                Path(gettempdir()) / "zm_ml/training"
+                Path(gettempdir()) / "src/training"
             )
         pull_method: PullMethod = Field(default=PullMethod)
         debug: Debug = Field(default=Debug)

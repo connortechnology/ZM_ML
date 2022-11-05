@@ -29,12 +29,12 @@ from requests.exceptions import HTTPError
 from urllib3 import disable_warnings
 from urllib3.exceptions import InsecureRequestWarning
 
-from main import GlobalConfig, get_global_config
-from models.config import ZMAPISettings
+from src.main import GlobalConfig, get_global_config
+from config import ZMAPISettings
 
 GRACE: int = 60 * 5  # 5 mins
 lp: str = "ZM API:"
-logger = getLogger('zm_ml')
+logger = getLogger('src')
 g: Optional[GlobalConfig] = None
 
 
@@ -93,7 +93,7 @@ class ZMApi:
                     logger.debug(
                         f"{lp} '{_name}' @ {_points} is being added...",
                     )
-                    from models.config import MonitorZones
+                    from config import MonitorZones
 
                     mid_cfg = g.config.monitors.get(g.mid)
                     if mid_cfg:
