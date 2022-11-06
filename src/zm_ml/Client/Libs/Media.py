@@ -5,37 +5,36 @@ from collections import namedtuple
 from ctypes import c_long, c_uint64
 from decimal import Decimal
 from enum import IntEnum
-from logging import getLogger
+import logging
 from sys import maxsize as sys_maxsize
 from time import sleep
-from typing import Optional, IO
+from typing import Optional, IO, Union
 from typing import Set, Tuple
 
 import requests
 
-from config import APIPullMethod
-from src.main import get_global_config
+from ..Models.config import APIPullMethod
 
-IS_64BITS = sys_maxsize > 2 ** 32
+IS_64BITS = sys_maxsize > 2**32
 # This will compensate for 32/64 bit
 struct_time_stamp = r"l"
 TIMEVAL_SIZE: int = struct.calcsize(struct_time_stamp)
 
-logger = getLogger("src")
+logger = logging.getLogger("ZM-ML")
 LP = "API Images:"
-g = get_global_config()
+g = None
 
 
 class APIImagePipeLine:
-    def __iter__(self):
-        logger.debug(f"{LP} __iter__ called on {__class__.__name__}")
-        if self.more():
-            yield self.get_image()
-
     def __init__(
-            self,
-            options: APIPullMethod,
+        self,
+        options: APIPullMethod,
     ):
+        global g
+        from ..main import get_global_config
+
+        g = get_global_config()
+
         lp = f"images:init:"
         if not options:
             raise ValueError(f"{lp} no stream options provided!")
@@ -56,21 +55,13 @@ class APIImagePipeLine:
         self.current_snapshot: int = 0
         self.last_fid_read: int = 0
         self.last_snapshot_id: int = 0
-        self.fps = int(Decimal(g.mon_fps).quantize(Decimal("1")))
-        self.buffer_pre_count = g.mon_pre
-        self.buffer_post_count = g.mon_post
+        mon_fps = g.mon_fps or 1
+        self.fps = int(Decimal(mon_fps).quantize(Decimal("1")))
+        self.buffer_pre_count = g.mon_pre or 0
+        self.buffer_post_count = g.mon_post or 1
 
         self.max_attempts = options.attempts
-        self.max_attempts_delay = options.attempt_delay
-
-        #  Check if delay is configured 
-        if not g.past_event and (delay := options.delay):
-            if delay:
-                logger.debug(
-                    f"{LP} a delay is configured, this only applies one time - waiting for {delay} "
-                    f"second(s) before starting"
-                )
-                sleep(delay)
+        self.max_attempts_delay = options.delay
 
         # Alarm frame is always the first frame, pre count buffer length+1 for alarm frame
         self.current_frame = self.buffer_pre_count + 1
@@ -80,14 +71,20 @@ class APIImagePipeLine:
         )
         # We don't know how long an event will be so set an upper limit of at least
         # pre- + post-buffers calculated as seconds because we are pulling 1 FPS
-        self.total_max_frames = max(10, self.total_min_frames)
+        self.total_max_frames = min(self.options.max_frames, self.total_min_frames)
 
     def get_image(self):
+        if self.frames_processed >= self.total_max_frames:
+            logger.error(
+                f"max_frames ({self.total_max_frames}) has been reached, stopping!"
+            )
+            return False, None
+
         def _grab_event_data(msg: Optional[str] = None):
             """Calls global API make_request method to get event data"""
+            if msg:
+                logger.debug(f"{LP}read>event_data: {msg}")
             if not self.event_ended:
-                if msg:
-                    logger.debug(f"{LP}read>event_data: {msg}")
                 try:
                     g.Event, g.Monitor, g.Frame = g.api.get_all_event_data(g.eid)
                 except Exception as e:
@@ -97,27 +94,26 @@ class APIImagePipeLine:
                     self.event_tot_frames = int(g.Event.get("Frames", 0))
                     self.has_event_ended = g.Event.get("EndDateTime", "")
                     logger.debug(
-                        f"{lp} grabbed event data from ZM API for event '{g.eid}' -- event total Frames(g.Event['fr"
-                        f"ames']): {self.event_tot_frames} -- EndDateTime: {self.has_event_ended} -- "
-                        f"has event ended: {self.event_ended} -- {len(g.Frame) = } -- "
-                        f"g.Frame and g.Event['Frame'] equal: {len(g.Frame) == self.event_tot_frames}"
+                        f"{lp} grabbed event data from ZM API for event '{g.eid}' -- event total Frames: "
+                        f"{self.event_tot_frames} -- EndDateTime: {self.has_event_ended} -- "
+                        f"has event ended: {self.event_ended}"
                     )
-                    if self.event_ended:
-                        logger.debug(
-                            f"DBG => THIS EVENT HAS AN EndDateTime ({self.has_event_ended}) checking max_frames "
-                            f"and modifying if needed"
-                        )
-                        new_max = int(self.event_tot_frames / self.fps)
-                        logger.debug(
-                            f"DEBUG>>>{LP} current max: {self.total_max_frames} new_max: {new_max} (event_total_frames"
-                            f"[{self.event_tot_frames}] / fps[{self.fps}])"
-                        )
-                        if new_max > self.total_max_frames:
-                            logger.debug(
-                                f"{lp} max_frames ({self.total_max_frames}) is lower than current calculations, "
-                                f"setting to {new_max}"
-                            )
-                            self.total_max_frames = new_max
+                    # if self.event_ended:
+                    #     logger.debug(
+                    #         f"DBG => THIS EVENT HAS AN EndDateTime ({self.has_event_ended}) checking max_frames "
+                    #         f"and modifying if needed"
+                    #     )
+                    #     new_max = int(self.event_tot_frames / self.fps)
+                    #     logger.debug(
+                    #         f"DEBUG>>>{LP} current max: {self.total_max_frames} new_max: {new_max} (event_total_frames"
+                    #         f"[{self.event_tot_frames}] / fps[{self.fps}])"
+                    #     )
+                    #     if new_max > self.total_max_frames:
+                    #         logger.debug(
+                    #             f"{lp} max_frames ({self.total_max_frames}) is lower than current calculations, "
+                    #             f"setting to {new_max}"
+                    #         )
+                    #         self.total_max_frames = new_max
             else:
                 logger.debug(f"{lp} event has ended, no need to grab event data")
 
@@ -134,11 +130,14 @@ class APIImagePipeLine:
         curr_snapshot = None
         if self.options.check_snapshots:
             logger.debug(f"{lp} checking snapshot ids enabled!")
+            logger.debug(f"{g.past_event = } || {self.options.snapshot_frame_skip = }")
             # Check if event data available or get data for snapshot fid comparison
-            if (not g.past_event) and (
-                    (self.frames_processed >= 0 and self.last_snapshot_id >= 0)
-                    and self.frames_processed % self.options.snapshot_frame_skip
-                    == 0  # Only run every <x> frames
+            if (
+                (not g.past_event)
+                and (self.frames_processed > 0)
+                and (
+                    self.frames_processed % self.options.snapshot_frame_skip == 0
+                )  # Only run every <x> frames
             ):
                 _grab_event_data(msg=f"grabbing data for snapshot comparisons...")
                 if curr_snapshot := int(g.Event.get("MaxScoreFrameId", 0)):
@@ -153,8 +152,8 @@ class APIImagePipeLine:
                     logger.warning(
                         f"{lp} Event: {g.eid} - No Snapshot Frame ID found in ZM API? -> {g.Event = }",
                     )
-            if not g.Event:
-                _grab_event_data(msg="NO EVENT DATA!!! grabbing from API...")
+            # if not g.Event:
+            #     _grab_event_data(msg="NO EVENT DATA!!! grabbing from API...")
 
             #  Check if we have already processed this frame ID 
             if self.current_frame in self._processed_fids:
@@ -164,6 +163,7 @@ class APIImagePipeLine:
                 )
                 return self._process_frame(skip=True)
             #  SET URL TO GRAB IMAGE FROM 
+            logger.debug(f"Calculated Frame ID as {self.current_frame}")
             fid_url = f"{g.api.get_portalbase()}/index.php?view=image&eid={g.eid}&fid={self.current_frame}"
 
             if g.past_event:
@@ -178,11 +178,12 @@ class APIImagePipeLine:
                 )
                 response = g.api.make_request(fid_url)
                 if (
-                        response
-                        and isinstance(response, requests.Response)
-                        and response.status_code == 200
+                    response
+                    and isinstance(response, requests.Response)
+                    and response.status_code == 200
                 ):
-                    return self._process_frame(image=bytearray(response.content))
+                    logger.debug(f"ZM API returned an Image")
+                    return self._process_frame(image=response.content)
                 # response code not 200 or no response
                 else:
                     resp_msg = ""
@@ -210,25 +211,24 @@ class APIImagePipeLine:
                         )
                     if not g.past_event and (image_grab_attempt < self.max_attempts):
                         logger.debug(
-                            f"{lp} sleeping for {self.options.attempt_delay} second(s)"
+                            f"{lp} sleeping for {self.options.delay} second(s)"
                         )
-                        sleep(self.options.attempt_delay)
+                        sleep(self.options.delay)
 
             return self._process_frame(skip=True)
 
-    def more(self) -> bool:
-        logger.debug(
-            f"{LP} DBG => more() called {self.frames_processed = } -- {self.total_max_frames = } -- "
-            f"{self.frames_processed < self.total_max_frames = }"
-        )
+    def is_image_stream_active(self) -> bool:
+        _cont = self.frames_processed < self.total_max_frames
+        if not _cont:
+            logger.warning(f"Image stream exhausted. Tried: {self.frames_processed} - Max: {self.total_max_frames}")
         return self.frames_processed < self.total_max_frames
 
     def _process_frame(
-            self,
-            image: bytearray = None,
-            skip: bool = False,
-            end: bool = False,
-    ) -> Tuple[Optional[bytearray], Optional[str]]:
+        self,
+        image: bytes = None,
+        skip: bool = False,
+        end: bool = False,
+    ) -> Tuple[Optional[Union[bytes, bool]], Optional[str]]:
         """Process the frame, increment counters, and return the image if there is one"""
         lp = f"{LP}processed_frame:"
         self.last_fid_read = self.current_frame
@@ -244,7 +244,9 @@ class APIImagePipeLine:
                 if end
                 else f"max_frames ({self.total_max_frames}) has been reached, stopping!"
             )
+            self._max_frames = 1
             logger.error(f"{lp} {_msg}")
+            return False, None
         elif not end:
             self.current_frame = self.current_frame + self.fps
             logger.debug(
@@ -310,7 +312,16 @@ def create_timeval():
         # logger.debug("64 BITS is TRUE")
         tv_usec = c_uint64
     # logger.debug("AFTER CHECKING 64 BITNESS -> tv_usec: ", tv_usec)
-    _fields = (("tv_sec", c_long,), ("tv_usec", tv_usec,))
+    _fields = (
+        (
+            "tv_sec",
+            c_long,
+        ),
+        (
+            "tv_usec",
+            tv_usec,
+        ),
+    )
     _class = type("timeval", (Structure,), {"_fields_": _fields})
     return _class()
 
@@ -319,7 +330,9 @@ def create_timeval():
 # TIMEVAL_SIZE = sizeof(timeval)
 
 
-def zm_version(ver: str, minx: Optional[int] = None, patchx: Optional[int] = None) -> int:
+def zm_version(
+    ver: str, minx: Optional[int] = None, patchx: Optional[int] = None
+) -> int:
     maj, min, patch = "", "", ""
     x = ver.split(".")
     x_len = len(x)
@@ -365,10 +378,10 @@ class ZMAlarmStateChanges(IntEnum):
 
 
 class SHMImagePipeLine:
-    def __init__(
-            self
-    ):
+    def __init__(self):
         global g
+        from ..main import get_global_config
+
         g = get_global_config()
         path = "/dev/shm"
 
@@ -391,11 +404,14 @@ class SHMImagePipeLine:
         self.file_handle = open(self.file_name, "r+b")
         # geta rough size of the memory consumed by object (doesn't follow links or weak ref)
         from os.path import getsize
+
         sz = getsize(self.file_name)
         if not sz:
             raise ValueError(f"Invalid size: {sz} of {self.file_name}")
 
-        self.mem_handle = mmap.mmap(self.file_handle.fileno(), 0, access=mmap.ACCESS_READ)
+        self.mem_handle = mmap.mmap(
+            self.file_handle.fileno(), 0, access=mmap.ACCESS_READ
+        )
         self.sd = None
         self.td = None
         self.get_image()
@@ -416,7 +432,8 @@ class SHMImagePipeLine:
     def get_image(self):
         self.mem_handle.seek(0)  # goto beginning of file
         # import proper class that contains mmap data
-        from src.shm_data import Dot3725
+        from shm_data import Dot3725
+
         x = Dot3725()
         sd_model = x.shared_data
         td_model = x.trigger_data
@@ -467,7 +484,10 @@ class SHMImagePipeLine:
             ts_str,
         )
         ts = TimeStampData._make(
-            struct.unpack(struct_time_stamp, self.mem_handle.read(g.mon_image_buffer_count * TIMEVAL_SIZE))
+            struct.unpack(
+                struct_time_stamp,
+                self.mem_handle.read(g.mon_image_buffer_count * TIMEVAL_SIZE),
+            )
         )
         logger.debug(f"{written_images = } - {images_offset = }")
         logger.debug(f"\nSharedData = {s}\n")
@@ -477,6 +497,7 @@ class SHMImagePipeLine:
         # image_buffer = self.mem_handle.read(written_images * s.imagesize)
         import cv2
         import numpy as np
+
         img: Optional[np.ndarray] = None
         logger.debug(f"Converting images into ndarray")
         # grab total image buffer
@@ -496,15 +517,25 @@ class SHMImagePipeLine:
         self.vsd = v._asdict()
         self.tsd = ts._asdict()
 
-        self.sd["video_fifo_path"] = self.sd["video_fifo_path"].decode("utf-8").strip("\x00")
-        self.sd["audio_fifo_path"] = self.sd["audio_fifo_path"].decode("utf-8").strip("\x00")
+        self.sd["video_fifo_path"] = (
+            self.sd["video_fifo_path"].decode("utf-8").strip("\x00")
+        )
+        self.sd["audio_fifo_path"] = (
+            self.sd["audio_fifo_path"].decode("utf-8").strip("\x00")
+        )
         self.sd["janus_pin"] = self.sd["janus_pin"].decode("utf-8").strip("\x00")
         self.vsd["event_file"] = self.vsd["event_file"].decode("utf-8").strip("\x00")
         self.td["trigger_text"] = self.td["trigger_text"].decode("utf-8").strip("\x00")
-        self.td["trigger_showtext"] = self.td["trigger_showtext"].decode("utf-8").strip("\x00")
-        self.td["trigger_cause"] = self.td["trigger_cause"].decode("utf-8").strip("\x00")
+        self.td["trigger_showtext"] = (
+            self.td["trigger_showtext"].decode("utf-8").strip("\x00")
+        )
+        self.td["trigger_cause"] = (
+            self.td["trigger_cause"].decode("utf-8").strip("\x00")
+        )
         self.sd["alarm_cause"] = self.sd["alarm_cause"].decode("utf-8").strip("\x00")
-        self.sd["control_state"] = self.sd["control_state"].decode("utf-8").strip("\x00")
+        self.sd["control_state"] = (
+            self.sd["control_state"].decode("utf-8").strip("\x00")
+        )
 
         return {
             "shared_data": self.sd,

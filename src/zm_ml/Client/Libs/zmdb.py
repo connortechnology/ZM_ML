@@ -2,19 +2,18 @@ import glob
 from configparser import ConfigParser
 from datetime import datetime
 from decimal import Decimal
-from logging import getLogger
+import logging
 from pathlib import Path
 from typing import Optional, Union, Tuple
 
-from pydantic import Field, AnyUrl, validator, BaseSettings
+from pydantic import Field, AnyUrl, validator, BaseSettings, IPvAnyAddress
 from sqlalchemy import MetaData, create_engine, select
 from sqlalchemy.engine import Engine, Connection, CursorResult
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.main import get_global_config
-
-logger = getLogger("src")
+logger = logging.getLogger("ZM-ML")
 lp = "ZMDB:"
+g = None
 
 
 def _rel_path(eid: int, mid: int, scheme: str, dt: Optional[datetime] = None) -> str:
@@ -39,10 +38,11 @@ class ZMEnvVars(BaseSettings):
         None, description="Path to ZoneMinder config files", env="CONF_PATH"
     )
 
-    @validator("conf_path", pre=True, always=True)
-    def conf_path(cls, v):
+    @validator("conf_path", pre=True, always=True, allow_reuse=True)
+    def validate_conf_path(cls, v):
         if not v:
             v = "/etc/zm"
+        assert isinstance(v, (Path, str))
         v = Path(v)
         if not v.is_dir():
             raise ValueError(f"Config path {v} does not exist")
@@ -50,14 +50,19 @@ class ZMEnvVars(BaseSettings):
 
     class Config:
         env_prefix = "ZM_ML_"
+        check_fields = False
 
 
 class DBEnvVars(ZMEnvVars):
-    host: AnyUrl = Field(None, description="Database host", env="DBHOST")
+    host: Union[IPvAnyAddress, AnyUrl] = Field(None, description="Database host", env="DBHOST")
     user: str = Field(None, description="Database user", env="DBUSER")
-    password: str = Field(None, description="Database password", env="DBPASSWORD")
+    password: str = Field(None, description="Database password", env="DBPASS")
     name: str = Field(None, description="Database name", env="DBNAME")
     driver: str = Field("mysql+pymysql", description="Database driver", env="DBDRIVER")
+
+    class Config:
+        check_fields = False
+    #     allow_reuse = True
 
 
 class ZMDB:
@@ -68,6 +73,12 @@ class ZMDB:
     db_config: DBEnvVars
 
     def __init__(self):
+        global g
+        from ..main import get_global_config
+        g = get_global_config()
+        self.engine = None
+        self.connection = None
+        self.meta = None
         self._db_create()
 
     def _db_create(self):
@@ -75,6 +86,7 @@ class ZMDB:
         # From @pliablepixels SQLAlchemy work - all credit goes to them.
         lp: str = "ZM-DB:"
         db_config = DBEnvVars()
+        # TODO: grab data from ZM DB about logging stuff?
         files = []
         conf_path = db_config.conf_path
         if conf_path.is_dir():
@@ -88,7 +100,8 @@ class ZMDB:
                     with open(f, "r") as zm_conf_file:
                         # This adds [zm_root] section to the head of each zm .conf.d config file,
                         # not physically only in memory
-                        config_file.read_string(f"[zm_root]\n{zm_conf_file.read()}")
+                        _data = zm_conf_file.read()
+                        config_file.read_string(f"[zm_root]\n{_data}")
             except Exception as exc:
                 logger.error(f"{lp} error opening ZoneMinder .conf files! -> {files}")
             else:
@@ -108,20 +121,21 @@ class ZMDB:
                 f":{db_config.password}@{db_config.host}"
                 f"/{db_config.name}"
             )
-
-            try:
-                self._check_conn()
-            except SQLAlchemyError as e:
-                logger.error(f"DB configs - {self.connection_str}")
-                logger.error(f"Could not connect to DB, message was: {e}")
+        self._check_conn()
 
     def _check_conn(self):
-        if not self.engine:
-            self.engine = create_engine(self.connection_str, pool_recycle=3600)
-        if not self.connection:
-            self.connection = self.engine.connect()
-        if not self.meta:
-            self._refresh_meta()
+        try:
+            if not self.engine:
+                self.engine = create_engine(self.connection_str, pool_recycle=3600)
+            if not self.connection:
+                self.connection = self.engine.connect()
+            if not self.meta:
+                self._refresh_meta()
+        except SQLAlchemyError as e:
+            logger.error(f"DB configs - {self.connection_str}")
+            logger.error(f"Could not connect to DB, message was: {e}")
+        except Exception as e:
+            logger.error(f"Exception while checking DB connection on _check_conn() -> {e}")
 
     def _refresh_meta(self):
         self.meta = MetaData(self.engine)
@@ -130,7 +144,6 @@ class ZMDB:
     def grab_all(self, eid: int) -> Tuple[int, str, int, int, Decimal, str, str]:
         #         return mid, mon_name, mon_post, mon_pre, mon_fps, reason, event_path
         self._check_conn()
-        g = get_global_config()
         mid: Optional[Union[str, int]] = None
         mon_name: Optional[str] = None
         mon_post: Optional[Union[str, int]] = None
@@ -316,8 +329,10 @@ class ZMDB:
             # Get Monitor 'ImageBufferCount'
         buffer_select: select = select(self.meta.tables["Monitors"].c.ImageBufferCount).where(
             self.meta.tables["Monitors"].c.Id == g.mid)
-        width_select: select = select(self.meta.tables["Monitors"].c.Width).where(self.meta.tables["Monitors"].c.Id == g.mid)
-        height_select: select = select(self.meta.tables["Monitors"].c.Height).where(self.meta.tables["Monitors"].c.Id == g.mid)
+        width_select: select = select(self.meta.tables["Monitors"].c.Width).where(
+            self.meta.tables["Monitors"].c.Id == g.mid)
+        height_select: select = select(self.meta.tables["Monitors"].c.Height).where(
+            self.meta.tables["Monitors"].c.Id == g.mid)
         colours_select: select = select(self.meta.tables["Monitors"].c.Colours).where(
             self.meta.tables["Monitors"].c.Id == g.mid)
         buffer_result: CursorResult = self.connection.execute(buffer_select)

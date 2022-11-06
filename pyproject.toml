@@ -4,28 +4,49 @@ build-backend = "setuptools.build_meta"
 
 
 [project]
-name = "zoneminder_mlapi_client_baudneo"
-version = "0.0.1"
+name = "zm_ml"
+version = "0.0.1a0"
 dependencies = [
     "requests",
     "requests-toolbelt",
     "sqlalchemy",
     "pydantic",
-    "numpy",
-    'urllib3; python_version=="3.9"',
+    'urllib3',
+    'pymysql',
+    'pyYAML',
+    'shapely',
+
 ]
+
 authors = [
   { name="baudneo", email="baudneo@protonmail.com" },
 ]
-description = "A client that allows to interact with the ZoneMinder Machine Learning API"
+#description = "A Client that allows to interact with the ZoneMinder Machine Learning API"
 readme = "README.md"
-requires-python = ">=3.7,<3.10"
+Description-Content-Type = "text/markdown; charset=UTF-8; variant=GFM"
+
+requires-python = ">=3.7"
+keywords = ["zoneminder", "object detection", "machine learning"]
+
 classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
+    "Intended Audience :: End Users/Desktop",
     "Operating System :: OS Independent",
+    "Natural Language :: English",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Multimedia :: Graphics :: Capture",
+    "Topic :: Multimedia :: Video :: Capture",
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/baudneo/zm_ml"
+"Repository" = "https://github.com/baudneo/zm_ml"
 "Bug Tracker" = "https://github.com/baudneo/zm_ml/issues"
+
+[tool.setuptools.packages.find]
+# All the following settings are optional:
+where = ["src"]  # ["."] by default
+#include = ["mypackage*"]  # ["*"] by default
+exclude = ["tests*", "examples*", "data*", "configs*"]  # empty by default
+#namespaces = false  # true by default

@@ -21,7 +21,7 @@ Important:
 
 import datetime
 import re
-from logging import getLogger
+import logging
 from typing import Dict, List, Optional, Union
 
 from requests import Response, Session
@@ -29,13 +29,12 @@ from requests.exceptions import HTTPError
 from urllib3 import disable_warnings
 from urllib3.exceptions import InsecureRequestWarning
 
-from src.main import GlobalConfig, get_global_config
-from config import ZMAPISettings
+from ..Models.config import ZMAPISettings
 
 GRACE: int = 60 * 5  # 5 mins
 lp: str = "ZM API:"
-logger = getLogger('src')
-g: Optional[GlobalConfig] = None
+logger = logging.getLogger('zm_ml')
+g = None
 
 
 def version_tuple(version_str: str) -> tuple:
@@ -121,11 +120,12 @@ class ZMApi:
     def __init__(
         self, options: ZMAPISettings
     ):
+        global g
+        from ..main import get_global_config
+        g = get_global_config()
         lp: str = "ZM API:init:"
         if options is None:
             raise ValueError(f"{lp} options is None")
-        global g
-        g = get_global_config()
         self.options = options
         self.api_url: Optional[str] = options.api
 
