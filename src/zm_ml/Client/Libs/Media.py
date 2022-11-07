@@ -20,7 +20,7 @@ IS_64BITS = sys_maxsize > 2**32
 struct_time_stamp = r"l"
 TIMEVAL_SIZE: int = struct.calcsize(struct_time_stamp)
 
-logger = logging.getLogger("ZM-ML")
+logger = logging.getLogger("ML-Client")
 LP = "API Images:"
 g = None
 

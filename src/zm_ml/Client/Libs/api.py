@@ -261,7 +261,7 @@ class ZMApi:
             )
             login_data = {
                 "user": self.options.user,
-                "pass": self.options.password,
+                "pass": self.options.password.get_secret_value(),
             }
         else:
             logger.debug(

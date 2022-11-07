@@ -1,6 +1,8 @@
 ###
 data/
 data/*
+configs/secrets.yml
+configs/zm_ml.yml
 
 ### Example user template
 # IntelliJ project files

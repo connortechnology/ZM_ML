@@ -3,15 +3,14 @@ from configparser import ConfigParser
 from datetime import datetime
 from decimal import Decimal
 import logging
-from pathlib import Path
 from typing import Optional, Union, Tuple
 
-from pydantic import Field, AnyUrl, validator, BaseSettings, IPvAnyAddress
 from sqlalchemy import MetaData, create_engine, select
 from sqlalchemy.engine import Engine, Connection, CursorResult
 from sqlalchemy.exc import SQLAlchemyError
 
-logger = logging.getLogger("ZM-ML")
+
+logger = logging.getLogger("ML-Client")
 lp = "ZMDB:"
 g = None
 
@@ -33,44 +32,11 @@ def _rel_path(eid: int, mid: int, scheme: str, dt: Optional[datetime] = None) ->
     return ret_val
 
 
-class ZMEnvVars(BaseSettings):
-    conf_path: Path = Field(
-        None, description="Path to ZoneMinder config files", env="CONF_PATH"
-    )
-
-    @validator("conf_path", pre=True, always=True, allow_reuse=True)
-    def validate_conf_path(cls, v):
-        if not v:
-            v = "/etc/zm"
-        assert isinstance(v, (Path, str))
-        v = Path(v)
-        if not v.is_dir():
-            raise ValueError(f"Config path {v} does not exist")
-        return v
-
-    class Config:
-        env_prefix = "ZM_ML_"
-        check_fields = False
-
-
-class DBEnvVars(ZMEnvVars):
-    host: Union[IPvAnyAddress, AnyUrl] = Field(None, description="Database host", env="DBHOST")
-    user: str = Field(None, description="Database user", env="DBUSER")
-    password: str = Field(None, description="Database password", env="DBPASS")
-    name: str = Field(None, description="Database name", env="DBNAME")
-    driver: str = Field("mysql+pymysql", description="Database driver", env="DBDRIVER")
-
-    class Config:
-        check_fields = False
-    #     allow_reuse = True
-
-
 class ZMDB:
     engine: Optional[Engine]
     connection: Optional[Connection]
     meta: Optional[MetaData]
     connection_str: str
-    db_config: DBEnvVars
 
     def __init__(self):
         global g
@@ -85,7 +51,9 @@ class ZMDB:
         """A private function to interface with the ZoneMinder DataBase"""
         # From @pliablepixels SQLAlchemy work - all credit goes to them.
         lp: str = "ZM-DB:"
-        db_config = DBEnvVars()
+        from ..main import ZMEnvVars, get_global_config
+        g = get_global_config()
+        db_config: ZMEnvVars = g.Environment
         # TODO: grab data from ZM DB about logging stuff?
         files = []
         conf_path = db_config.conf_path
@@ -106,20 +74,20 @@ class ZMDB:
                 logger.error(f"{lp} error opening ZoneMinder .conf files! -> {files}")
             else:
                 conf_data = config_file["zm_root"]
-                if not db_config.user:
-                    db_config.user = conf_data["ZM_DB_USER"]
-                if not db_config.password:
-                    db_config.password = conf_data["ZM_DB_PASS"]
-                if not db_config.host:
-                    db_config.host = conf_data["ZM_DB_HOST"]
-                if not db_config.name:
-                    db_config.name = conf_data["ZM_DB_NAME"]
+                if not db_config.db_user:
+                    db_config.db_user = conf_data["ZM_DB_USER"]
+                if not db_config.db_password:
+                    db_config.db_password = conf_data["ZM_DB_PASS"]
+                if not db_config.db_host:
+                    db_config.db_host = conf_data["ZM_DB_HOST"]
+                if not db_config.db_name:
+                    db_config.db_name = conf_data["ZM_DB_NAME"]
                 self.db_config = db_config
 
             self.connection_str = (
-                f"{db_config.driver}://{db_config.user}"
-                f":{db_config.password}@{db_config.host}"
-                f"/{db_config.name}"
+                f"{db_config.db_driver}://{db_config.db_user}"
+                f":{db_config.db_password.get_secret_value()}@{db_config.db_host}"
+                f"/{db_config.db_name}"
             )
         self._check_conn()
 

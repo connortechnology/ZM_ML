@@ -7,7 +7,7 @@ from decimal import Decimal
 from hashlib import new
 from pathlib import Path
 from time import perf_counter
-from typing import Union, Dict, Optional, List
+from typing import Union, Dict, Optional, List, Any
 
 __version__ = "0.0.1"
 __version_type__ = "dev"
@@ -15,16 +15,16 @@ __version_type__ = "dev"
 import requests
 import requests_toolbelt
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, BaseSettings, validator, IPvAnyAddress, AnyUrl, SecretStr
 import cv2
 import numpy as np
 
-from Media import APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine
-from api import ZMApi
-from config import ConfigFileModel, MLAPIRoute, Testing
-from zmdb import ZMDB
+from .Libs.Media import APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine
+from .Libs.api import ZMApi
+from .Models.config import ConfigFileModel, MLAPIRoute, Testing
+from .Libs.zmdb import ZMDB
 
-logger = logging.getLogger("ZM-ML")
+logger = logging.getLogger("ML-Client")
 formatter = logging.Formatter(
     "%(asctime)s.%(msecs)04d %(name)s[%(process)s] %(levelname)s %(module)s:%(lineno)d -> %(message)s",
     "%m/%d/%y %H:%M:%S",
@@ -33,6 +33,63 @@ stream_handler = logging.StreamHandler(stream=sys.stdout)
 stream_handler.setFormatter(formatter)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(stream_handler)
+
+
+class ZMEnvVars(BaseSettings):
+    conf_path: Path = Field(
+        None, description="Path to ZoneMinder config files", env="CONF_PATH"
+    )
+    config_file: Path = Field(None, description="Absolute Path to config file", env="CONFIG_FILE")
+    db_host: Union[IPvAnyAddress, AnyUrl] = Field("localhost", description="Database host", env="DBHOST")
+    db_user: str = Field("zmuser", description="Database user", env="DBUSER")
+    db_password: SecretStr = Field("zmpass", description="Database password", env="DBPASS")
+    db_name: str = Field("zm", description="Database name", env="DBNAME")
+    db_driver: str = Field("mysql+pymysql", description="Database driver", env="DBDRIVER")
+
+    end: Optional[Any] = Field(None, description="End of config", repr=False, dump=False)
+
+    @validator("db_host", pre=True)
+    def _validate_db_host(cls, v):
+        if v:
+            if v == 'localhost':
+                v = "127.0.0.1"
+        return v
+
+    def __init__(self, **values: Any):
+        logger.info("Loading environment variables")
+        super().__init__(**values)
+        logger.info("Environment variables loaded")
+        logger.info(f"Environment variables: {self}")
+
+    @validator("end", always=True)
+    def end_of_env(cls, v):
+        logger.info("Validating 'end' of ZMEnvVars")
+        return v
+
+    @validator("conf_path", pre=True, always=True, allow_reuse=True)
+    def validate_conf_path(cls, v):
+        if not v:
+            v = "/etc/zm"
+        assert isinstance(v, (Path, str))
+        v = Path(v)
+        if not v.is_dir():
+            raise ValueError(f"Config path {v} does not exist")
+        return v
+
+    @validator("config_file", pre=True)
+    def val_config_file(cls, v, values):
+        if v:
+            if isinstance(v, str):
+                v = Path(v)
+            assert isinstance(v, Path)
+        return v
+
+    class Config:
+        env_prefix = "ZM_ML_"
+        check_fields = False
+
+
+ENV_VARS= ZMEnvVars()
 
 
 class GlobalConfig(BaseModel):
@@ -60,6 +117,8 @@ class GlobalConfig(BaseModel):
     mon_colorspace: int = None
     frame_buffer: list = Field(default_factory=list)
 
+    Environment: ZMEnvVars = Field(ENV_VARS)
+
     class Config:
         arbitrary_types_allowed = True
 
@@ -71,27 +130,79 @@ def get_global_config() -> GlobalConfig:
     return g
 
 
-class ZMClient:
-    config_file: Union[str, Path]
-    config_hash: str
-    raw_config: str
-    parsed_cfg: Dict
-    config: ConfigFileModel
-    api: ZMApi
-    db: ZMDB
-    routes: List[MLAPIRoute]
-    mid: int
-    eid: int
-    image_pipeline: Union[APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine]
+def check_imports():
+    logger.debug("Checking for required imports")
+    try:
+        import cv2
+        maj, min, patch = "", "", ""
+        x = cv2.__version__.split(".")
+        x_len = len(x)
+        if x_len <= 2:
+            maj, min = x
+            patch = "0"
+        elif x_len == 3:
+            maj, min, patch = x
+            patch = patch.replace("-dev", "") or "0"
+        else:
+            logger.error(f"come and fix me again, cv2.__version__.split(\".\")={x}")
 
-    def get_hash(
-        self,
-        read_chunk_size: int = 65536,
-        algorithm: str = "sha256",
+        cv_ver = int(maj + min + patch)
+        if cv_ver < 420:
+            logger.error(
+                f"You are using OpenCV version {cv2.__version__} which does not support CUDA for DNNs. A minimum"
+                f" of 4.2 is required. See https://medium.com/@baudneo/install-zoneminder-1-36-x-6dfab7d7afe7"
+                f" on how to compile and install openCV 4.5.4 with CUDA"
+            )
+        del cv2
+        try:
+            import cv2.dnn
+        except ImportError:
+            logger.error(
+                f"OpenCV does not have DNN support! If you installed from pip you need to install opencv-contrib-python"
+            )
+            raise
+    except ImportError as e:
+        logger.error(f"Missing OpenCV 4.2+ (4.5.4+ recommended): {e}")
+        raise
+
+    try:
+        import numpy as np
+    except ImportError as e:
+        logger.error(f"Missing numpy: {e}")
+        raise
+    logger.debug("All imports found")
+
+
+def _cfg2path(config_file: Union[str, Path]) -> Path:
+    if config_file:
+        if isinstance(config_file, (str, Path)):
+            config_file = Path(config_file)
+        else:
+            raise TypeError(f"config_file must be a string or Path, not {type(config_file)}")
+        return Path(config_file)
+
+
+class CFGHash:
+    previous_hash: str
+    config_file: Path
+    hash: str
+    def __init__(self, config_file: Union[str, Path, None] = None):
+        self.previous_hash = ""
+        self.hash = ""
+        if config_file:
+            self.config_file = _cfg2path(config_file)
+        self.compute()
+
+    def compute(
+            self,
+            input_file: Optional[Union[str, Path]] = None,
+            read_chunk_size: int = 65536,
+            algorithm: str = "sha256",
     ):
         """Hash a file using hashlib.
         Default algorithm is SHA-256
 
+        :param input_file: File to hash
         :param int read_chunk_size: Maximum number of bytes to be read from the file
          at once. Default is 65536 bytes or 64KB
         :param str algorithm: The hash algorithm name to use. For example, 'md5',
@@ -101,7 +212,11 @@ class ZMClient:
 
         lp: str = "conf:hash:"
         checksum = new(algorithm)  # Raises appropriate exceptions.
-        self.config_hash = ""
+        self.previous_hash = str(self.hash)
+        self.hash = ""
+        if input_file:
+            self.config_file = _cfg2path(input_file)
+
         try:
             with self.config_file.open("rb") as f:
                 for chunk in iter(lambda: f.read(read_chunk_size), b""):
@@ -113,30 +228,50 @@ class ZMClient:
             )
             raise
         else:
-            self.config_hash = checksum.hexdigest()
+            self.hash = checksum.hexdigest()
             logger.debug(
-                f"{lp} the {algorithm} hex digest for file '{self.config_file.as_posix()}' -> {self.config_hash}"
+                f"{lp} the {algorithm} hex digest for file '{self.config_file.as_posix()}' -> {self.hash}"
             )
-        return self.config_hash
+        return self.hash
 
-    @staticmethod
-    def compare_hash(hash1: str, hash2: str) -> bool:
-        """Compare two hashes"""
-        if hash1 == hash2:
+    def compare(self, compare_hash: str) -> bool:
+        if self.hash == compare_hash:
             return True
-        else:
-            return False
+        return False
+
+    def __repr__(self):
+        return f"{self.hash}"
+
+    def __str__(self):
+        return f"{self.hash}"
+
+
+class ZMClient:
+    config_file: Union[str, Path]
+    config_hash: CFGHash
+    raw_config: str
+    parsed_cfg: Dict
+    config: ConfigFileModel
+    api: ZMApi
+    db: ZMDB
+    routes: List[MLAPIRoute]
+    mid: int
+    eid: int
+    image_pipeline: Union[APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine]
 
     def __init__(self, cfg_file: Union[str, Path]):
         """
         Initialize the ZMDetect class
         :param cfg_file: Path to the config file
         """
+
         if isinstance(cfg_file, (str, Path)):
             g.config_file = self.config_file = Path(cfg_file)
         else:
             raise TypeError("cfg_file must be a str or Path object")
         g.config = self.config = self.load_config()
+        self.config_hash = CFGHash(self.config_file)
+
         self.sort_routes()
 
         from concurrent.futures import ThreadPoolExecutor
@@ -149,6 +284,7 @@ class ZMClient:
             futures.append(executor.submit(self.init_api))
         for future in futures:
             future.result()
+        del tpe
 
     def sort_routes(self):
         self.routes = self.config.mlapi.routes
@@ -178,9 +314,18 @@ class ZMClient:
         elif self.config.logging.console is True:
             pass
         else:
+            logger.info(f"Removing console log output!")
             logger.removeHandler(stream_handler)
         file_from_config = self.config.logging.dir / self.config.logging.file_name
-        if os.access(self.config.logging.dir.as_posix(), os.W_OK):
+        # Get user and group id and name
+        import getpass
+        import grp
+
+        uname = getpass.getuser()
+        gname = grp.getgrgid(os.getgid()).gr_name
+        uid = os.getuid()
+        gid = os.getgid()
+        if os.access(file_from_config, os.W_OK):
             file_from_config.touch(exist_ok=True)
             # ZM /var/log/zm is handled by logrotate
             file_handler = logging.FileHandler(file_from_config.as_posix(), mode="a")
@@ -189,22 +334,16 @@ class ZMClient:
             # )
             file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
-            # Get user and group id and name
-            import getpass
-            import grp
 
-            uname = getpass.getuser()
-            gname = grp.getgrgid(os.getgid()).gr_name
-            uid = os.getuid()
-            gid = os.getgid()
             logger.debug(
                 f"Logging to file '{file_from_config}' with user: "
-                f"{uid} [{uname}] group: {gid} [{gname}] enabled"
+                f"{uid} [{uname}] group: {gid} [{gname}]"
             )
         else:
             logger.warning(
                 f"Logging to file {file_from_config} disabled due to permissions"
-                f" [No write access to {file_from_config.parent.as_posix()}]"
+                f" - No write access to {file_from_config.as_posix()} for user: "
+                f"{uid} [{uname}] group: {gid} [{gname}]"
             )
         logger.info(f"Logging initialized...")
 
@@ -244,18 +383,8 @@ class ZMClient:
         logger.info(f"Running detection for event {eid}, obtaining monitor info...")
         self.get_db_data(eid)
         # get monitor and event info
-        monitor_data = self.api.get_monitor_data(mid)
-        event_data, event_monitor_data, frame_data = self.api.get_all_event_data(eid)
-        # logger.debug(
-        #     f"event_monitor_data and monitor_data SAME? :>> {event_monitor_data == monitor_data}"
-        # )
-        # logger.debug(f"Monitor data: {monitor_data}")
-        # logger.debug(f"Event data: {event_data}")
-        # if event_monitor_data != monitor_data:
-        #     logger.debug(f"Event monitor data: {event_monitor_data}")
-        # logger.debug(f"Frame data: {frame_data}")
-        # get image and image name
-        # FIXME: did __iter__ work?
+        g.Monitor = self.api.get_monitor_data(mid)
+        g.Event, event_monitor_data, g.Frame = self.api.get_all_event_data(eid)
         # init Image Pipeline
         how = self.config.detection_settings.images.pull_method
         logger.debug(f"DBG>>> Image pull methods: {how}")
@@ -288,7 +417,6 @@ class ZMClient:
 
         final_detections: dict = {}
         detections: dict = {}
-        _routes = {}
         _start_all = perf_counter()
         # for image, image_name in self.image_pipeline:
         i = 0
@@ -331,20 +459,6 @@ class ZMClient:
                         "Accept": "application/json",
                         "Content-Type": multipart_data.content_type,
                     }
-                    if route.name in _routes:
-                        url = _routes[route.name]
-                    else:
-                        # regex for http(s)://
-                        import re
-
-                        if re.match(r"^(http(s)?)://", url):
-                            logger.debug(f"route.host is valid with schema: {url}")
-                        else:
-                            logger.debug(
-                                f"No http(s):// in route.host, assuming http://"
-                            )
-                            url = f"http://{url}"
-                        _routes[route.name] = url
                     logger.debug(f"Sending image to '{route.name}' @ {url}")
                     _perf = perf_counter()
                     r = requests.post(
@@ -383,12 +497,7 @@ class ZMClient:
         return final_detections
 
     def load_config(self) -> Optional[ConfigFileModel]:
-        """Parse the YAML configuration file. In the future this will read DB values
-
-        Args:
-            cfg_file (Path): Configuration YAML file.
-
-        """
+        """Parse the YAML configuration file. In the future this will read DB values"""
         cfg: Dict = {}
         self.raw_config = self.config_file.read_text()
 
@@ -396,7 +505,7 @@ class ZMClient:
             cfg = yaml.safe_load(self.raw_config)
         except yaml.YAMLError as e:
             logger.error(
-                f"model_config_parser: Error parsing the YAML configuration file!"
+                f"Error parsing the YAML configuration file!"
             )
             raise e
         substitutions = cfg.get("substitutions", {})
@@ -416,20 +525,20 @@ class ZMClient:
             if inc_file.is_file():
                 inc_vars = yaml.safe_load(inc_file.read_text())
                 logger.debug(
-                    f"model_config_parser: Loaded {len(inc_vars)} substitution from IncludeFile {inc_file}"
+                    f"Loaded {len(inc_vars)} substitution from IncludeFile {inc_file}"
                 )
                 # check for duplicates
                 for k in inc_vars:
                     if k in substitutions:
                         logger.warning(
-                            f"model_config_parser: Duplicate substitution variable '{k}' in IncludeFile {inc_file} - "
+                            f"Duplicate substitution variable '{k}' in IncludeFile {inc_file} - "
                             f"IncludeFile overrides config file"
                         )
 
                 substitutions.update(inc_vars)
             else:
                 logger.warning(
-                    f"model_config_parser: IncludeFile {inc_file} is not a file!"
+                    f"IncludeFile {inc_file} is not a file!"
                 )
 
         logger.debug(f"Replacing ${{VARS}} in config")
@@ -454,17 +563,17 @@ class ZMClient:
             # $ remove duplicates
             var_list = list(set(var_list))
             logger.debug(
-                f"substitution_vars: Found the following substitution variables: {var_list}"
+                f"Found the following substitution variables: {var_list}"
             )
             # substitute variables
             _known_vars = []
             _unknown_vars = []
             for var in var_list:
                 if var in var_pool:
-                    logger.debug(
-                        f"substitution variable '{var}' IS IN THE POOL! VALUE: "
-                        f"{var_pool[var]} [{type(var_pool[var])}]"
-                    )
+                    # logger.debug(
+                    #     f"substitution variable '{var}' IS IN THE POOL! VALUE: "
+                    #     f"{var_pool[var]} [{type(var_pool[var])}]"
+                    # )
                     _known_vars.append(var)
                     value = var_pool[var]
                     if value is None:
@@ -478,14 +587,14 @@ class ZMClient:
                     _unknown_vars.append(var)
             if _unknown_vars:
                 logger.warning(
-                    f"substitution_vars: The following variables have no configured substitution value: {_unknown_vars}"
+                    f"The following variables have no configured substitution value: {_unknown_vars}"
                 )
             if _known_vars:
                 logger.debug(
-                    f"substitution_vars: The following variables have been substituted: {_known_vars}"
+                    f"The following variables have been substituted: {_known_vars}"
                 )
         else:
-            logger.debug(f"substitution_vars: No substitution variables found.")
+            logger.debug(f"No substitution variables found.")
 
         return yaml.safe_load(search_str)
 

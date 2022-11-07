@@ -2,7 +2,9 @@ import logging
 import re
 from typing import Optional
 
-logger = logging.getLogger("ZM-ML")
+from pydantic import AnyUrl
+
+logger = logging.getLogger("ML-Client")
 
 
 def percentage_and_pixels_validator(input_, values, field):
@@ -49,3 +51,18 @@ def percentage_and_pixels_validator(input_, values, field):
             input_ = 1
 
     return input_
+
+
+def no_scheme_url_validator(v, field, values, config):
+    logger.debug(f"validating {field.name} - {v}")
+    if v:
+        import re
+
+        if re.match(r"^(http(s)?)://", v):
+            logger.debug(f"'{field.name}' is valid with schema: {v}")
+        else:
+            logger.debug(
+                f"No schema in '{field.name}, assuming http:// to make a valid URL"
+            )
+            v = f"http://{v}"
+    return v

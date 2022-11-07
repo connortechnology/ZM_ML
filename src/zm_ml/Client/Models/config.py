@@ -1,12 +1,12 @@
 import logging
 from pathlib import Path
-from typing import Dict, List, Tuple, Pattern, Union, Any, Optional
+from typing import Dict, List, Tuple, Pattern, Union, Any
 
-from pydantic import BaseModel, Field, AnyUrl, validator, IPvAnyAddress
+from pydantic import BaseModel, Field, AnyUrl, validator, IPvAnyAddress, SecretStr
 
-from .validators import percentage_and_pixels_validator
+from .validators import percentage_and_pixels_validator, no_scheme_url_validator
 
-logger = logging.getLogger("ZM-ML")
+logger = logging.getLogger("ML-Client")
 
 
 class DefaultEnabled(BaseModel):
@@ -17,8 +17,13 @@ class ZMAPISettings(BaseModel):
     portal: AnyUrl = Field(None)
     api: AnyUrl = Field(None)
     user: str = Field(None)
-    password: str = Field(None)
+    password: SecretStr = Field(None)
     ssl_verify: bool = Field(True)
+
+    # validators
+    _validate_host_portal = validator(
+        "api", "portal", allow_reuse=True, pre=True
+    )(no_scheme_url_validator)
 
 
 class LoggingSettings(BaseModel):
@@ -35,11 +40,16 @@ class MLAPIRoute(BaseModel):
     name: str = Field(...)
     enabled: bool = Field(True)
     weight: int = Field(0)
-    host: Union[IPvAnyAddress, AnyUrl] = Field(...)
+    host: AnyUrl = Field(...)
     port: int = Field(5000)
     username: str = Field(None)
-    password: str = Field(None)
+    password: SecretStr = Field(None)
     timeout: int = Field(90)
+
+    # validators
+    _validate_host_portal = validator(
+        "host", allow_reuse=True, pre=True
+    )(no_scheme_url_validator)
 
 
 class MLAPIRoutes(BaseModel):
@@ -53,19 +63,8 @@ class MLAPIAnimationSettings(BaseModel):
         duration: int = Field(le=120, ge=1, default=10)
         width: int = Field(640)
 
-        def __init__(self, **data: Any):
-            logger.debug(f"About to validate '{self.__repr_name__()}'")
-            super().__init__(**data)
-            logger.debug(f"Validated '{self.__repr_name__()}'")
-
     class AnimationGIFSettings(AnimationBaseSettings):
-
         fast: bool = Field(False)
-
-        def __init__(self, **data: Any):
-            logger.debug(f"About to validate '{self.__repr_name__()}'")
-            super().__init__(**data)
-            logger.debug(f"Validated '{self.__repr_name__()}'")
 
     gif: AnimationGIFSettings = Field(default_factory=AnimationGIFSettings)
     mp4: AnimationBaseSettings = Field(default_factory=AnimationBaseSettings)
@@ -84,9 +83,7 @@ class MLNotificationSettings(BaseModel):
         class ZMNinjaFCMSettings(BaseModel):
             enabled: bool = Field(False)
             v1: bool = Field(False)
-            local_tokens: Path = Field(
-                None,
-            )
+            local_tokens: Path = Field(None)
             replace_messages: bool = Field(False)
             date_fmt: str = Field("%I:%M %p, %d-%b")
             android_priority: str = Field("high")
@@ -99,10 +96,16 @@ class MLNotificationSettings(BaseModel):
 
     class GotifyNotificationSettings(BaseModel):
         enabled: bool = Field(False)
-        host: Union[AnyUrl, IPvAnyAddress, str] = Field("http://localhost:8008")
+        host: AnyUrl = Field(None)
         token: str = Field(None)
-        portal: str = Field(None)
+        portal: AnyUrl = Field(None)
         url_opts: NotificationZMURLOptions = Field(default_factory=NotificationZMURLOptions)
+
+        # validators
+        _validate_host_portal = validator(
+            "host", "portal",  allow_reuse=True, pre=True
+        )(no_scheme_url_validator)
+
 
     class PushoverNotificationSettings(BaseModel):
         class SendAnimations(BaseModel):
@@ -113,9 +116,14 @@ class MLNotificationSettings(BaseModel):
         enabled: bool = Field(False)
         token: str = Field(None)
         key: str = Field(None)
-        portal: str = Field(None)
+        portal: Union[IPvAnyAddress, AnyUrl] = Field(None)
         animation: SendAnimations = Field(default_factory=SendAnimations)
         url_opts: NotificationZMURLOptions = Field(default_factory=NotificationZMURLOptions)
+
+        # validators
+        _validate_host_portal = validator(
+            "portal", allow_reuse=True, pre=True
+        )(no_scheme_url_validator)
 
     class ShellScriptNotificationSettings(BaseModel):
         enabled: bool = Field(False)
@@ -123,9 +131,14 @@ class MLNotificationSettings(BaseModel):
 
     class HassNotificationSettings(BaseModel):
         enabled: bool = Field(False)
-        host: Union[AnyUrl, IPvAnyAddress] = Field(None)
+        host: AnyUrl = Field(None)
         token: str = Field(None)
         ssl_verify: bool = Field(True)
+
+        # validators
+        _validate_host_portal = validator(
+            "host", allow_reuse=True, pre=True
+        )(no_scheme_url_validator)
 
     zmninja: ZMNinjaNotificationSettings = Field(default_factory=ZMNinjaNotificationSettings)
     gotify: GotifyNotificationSettings = Field(default_factory=GotifyNotificationSettings)
@@ -142,11 +155,6 @@ class APIPullMethod(BaseModel):
     check_snapshots: bool = Field(True)
     snapshot_frame_skip: int = Field(3)
     max_frames: int = Field(0)
-
-    def __init__(self, **data: Any):
-        logger.debug(f"About to validate '{self.__repr_name__()}'")
-        super().__init__(**data)
-        logger.debug(f"Validated '{self.__repr_name__()}'")
 
 
 class DetectionSettings(BaseModel):
@@ -188,11 +196,6 @@ class DetectionSettings(BaseModel):
     match_origin_zone: bool = Field(False)
     images: ImageSettings = Field(default_factory=ImageSettings)
 
-    def __init__(self, **data: Any):
-        logger.debug(f"About to validate '{self.__repr_name__()}'")
-        super().__init__(**data)
-        logger.debug(f"Validated '{self.__repr_name__()}'")
-
 
 class BaseObjectFilters(BaseModel):
     min_conf: float = Field(ge=0.0, le=1.0, default=None)
@@ -210,11 +213,6 @@ class BaseObjectFilters(BaseModel):
 class ObjectFilters(BaseObjectFilters):
     pattern: Pattern = Field(default=".*")
     labels: Dict[str, BaseObjectFilters] = Field(None)
-
-    def __init__(self, **data: Any):
-        logger.debug(f"About to validate '{self.__repr_name__()}'")
-        super().__init__(**data)
-        logger.debug(f"Validated '{self.__repr_name__()}'")
 
 
 class FaceFilters(BaseModel):
@@ -235,21 +233,11 @@ class StaticObjects(DefaultEnabled):
         percentage_and_pixels_validator
     )
 
-    def __init__(self, **data: Any):
-        logger.debug(f"About to validate '{self.__repr_name__()}'")
-        super().__init__(**data)
-        logger.debug(f"Validated '{self.__repr_name__()}'")
-
 
 class MatchFilters(BaseModel):
     object: ObjectFilters = Field(default_factory=ObjectFilters)
     face: FaceFilters = Field(default_factory=FaceFilters)
     alpr: AlprFilters = Field(default_factory=AlprFilters)
-
-    def __init__(self, **data: Any):
-        logger.debug(f"About to validate '{self.__repr_name__()}'")
-        super().__init__(**data)
-        logger.debug(f"Validated '{self.__repr_name__()}'")
 
 
 class MatchingSettings(BaseModel):
@@ -269,9 +257,8 @@ class MonitorZones(BaseModel):
     def validate_points(cls, v, field):
         if v:
             orig = str(v)
-            logger.debug(f"Validating '{field.name}' [type: {type(v)}] -> {v}")
             if not isinstance(v, (str, list)):
-                raise TypeError(f"Can only be List or string! type={type(v)}")
+                raise TypeError(f"'{field.name}' Can only be List or string! type={type(v)}")
             elif isinstance(v, str):
                 v = [tuple(map(int, x.strip().split(","))) for x in v.split(" ")]
             from shapely.geometry import Polygon
@@ -286,7 +273,6 @@ class MonitorZones(BaseModel):
                 )
             else:
                 assert isinstance(v, list)
-                logger.debug(f"Zone Polygon points are valid -> {v}")
 
         return v
 
@@ -294,11 +280,6 @@ class MonitorZones(BaseModel):
 class MonitorsSettings(BaseModel):
     models: Dict[str, Any] = Field(default_factory=dict)
     zones: Dict[str, MonitorZones] = Field(default_factory=dict)
-
-    def __init__(self, **data: Any):
-        logger.debug(f"About to validate '{self.__repr_name__()}'")
-        super().__init__(**data)
-        logger.debug(f"Validated '{self.__repr_name__()}'")
 
 
 class Testing(BaseModel):
@@ -321,14 +302,7 @@ class ConfigFileModel(BaseModel):
     detection_settings: DetectionSettings = Field(default_factory=DetectionSettings)
     matching: MatchingSettings = Field(default_factory=MatchingSettings)
     monitors: Dict[int, MonitorsSettings] = Field(default_factory=dict)
-    end: Optional[Any] = "END"
 
-    @validator("end", always=True)
-    def end_of_config(cls, v, values, field, config):
-        cfg_path = values["config_path"]
-        notification: MLNotificationSettings = values["notifications"]
-        if not notification.zmninja.fcm.local_tokens:
-            notification.zmninja.fcm.local_tokens = cfg_path / "zmninja_tokens"
     @validator("config_path", always=True, pre=True)
     def val_cfg_path(cls, v):
         if v:
@@ -337,25 +311,3 @@ class ConfigFileModel(BaseModel):
                 v = Path(v)
         return v
 
-    # @validator("substitutions", pre=True, always=True)
-    # def val_subs(cls, v, field, values, config):
-    #     testing: Testing = values['testing']
-    #     logging.debug(f"Validating {field.name}!! -> {testing = }")
-    #     if testing.enabled:
-    #         logger.info(f"|----- TESTING IS ENABLED! -----|")
-    #         if testing.substitutions:
-    #             logger.info(f"Overriding substitutions WITH testing:substitutions")
-    #             v = testing.substitutions
-    #
-    #     return v
-
-    @validator("monitors", always=True)
-    def val_mons(cls, v, field, values, config):
-        logger.debug(f"validating {field.name} {list(v.keys())}")
-        # logger.debug(f"--  {cls = }\n\n--  {v = }\n\n--  {values = }\n\n--  {field = }\n\n--  {config = }")
-        return v
-
-    def __init__(self, **data: Any):
-        logger.debug(f"About to validate '{self.__repr_name__()}'")
-        super().__init__(**data)
-        logger.debug(f"Validated '{self.__repr_name__()}'")
