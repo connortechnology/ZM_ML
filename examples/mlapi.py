@@ -19,8 +19,6 @@ if __name__ == "__main__":
 
     from zm_ml.Server.app import MLAPI
 
-
-
     parser = ArgumentParser()
     parser.add_argument("-C", "--config", help="Path to configuration ENV file", default="./prod.env")
     args = vars(parser.parse_args())

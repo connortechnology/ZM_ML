@@ -58,7 +58,6 @@ class FaceRecognitionLibDetector(FileLock):
             import dlib
         except ImportError as e:
             logger.error(f"{LP} UNABLE to import D-Lib library, is it installed?")
-            raise e
         else:
             logger.debug(f"{LP} successfully imported D-Lib library")
 
@@ -71,7 +70,6 @@ class FaceRecognitionLibDetector(FileLock):
             logger.error(
                 f"{LP} Could not import face_recognition, is the face-recognition library installed?)"
             )
-            raise e
         else:
             logger.debug(
                 f"perf:{LP}{self.processor}: importing Face Recognition library "

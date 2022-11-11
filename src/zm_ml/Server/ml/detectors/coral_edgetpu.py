@@ -90,6 +90,7 @@ class TpuDetector(FileLock):
         logger.debug(
             f"{LP}detect: input image {w}*{h} model input {_w}*{_h}{' (resized)' if model_resize else ''}"
         )
+
         _, scale = common.set_resized_input(
             self.model,
             input_image.size,

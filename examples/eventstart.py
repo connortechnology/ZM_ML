@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 # vim:fenc=utf-8
+"""An example that uses ZM's EventStartCommand mechanism to run object detection on a ZM event."""
 
 import sys
 import time
@@ -21,6 +22,7 @@ stream_handler.setFormatter(formatter)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(stream_handler)
 
+
 def _parse_cli():
     from argparse import ArgumentParser
     parser = ArgumentParser()
@@ -33,6 +35,7 @@ def _parse_cli():
     args = parser.parse_args()
     logger.debug(f"CLI Args: {args}")
     return args
+
 
 if __name__ == "__main__":
     args = _parse_cli()
@@ -75,5 +78,3 @@ if __name__ == "__main__":
     detections = ZM.detect(eid=eid, mid=mid)
 
     logger.info(f"perf:: ---- END ---- total: {time.perf_counter() - _start:.5f} second(s)")
-
-

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=65.5.1", "wheel>=0.38.2"]
 build-backend = "setuptools.build_meta"
 
 
@@ -7,31 +7,34 @@ build-backend = "setuptools.build_meta"
 name = "zm_ml"
 version = "0.0.1a0"
 dependencies = [
-    "requests-toolbelt>=0.10.0",
-    "sqlalchemy>=1.4.42",
+    # Both
+    'PyYAML>=6.0',
+    'requests>=2.28.1',
     "pydantic>=1.10.2",
     'urllib3>=1.26.12',
+    # Client
+    "requests-toolbelt>=0.10.0",
+    "sqlalchemy>=1.4.42",
     'pymysql>=1.0.2',
     'shapely>=1.8.5',
     'numpy>=1.23.2',
+    # Server
     'scikit-learn>=1.1.3',
     'portalocker>=2.6.0',
     'uvicorn>=0.19.0',
     'fastapi>=0.86.0',
     'passlib>=1.7.4',
-    'PyYAML>=6.0',
-    'requests>=2.28.1',
     'Pillow>=9.3.0',
     'aiosmtpd>=1.4.2',
-    'jose>=1.0.0',
+    'python-jose>=3.3.0',
+    'python-multipart>=0.0.5',
+    'python-dotenv>=0.21.0'
 ]
 
 authors = [
   { name="baudneo", email="baudneo@protonmail.com" },
 ]
-#description = "A Client that allows to interact with the ZoneMinder Machine Learning API"
 readme = "README.md"
-#Description-Content-Type = "text/markdown; charset=UTF-8; variant=GFM"
 
 requires-python = ">=3.7"
 keywords = ["zoneminder", "object detection", "machine learning", "rest api"]
@@ -61,6 +64,74 @@ tensorflow = ['tensorflow>=2.7.0']
 tensorflow_gpu = ['tensorflow-gpu>=2.7.0']
 torch = ['torch>=1.13.0']
 cpu = ['opencv-contrib-python>=4.6.0']
+all_frameworks = [
+    'opencv-contrib-python>=4.6.0',
+    'torch>=1.13.0',
+    'tensorflow>=2.7.0',
+    'deepface>=0.0.75',
+    'boto3>=1.26.3',
+    'face-recognition>=1.3.0'
+]
+
+client = [
+    'PyYAML>=6.0',
+    'requests>=2.28.1',
+    "pydantic>=1.10.2",
+    'urllib3>=1.26.12',
+    'pytest>=7.2.0',
+    "requests-toolbelt>=0.10.0",
+    "sqlalchemy>=1.4.42",
+    'pymysql>=1.0.2',
+    'shapely>=1.8.5',
+    'numpy>=1.23.2',
+    ]
+
+server = [
+    'PyYAML>=6.0',
+    'requests>=2.28.1',
+    "pydantic>=1.10.2",
+    'urllib3>=1.26.12',
+
+    'scikit-learn>=1.1.3',
+    'portalocker>=2.6.0',
+    'uvicorn>=0.19.0',
+    'fastapi>=0.86.0',
+    'passlib>=1.7.4',
+    'Pillow>=9.3.0',
+    'aiosmtpd>=1.4.2',
+    'python-jose>=3.3.0',
+    'python-multipart>=0.0.5',
+    'python-dotenv>=0.21.0'
+]
+
+all = [
+    'torch>=1.13.0',
+    'tensorflow>=2.7.0',
+    'deepface>=0.0.75',
+    'boto3>=1.26.3',
+    'face-recognition>=1.3.0',
+
+    'PyYAML>=6.0',
+    'requests>=2.28.1',
+    "pydantic>=1.10.2",
+    'urllib3>=1.26.12',
+    "requests-toolbelt>=0.10.0",
+    "sqlalchemy>=1.4.42",
+    'pymysql>=1.0.2',
+    'shapely>=1.8.5',
+    'numpy>=1.23.2',
+    'scikit-learn>=1.1.3',
+    'portalocker>=2.6.0',
+    'uvicorn>=0.19.0',
+    'fastapi>=0.86.0',
+    'passlib>=1.7.4',
+    'Pillow>=9.3.0',
+    'aiosmtpd>=1.4.2',
+    'python-jose>=3.3.0',
+    'python-multipart>=0.0.5',
+    'python-dotenv>=0.21.0'
+    ]
+
 
 
 #[tool.setuptools.packages.find]

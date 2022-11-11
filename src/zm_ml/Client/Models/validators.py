@@ -1,5 +1,6 @@
 import logging
 import re
+from pathlib import Path
 from typing import Optional
 
 from pydantic import AnyUrl
@@ -62,7 +63,14 @@ def no_scheme_url_validator(v, field, values, config):
             logger.debug(f"'{field.name}' is valid with schema: {v}")
         else:
             logger.debug(
-                f"No schema in '{field.name}, assuming http:// to make a valid URL"
+                f"No schema in '{field.name}, prepending http:// to make {field.name} a valid URL"
             )
             v = f"http://{v}"
+    return v
+
+
+def str_2_path_validator(v, field, values, config):
+    if v:
+        assert isinstance(v, (Path, str))
+        v = Path(v)
     return v

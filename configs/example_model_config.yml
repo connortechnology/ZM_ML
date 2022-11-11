@@ -2,8 +2,8 @@
 # Add the model name and the path to the model input, config and classes files
 
 # Supports BASH like substitutions; ${sub}
-model_dir: "/home/zmadmin/zm_ml/models"  # this is a substitution var
-data_dir: "/home/zmadmin/zm_ml/data"  # this is a substitution var
+model_dir: "/shared/models"  # this is a substitution var
+data_dir: "/home/baudneo/PycharmProjects/zm_ml/data"  # this is a substitution var
 
 models:
     # An example of a OpenCV YOLO model...

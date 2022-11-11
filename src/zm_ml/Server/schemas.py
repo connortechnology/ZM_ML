@@ -339,7 +339,7 @@ class TPUModelConfig(BaseModelConfig):
                 logger.debug(
                     f"{lp} 'classes' is not defined. Using *default* COCO 2017 class labels"
                 )
-                from zm_mlapi.ml.coco17_cv2 import COCO17
+                from zm_ml.Server.ml.coco17_cv2 import COCO17
 
                 v = COCO17
             else:
@@ -410,7 +410,7 @@ class CV2YOLOModelConfig(BaseModelConfig):
                 logger.debug(
                     f"{lp} 'classes' is not defined. Using *default* COCO 2017 class labels"
                 )
-                from zm_mlapi.ml.coco17_cv2 import COCO17
+                from zm_ml.Server.ml.coco17_cv2 import COCO17
 
                 v = COCO17
             else:
@@ -560,7 +560,7 @@ class CV2TFModelConfig(BaseModelConfig):
                 logger.debug(
                     f"{lp} 'classes' is not defined. Using *default* COCO 2017 class labels"
                 )
-                from zm_mlapi.ml.coco17_cv2 import COCO17
+                from zm_ml.Server.ml.coco17_cv2 import COCO17
 
                 v = COCO17
             else:
@@ -924,7 +924,7 @@ class APIDetector:
             DeepFaceModelConfig,
         ],
     ):
-        from zm_mlapi.ml.detectors.opencv.cv_yolo import CV2YOLODetector
+        from zm_ml.Server.ml.detectors.opencv.cv_yolo import CV2YOLODetector
 
         self.config = model_config
         self.id = self.config.id
@@ -981,17 +981,17 @@ class APIDetector:
                 f"{self.config.processor} is not available on this system"
             )
         if self.config.framework == ModelFrameWork.YOLO:
-            from zm_mlapi.ml.detectors.opencv.cv_yolo import CV2YOLODetector
+            from zm_ml.Server.ml.detectors.opencv.cv_yolo import CV2YOLODetector
 
             self.model = CV2YOLODetector(self.config)
         elif self.config.framework == ModelFrameWork.FACE_RECOGNITION:
-            from zm_mlapi.ml.detectors.face_recognition import (
+            from zm_ml.Server.ml.detectors.face_recognition import (
                 FaceRecognitionLibDetector,
             )
 
             self.model = FaceRecognitionLibDetector(self.config)
         elif self.config.framework == ModelFrameWork.ALPR:
-            from zm_mlapi.ml.detectors.alpr import (
+            from zm_ml.Server.ml.detectors.alpr import (
                 OpenAlprCmdLine,
                 OpenAlprCloud,
                 PlateRecognizer,

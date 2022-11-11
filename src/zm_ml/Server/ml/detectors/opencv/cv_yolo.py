@@ -33,6 +33,7 @@ class CV2YOLODetector(CV2Base):
             config_file: Optional[str] = None
             if self.config.config and self.config.config.exists():
                 config_file = self.config.config.as_posix()
+            logger.info(f"{LP} loading -> model: {model_file} :: config: {config_file}")
             self.net = cv2.dnn.readNet(model_file, config_file)
         except Exception as model_load_exc:
             logger.error(

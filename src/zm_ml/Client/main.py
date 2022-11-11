@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field, BaseSettings, validator, IPvAnyAddress, A
 import cv2
 import numpy as np
 
+from validators import str_2_path_validator
 from .Libs.Media import APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine
 from .Libs.api import ZMApi
 from .Models.config import ConfigFileModel, MLAPIRoute, Testing
@@ -37,7 +38,7 @@ logger.addHandler(stream_handler)
 
 class ZMEnvVars(BaseSettings):
     conf_path: Path = Field(
-        None, description="Path to ZoneMinder config files", env="CONF_PATH"
+        None, description="Path to ZoneMinder config files", env="ZM_CONF_DIR"
     )
     config_file: Path = Field(None, description="Absolute Path to config file", env="CONFIG_FILE")
     db_host: Union[IPvAnyAddress, AnyUrl] = Field("localhost", description="Database host", env="DBHOST")
@@ -46,8 +47,6 @@ class ZMEnvVars(BaseSettings):
     db_name: str = Field("zm", description="Database name", env="DBNAME")
     db_driver: str = Field("mysql+pymysql", description="Database driver", env="DBDRIVER")
 
-    end: Optional[Any] = Field(None, description="End of config", repr=False, dump=False)
-
     @validator("db_host", pre=True)
     def _validate_db_host(cls, v):
         if v:
@@ -55,23 +54,11 @@ class ZMEnvVars(BaseSettings):
                 v = "127.0.0.1"
         return v
 
-    def __init__(self, **values: Any):
-        logger.info("Loading environment variables")
-        super().__init__(**values)
-        logger.info("Environment variables loaded")
-        logger.info(f"Environment variables: {self}")
-
-    @validator("end", always=True)
-    def end_of_env(cls, v):
-        logger.info("Validating 'end' of ZMEnvVars")
-        return v
-
     @validator("conf_path", pre=True, always=True, allow_reuse=True)
-    def validate_conf_path(cls, v):
+    def validate_conf_path(cls, v, **kwargs):
         if not v:
             v = "/etc/zm"
-        assert isinstance(v, (Path, str))
-        v = Path(v)
+        v = str_2_path_validator(v, **kwargs)
         if not v.is_dir():
             raise ValueError(f"Config path {v} does not exist")
         return v
@@ -85,11 +72,11 @@ class ZMEnvVars(BaseSettings):
         return v
 
     class Config:
-        env_prefix = "ZM_ML_"
+        env_prefix = "ML_"
         check_fields = False
 
 
-ENV_VARS= ZMEnvVars()
+ENV_VARS = ZMEnvVars()
 
 
 class GlobalConfig(BaseModel):
@@ -134,19 +121,19 @@ def check_imports():
     logger.debug("Checking for required imports")
     try:
         import cv2
-        maj, min, patch = "", "", ""
+        maj, min_, patch = "", "", ""
         x = cv2.__version__.split(".")
         x_len = len(x)
         if x_len <= 2:
-            maj, min = x
+            maj, min_ = x
             patch = "0"
         elif x_len == 3:
-            maj, min, patch = x
+            maj, min_, patch = x
             patch = patch.replace("-dev", "") or "0"
         else:
             logger.error(f"come and fix me again, cv2.__version__.split(\".\")={x}")
 
-        cv_ver = int(maj + min + patch)
+        cv_ver = int(maj + min_ + patch)
         if cv_ver < 420:
             logger.error(
                 f"You are using OpenCV version {cv2.__version__} which does not support CUDA for DNNs. A minimum"

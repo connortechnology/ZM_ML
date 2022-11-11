@@ -4,7 +4,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from platform import python_version
-from typing import Union, Optional, Type, Dict, List
+from typing import Union, Dict, List
 
 import cv2
 import numpy as np
@@ -14,18 +14,15 @@ from fastapi import (
     FastAPI,
     HTTPException,
     __version__ as fastapi_version,
-    Form,
-    Depends,
     UploadFile,
-    File, Body, Path as FastPath
-
+    File,
+    Body,
+    Path as FastPath,
 )
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, Field
 
 from .imports import (
     Settings,
-    DetectionResult,
     GlobalConfig,
     BaseModelOptions,
     FaceRecognitionLibModelOptions,
@@ -34,7 +31,7 @@ from .imports import (
     BaseModelConfig,
     ModelType,
     ModelProcessor,
-    ModelFrameWork
+    ModelFrameWork,
 )
 
 __version__ = "0.0.1"
@@ -124,7 +121,7 @@ def get_model(model_hint: Union[str, BaseModelConfig]) -> BaseModelConfig:
                     return model
         elif isinstance(model_hint, str):
             for model in available_models:
-                identifiers = {normalize_id(model.db_name), str(model.id)}
+                identifiers = {normalize_id(model.name), str(model.id)}
                 logger.debug(f"get_model: identifiers: {identifiers}")
                 if normalize_id(model_hint) in identifiers:
                     return model
@@ -132,8 +129,8 @@ def get_model(model_hint: Union[str, BaseModelConfig]) -> BaseModelConfig:
 
 
 async def detect(
-        model_hint: str,
-        image,
+    model_hint: str,
+    image,
 ):
     model_hint = normalize_id(model_hint)
     logger.info(f"{LP} detect: {model_hint}")
@@ -143,7 +140,9 @@ async def detect(
     image = load_image_into_numpy_array(await image.read())
     timer = time.perf_counter()
     detection: Dict = detector.detect(image)
-    logger.info(f"{LP} single detection completed in {time.perf_counter() - timer:.5f}ms -> {detection}")
+    logger.info(
+        f"{LP} single detection completed in {time.perf_counter() - timer:.5f}ms -> {detection}"
+    )
     return detection
 
 
@@ -153,9 +152,9 @@ async def threaded_detect(model_hints: List[str], image) -> List[Dict]:
     logger.debug(f"threaded_detect: model_hints -> {model_hints}")
     detectors: List[APIDetector] = []
     for model in available_models:
-        identifiers = {model.db_name, str(model.id)}
+        identifiers = {model.name, str(model.id)}
         if any([normalize_id(model_hint) in identifiers for model_hint in model_hints]):
-            logger.info(f"Found model: {model.db_name} ({model.id})")
+            logger.info(f"Found model: {model.name} ({model.id})")
             detector = get_global_config().get_detector(model)
             detectors.append(detector)
     image = load_image_into_numpy_array(await image.read())
@@ -163,6 +162,7 @@ async def threaded_detect(model_hints: List[str], image) -> List[Dict]:
     # logger.info(f"detectors ({len(detectors)}) -> {detectors}")
     timer = time.perf_counter()
     import concurrent.futures
+
     futures = []
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -180,7 +180,9 @@ async def threaded_detect(model_hints: List[str], image) -> List[Dict]:
     # for thread in threads:
     #     logger.info(f"Waiting for thread {thread}")
     #     thread.join()
-    logger.info(f"{LP} ThreadPool detections completed in {time.perf_counter() - timer:.5f}ms -> {detections}")
+    logger.info(
+        f"{LP} ThreadPool detections completed in {time.perf_counter() - timer:.5f}ms -> {detections}"
+    )
     return detections
 
 
@@ -202,59 +204,75 @@ async def _available_models():
     return {"models": get_global_config().available_models}
 
 
-@app.get("/models/available/type/{model_type}", summary="Get a list of available models based on the type")
+@app.get(
+    "/models/available/type/{model_type}",
+    summary="Get a list of available models based on the type",
+)
 async def available_models_type(model_type: ModelType):
     available_models = get_global_config().available_models
     return {
         "models": [
-            model.dict()
-            for model in available_models
-            if model.model_type == model_type
+            model.dict() for model in available_models if model.model_type == model_type
         ]
     }
 
 
-@app.get("/models/available/proc/{processor}", summary="Get a list of available models based on the processor")
+@app.get(
+    "/models/available/proc/{processor}",
+    summary="Get a list of available models based on the processor",
+)
 async def available_models_proc(processor: ModelProcessor):
     logger.info(f"available_models_proc: {processor}")
     available_models = get_global_config().available_models
     return {
         "models": [
-            model.dict()
-            for model in available_models
-            if model.processor == processor
+            model.dict() for model in available_models if model.processor == processor
         ]
     }
 
 
-@app.get("/models/available/framework/{framework}", summary="Get a list of available models based on the framework")
+@app.get(
+    "/models/available/framework/{framework}",
+    summary="Get a list of available models based on the framework",
+)
 async def available_models_proc(framework: ModelFrameWork):
     logger.info(f"available_models_proc: {framework}")
     available_models = get_global_config().available_models
     return {
         "models": [
-            model.dict()
-            for model in available_models
-            if model.framework == framework
+            model.dict() for model in available_models if model.framework == framework
         ]
     }
 
 
 @app.post("/models/modify/{model_hint}", summary="Change a models options")
-async def modify_model(model_hint: str, model_options: Union[BaseModelOptions, FaceRecognitionLibModelOptions, OpenALPRLocalModelOptions]):
+async def modify_model(
+    model_hint: str,
+    model_options: Union[
+        BaseModelOptions, FaceRecognitionLibModelOptions, OpenALPRLocalModelOptions
+    ],
+):
     model = get_model(model_hint)
     old_options = model.detection_options
     detector = get_global_config().get_detector(model)
-    logger.info(f"modify_model: '{model.db_name}' original: {old_options}  -> new: {model_options}")
+    logger.info(
+        f"modify_model: '{model.name}' original: {old_options}  -> new: {model_options}"
+    )
     detector.config.detection_options = model.detection_options = model_options
     return {"original": old_options, "new": model.detection_options}
 
 
-@app.post("/detect/group", summary="Detect objects in an image using a set of threaded models referenced by name")
+@app.post(
+    "/detect/group",
+    summary="Detect objects in an image using a set of threaded models referenced by name",
+)
 async def group_detect(
-        model_hints: List[str] = Body(..., description="model names or ids",
-                                      example="yolov4,97acd7d4-270c-4667-9d56-910e1510e8e8,yolov7 tiny"),
-        image: UploadFile = File(...),
+    model_hints: List[str] = Body(
+        ...,
+        description="model names or ids",
+        example="yolov4,97acd7d4-270c-4667-9d56-910e1510e8e8,yolov7 tiny",
+    ),
+    image: UploadFile = File(...),
 ):
     logger.info(f"group_detect: {model_hints}")
     model_hints = model_hints[0].strip('"').split(",")
@@ -268,8 +286,8 @@ async def group_detect(
     # response_model=DetectionResult,
 )
 async def single_detection(
-        model_hint: str = FastPath(..., description="model name or id", example="yolov4"),
-        image: UploadFile = File(..., description="Image to run the ML model on"),
+    model_hint: str = FastPath(..., description="model name or id", example="yolov4"),
+    image: UploadFile = File(..., description="Image to run the ML model on"),
 ):
     logger.info(f"single_detection: ENDPOINT {model_hint}")
     detections = await detect(model_hint, image)
@@ -303,23 +321,30 @@ class MLAPI:
             self.start_server()
 
     def read_settings(self):
-        logger.info(f"reading settings from '{self.env_file.as_posix()}'")
+        logger.info(
+            f"reading settings from '{self.env_file.as_posix()}' - {self.env_file.exists() = }"
+        )
         if self.env_file.exists():
             self.cached_settings = Settings(_env_file=self.env_file)
             get_global_config().settings = self.cached_settings
             # logger.debug(f"{g.settings = }")
-            available_models = get_global_config().available_models = self.cached_settings.available_models
+            available_models = (
+                get_global_config().available_models
+            ) = self.cached_settings.available_models
 
             if available_models:
                 futures = []
                 timer = time.perf_counter()
                 with ThreadPoolExecutor() as executor:
                     for model in available_models:
-                        futures.append(executor.submit(get_global_config().get_detector, model))
+                        futures.append(
+                            executor.submit(get_global_config().get_detector, model)
+                        )
                 for future in futures:
                     future.result()
                 logger.info(
-                    f"{LP} TOTAL ThreadPool loading {len(futures)} models took {time.perf_counter() - timer:.5f}ms")
+                    f"{LP} TOTAL ThreadPool loading {len(futures)} models took {time.perf_counter() - timer:.5f}ms"
+                )
         else:
             raise FileNotFoundError(f"'{self.env_file.as_posix()}' does not exist")
 
@@ -333,7 +358,7 @@ class MLAPI:
         logger.info("running server")
         _avail = {}
         for model in get_global_config().available_models:
-            _avail[normalize_id(model.db_name)] = str(model.id)
+            _avail[normalize_id(model.name)] = str(model.id)
         logger.info(f"AVAILABLE MODELS! --> {_avail}")
         """LOGGING_CONFIG: Dict[str, Any] = {
             "version": 1,
@@ -376,11 +401,10 @@ class MLAPI:
         uvicorn.config.LOGGING_CONFIG["loggers"]["uvicorn"]["level"] = "DEBUG"
         uvicorn.config.LOGGING_CONFIG["loggers"]["uvicorn.error"]["level"] = "DEBUG"
         config = uvicorn.Config(
-            "zm_mlapi.app:app",
-            host=self.cached_settings.db_host,
+            "zm_ml.Server.app:app",
+            host=self.cached_settings.host,
             port=self.cached_settings.port,
             reload=self.cached_settings.reload,
-            debug=self.cached_settings.debug,
             log_config=uvicorn.config.LOGGING_CONFIG,
             log_level="debug",
             proxy_headers=True,
