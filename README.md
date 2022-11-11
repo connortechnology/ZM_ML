@@ -3,7 +3,7 @@ This is a project aiming to update how ZoneMinder Object Detection works.
 A server and client are supplied to allow for easy integration with ZoneMinder. 
 ## Server
 - Based on FastAPI
-- OpenCV DNN for CPU/GPU and pycoral for TPU. 
+- OpenCV DNN for CPU/GPU, openALPR binary, cloud ALPR integrations and pycoral for TPU. 
 - Run on local zoneminder machine or on a remote machine. 
 ### GPU
 For GPU acceleration you will need to compile OpenCV with GPU support (This includes knowing the 'Compute Capability' [_CUDA_ARCH_BIN_] of the cards you want to run the server on)
