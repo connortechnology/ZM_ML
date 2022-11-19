@@ -20,20 +20,21 @@ Important:
 """
 
 import datetime
+import inspect
 import re
 import logging
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple
 
 from requests import Response, Session
 from requests.exceptions import HTTPError
 from urllib3 import disable_warnings
 from urllib3.exceptions import InsecureRequestWarning
 
-from ..Models.config import ZMAPISettings
+from ..Models.config import ZMAPISettings, MonitorsSettings
 
 GRACE: int = 60 * 5  # 5 mins
-lp: str = "ZM API:"
-logger = logging.getLogger('zm_ml')
+lp: str = "api::"
+logger = logging.getLogger("ML-Client")
 g = None
 
 
@@ -55,75 +56,130 @@ def find_whole_word(w: str):
 class ZMApi:
     def import_zones(self):
         """A function to import zones that are defined in the ZoneMinder web GUI instead of defining
-                zones in the per-monitor section of the configuration file.
+        zones in the per-monitor section of the configuration file.
 
 
-                :return:
-                """
+        :return:
+        """
+        imported_zones = []
+        lp: str = "api::import zones::"
+        mid_cfg = None
+        existing_zones = {}
         if g.config.detection_settings.import_zones:
+            mid_cfg = g.config.monitors.get(g.mid)
+            if mid_cfg:
+                existing_zones: Dict = mid_cfg.zones
+            monitor_resolution: Tuple[int, int] = (int(g.mon_width), int(g.mon_height))
             match_reason: bool = False
-            lp: str = "import zones:"
+            logger.debug(f"{lp} import_zones() called")
+
             if match_reason := g.config.detection_settings.match_origin_zone:
                 logger.debug(
-                    f"{lp} only triggering on ZM zone! 'Cause' for event: {g.reason}"
+                    f"{lp}match origin zone:: only triggering on ZM zones that are "
+                    f"listed in the event 'Cause' [{g.event_cause}]",
                 )
-            url = f"{g.api.get_portalbase()}/api/zones/forMonitor/{g.mid}.json"
+            url = f"{self.get_portalbase()}/api/zones/forMonitor/{g.mid}.json"
             r = self.make_request(url)
             # Now lets look at reason to see if we need to honor ZM motion zones
-            if r and r is not None:
+            if r:
+                logger.debug(f"{lp} RESPONSE from zone API call => {r}")
                 zones = r.get("zones")
-                logger.debug(f"{lp} ZM zones found: {len(zones)}")
-                for _zone in zones:
-                    _name = _zone.get("Zone", {}).get("Name", "")
-                    _type = _zone.get("Zone", {}).get("Type", "")
-                    _points = _zone.get("Zone", {}).get("Coords", "")
-                    if _type == "Inactive":
-                        logger.debug(
-                            f"{lp} skipping '{_name}' as it is set to 'Inactive'"
-                        )
-                        continue
-                    if match_reason:
-                        if not re.compile(r"\b({0})\b".format(_name)).search(g.reason):
+                if zones:
+                    logger.debug(f"{lp} {len(zones)} ZM zones found, checking for 'Inactive' zones")
+                    for zone in zones:
+                        zone_name: str = zone.get("Zone", {}).get("Name", "")
+                        zone_type: str = zone.get("Zone", {}).get("Type", "")
+                        zone_points: str = zone.get("Zone", {}).get("Coords", "")
+                        logger.debug(f"{lp} BEGINNING OF ZONE LOOP - {zone_name=} -- {zone_type=} -- {zone_points=}")
+                        if zone_type.casefold() == "inactive":
                             logger.debug(
-                                f"{lp} skipping '{_name}' as it is not in event "
-                                f"cause -> '{g.reason}'"
+                                f"{lp} skipping '{zone_name}' as it is set to 'Inactive'"
                             )
                             continue
-                    logger.debug(
-                        f"{lp} '{_name}' @ {_points} is being added...",
-                    )
-                    from config import MonitorZones
-
-                    mid_cfg = g.config.monitors.get(g.mid)
-                    if mid_cfg:
-                        zones = mid_cfg.zones
-                        if zones:
-                            resolution = f'{g.mon_width}x{g.mon_height}'
-                            if not (existing_zone := zones.get(_name)):
-                                # TODO: Inherit pattern automagically
-                                # pattern = None
-                                new_zone = MonitorZones(
-                                    resolution=resolution,
-                                    points=_points,
-                                )
-                                g.config.monitors[g.mid].zones[_name] = new_zone
+                        if match_reason:
+                            if not re.compile(r"\b({0})\b".format(zone_name)).search(
+                                g.event_cause
+                            ):
                                 logger.debug(
-                                    f"{lp} '{_name}' added to config file"
+                                    f"{lp}match origin zone:: skipping '{zone_name}' as it is not in event "
+                                    f"cause -> '{g.event_cause}' and 'match_origin_zone' is enabled"
                                 )
-                            else:
-                                logger.debug(
-                                    f"{lp} '{_name}' already exists in config file, updating points and resolution"
-                                )
-                                existing_zone.points = _points
-                                existing_zone.resolution = resolution
+                                continue
+                            logger.debug(f"{lp}match origin zone:: '{zone_name}' is in event cause -> '{g.event_cause}'")
 
-    def __init__(
-        self, options: ZMAPISettings
-    ):
+                        from ..Models.config import MonitorZones
+
+                        if not mid_cfg:
+                            logger.debug(
+                                f"{lp} no monitor configuration found for monitor {g.mid}, "
+                                f"creating a new one"
+                            )
+                            mid_cfg = MonitorsSettings(
+                                models=None,
+                                object_confirm=None,
+                                static_objects=None,
+                                filters=None,
+                                zones={zone_name: MonitorZones(
+                                        points=zone_points,
+                                        resolution=monitor_resolution,
+                                    )},
+                            )
+                            g.config.monitors[g.mid] = mid_cfg
+
+                        if existing_zones is None:
+                            existing_zones = {}
+
+                        if mid_cfg:
+                            logger.debug(f"{lp} monitor configuration found for monitor {g.mid}")
+                            if existing_zones is not None:
+                                logger.debug(f"{lp} existing zones found: {existing_zones}")
+                                if not (existing_zone := existing_zones.get(zone_name)):
+                                    new_zone = MonitorZones(
+                                        points=zone_points,
+                                        resolution=monitor_resolution,
+                                    )
+                                    g.config.monitors[g.mid].zones[zone_name] = new_zone
+                                    imported_zones.append({zone_name: new_zone})
+                                    logger.debug(
+                                        f"{lp} '{zone_name}' has been constructed into a model and imported"
+                                    )
+                                else:
+                                    logger.debug(
+                                        f"{lp} '{zone_name}' already exists in the monitor configuration {existing_zone}"
+                                    )
+                                    # only update if points are not set
+                                    if not existing_zone.points:
+                                        logger.debug(f"{lp} updating points for '{zone_name}'")
+                                        ex_z_dict = existing_zone.dict()
+                                        logger.debug(f"{lp} existing zone AS DICT: {ex_z_dict}")
+                                        ex_z_dict["points"] = zone_points
+                                        ex_z_dict["resolution"] = monitor_resolution
+                                        logger.debug(f"{lp} updated zone AS DICT: {ex_z_dict}")
+                                        existing_zone = MonitorZones(**ex_z_dict)
+                                        logger.debug(f"{lp} updated zone AS MODEL: {existing_zone}")
+                                        g.config.monitors[g.mid].zones[zone_name] = existing_zone
+                                        imported_zones.append({zone_name: existing_zone})
+                                        logger.debug(
+                                            f"{lp} '{zone_name}' already exists, updated points and resolution"
+                                        )
+                                    else:
+                                        logger.debug(
+                                            f"{lp} '{zone_name}' HAS POINTS SET which is interpreted "
+                                            f"as already existing, skipping"
+                                        )
+                        logger.debug(f"{lp}DBG>>> END OF ZONE LOOP for '{zone_name}'")
+        else:
+            logger.debug(f"{lp} import_zones() is disabled, skipping")
+        logger.debug(f"{lp} ALL ZONES with imported zones => {imported_zones}")
+        exit(1)
+        return imported_zones
+
+    def __init__(self, options: ZMAPISettings):
         global g
         from ..main import get_global_config
+
         g = get_global_config()
-        lp: str = "ZM API:init:"
+        lp: str = "api:init:"
         if options is None:
             raise ValueError(f"{lp} options is None")
         self.options = options
@@ -170,9 +226,17 @@ class ZMApi:
 
         return self.zm_tz
 
-
     # called in _make_request to avoid 401s if possible
     def _refresh_tokens_if_needed(self):
+
+        lp = f"api::_refresh_tokens_if_needed::"
+        # stack = inspect.stack()
+        # idx = min(len(stack), 1)
+        # caller = inspect.getframeinfo(stack[idx][0])
+        # stack.reverse()
+        # stack = [f"{s[3]}()" for s in stack]
+        # stack = " -> ".join(stack)
+        # logger.debug(f"{lp} caller: {caller} line_no: {caller.lineno} stack: {stack}")
 
         # global GRACE
         if not self.access_token_datetime and not self.refresh_token_datetime:
@@ -180,20 +244,22 @@ class ZMApi:
                 f"{lp} no token expiration times to check, not evaluating if access token needs a refresh"
             )
             return
-        sec_remain = (self.access_token_datetime - datetime.datetime.now()).total_seconds()
+        sec_remain = (
+            self.access_token_datetime - datetime.datetime.now()
+        ).total_seconds()
         if sec_remain >= GRACE:  # grace for refresh lifetime
             logger.debug(
                 f"{lp} access token still has {sec_remain/60:.2f} minutes remaining"
             )
+
             return
         else:
-            logger.debug(
-                f"{lp} access token has expired, checking if refreshable"
-            )
+            logger.debug(f"{lp} access token has expired, checking if refreshable")
             self._re_login()
 
     def _re_login(self):
         """Used for 401. I could use _login too but decided to do a simpler fn"""
+        lp = f"api::_re_login::"
 
         time_remaining = (
             self.refresh_token_datetime - datetime.datetime.now()
@@ -203,7 +269,7 @@ class ZMApi:
                 f"{lp} using refresh token to get a new auth, as refresh still has {time_remaining / 60} "
                 f"minutes remaining",
             )
-            
+
             url = f"{self.api_url}/host/login.json"
             login_data = {"token": self.refresh_token}
             try:
@@ -226,10 +292,12 @@ class ZMApi:
                             )
                             self.access_token = resp_json.get("access_token", "")
                             if self.access_token:
-                                access_token_expires = int(resp_json.get("access_token_expires"))
+                                access_token_expires = int(
+                                    resp_json.get("access_token_expires")
+                                )
                                 self.access_token_datetime = (
-                                        datetime.datetime.now()
-                                        + datetime.timedelta(seconds=access_token_expires)
+                                    datetime.datetime.now()
+                                    + datetime.timedelta(seconds=access_token_expires)
                                 )
                                 logger.debug(
                                     f"{lp} access token expires in {access_token_expires} seconds "
@@ -251,7 +319,7 @@ class ZMApi:
         Raises:
             err: reason for failure
         """
-        lp: str = "ZM API:login:"
+        lp: str = "api::login::"
         login_data: dict = {}
         url = f"{self.api_url}/host/login.json"
 
@@ -264,9 +332,7 @@ class ZMApi:
                 "pass": self.options.password.get_secret_value(),
             }
         else:
-            logger.debug(
-                f"{lp} not using auth (no user/password was supplied)"
-            )
+            logger.debug(f"{lp} not using auth (no user/password was supplied)")
             url = f"{self.api_url}/host/getVersion.json"
         try:
             response = self.session.post(url, data=login_data)
@@ -283,7 +349,7 @@ class ZMApi:
                         f"has been supplied"
                     )
                     self.auth_enabled = True
-        
+
                     if version_tuple(self.api_version) >= version_tuple("2.0"):
                         logger.debug(
                             f"{lp} detected API ver 2.0+, using token system",
@@ -291,10 +357,12 @@ class ZMApi:
                         self.access_token = resp_json.get("access_token", "")
                         self.refresh_token = resp_json.get("refresh_token")
                         if self.access_token:
-                            access_token_expires = int(resp_json.get("access_token_expires"))
+                            access_token_expires = int(
+                                resp_json.get("access_token_expires")
+                            )
                             self.access_token_datetime = (
-                                    datetime.datetime.now()
-                                    + datetime.timedelta(seconds=access_token_expires)
+                                datetime.datetime.now()
+                                + datetime.timedelta(seconds=access_token_expires)
                             )
                             logger.debug(
                                 f"{lp} access token expires in {access_token_expires} seconds "
@@ -305,8 +373,8 @@ class ZMApi:
                                 resp_json.get("refresh_token_expires")
                             )
                             self.refresh_token_datetime = (
-                                    datetime.datetime.now()
-                                    + datetime.timedelta(seconds=refresh_token_expires)
+                                datetime.datetime.now()
+                                + datetime.timedelta(seconds=refresh_token_expires)
                             )
                             logger.debug(
                                 f"{lp} refresh token expires in {refresh_token_expires} seconds "
@@ -318,6 +386,19 @@ class ZMApi:
 
         except HTTPError as err:
             logger.error(f"{lp} got API login error: {err}")
+            code_ = err.response.status_code
+            if code_ == 401 or code_ == 403 or code_ == 404:
+                logger.error(f"{lp} got 401, trying to re-login")
+                self._login()
+            elif code_ == 521:
+                logger.error(
+                    f"{lp} CloudFlare reports that the origin server is down, sleeping for 5 "
+                    f"secs and retrying"
+                )
+                from time import sleep
+
+                sleep(5)
+                self._re_login()
             self.authenticated = False
             raise err
 
@@ -333,6 +414,7 @@ class ZMApi:
 
         :param event_id: (int) the event ID to query.
         """
+        lp: str = "api::get_all_event_data::"
         event: Optional[Dict] = None
         monitor: Optional[Dict] = None
         frame: Optional[List] = None
@@ -365,6 +447,9 @@ class ZMApi:
         self,
         mon_id: int,
     ):
+        """Returns the data from a 'Monitor' API call."""
+        lp: str = "api::get_monitor_data::"
+
         monitor: Optional[Dict] = None
         monitor_url = f"{self.api_url}/monitors/{mon_id}.json"
         try:
@@ -390,12 +475,12 @@ class ZMApi:
         re_auth: bool = True,
         quiet: bool = False,
     ) -> Union[Dict, Response]:
-        lp: str = "ZM API:make_req:"
+        lp: str = "api:make_req:"
         if payload is None:
             payload = {}
         if query is None:
             query = {}
-            
+
         self._refresh_tokens_if_needed()
         type_action = type_action.casefold()
         if self.auth_enabled:
@@ -415,9 +500,7 @@ class ZMApi:
             elif type_action == "delete":
                 r = self.session.delete(url, data=payload, params=query)
             else:
-                logger.error(
-                    f"{lp} unsupported request type: {type_action}"
-                )
+                logger.error(f"{lp} unsupported request type: {type_action}")
                 raise ValueError(f"Unsupported request type: {type_action}")
             r.raise_for_status()
             # Empty response, e.g. to DELETE requests, can't be parsed to json
@@ -439,7 +522,9 @@ class ZMApi:
                     if content_length != "0":
                         if r.text.lower().startswith("no frame found"):
                             #  r.text = 'No Frame found for event(69129) and frame id(280)']
-                            logger.warning(f"{lp} Frame was not found by API! >>> {r.text}")
+                            logger.warning(
+                                f"{lp} Frame was not found by API! >>> {r.text}"
+                            )
                         else:
                             logger.debug(
                                 f"{lp} raising RE_LOGIN ValueError -> Non 0 byte response: {r.text}"
@@ -447,9 +532,7 @@ class ZMApi:
                             raise ValueError("RE_LOGIN")
                     elif content_length == "0":
                         # ZM returns 0 byte body if index not found (no frame ID or out of bounds)
-                        logger.debug(
-                            f"{lp} {content_length = } >>> {r.text = }"
-                        )
+                        logger.debug(f"{lp} {content_length = } >>> {r.text = }")
                         logger.debug(
                             f"{lp} raising BAD_IMAGE ValueError -> Content-Length = {content_length}"
                         )
@@ -484,9 +567,7 @@ class ZMApi:
                 if re_auth:
                     logger.debug(f"{lp} retrying login once")
                     self._refresh_tokens_if_needed()
-                    logger.debug(
-                        f"{lp} retrying failed request again..."
-                    )
+                    logger.debug(f"{lp} retrying failed request again...")
                     return self.make_request(
                         url, query, payload, type_action, re_auth=False
                     )

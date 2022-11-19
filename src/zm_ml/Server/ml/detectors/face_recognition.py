@@ -151,7 +151,7 @@ class FaceRecognitionLibDetector(FileLock):
             self.scaled = True
             logger.debug(f"{LP} scaling image down using {max_size} as width")
             self.original_image = input_image.copy()
-            from zm_mlapi.utils import resize_cv2_image
+            from ...utils import resize_cv2_image
 
             input_image = resize_cv2_image(input_image, max_size)
             resized_h, resized_w = input_image.shape[:2]
@@ -288,7 +288,7 @@ class FaceRecognitionLibDetector(FileLock):
                             if not face_resize_width:
                                 face_resize_width = self.config.train_max_size
                             logger.debug(f"{LP} resizing to {face_resize_width}")
-                            from zm_mlapi.utils import resize_cv2_image
+                            from ...utils import resize_cv2_image
 
                             known_face_image = resize_cv2_image(
                                 known_face_image, face_resize_width

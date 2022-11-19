@@ -73,7 +73,7 @@ class APIImagePipeLine:
         # pre- + post-buffers calculated as seconds because we are pulling 1 FPS
         self.total_max_frames = min(self.options.max_frames, self.total_min_frames)
 
-    def get_image(self):
+    def get_image(self) -> Tuple[Optional[Union[bytes, bool]], Optional[str]]:
         if self.frames_processed >= self.total_max_frames:
             logger.error(
                 f"max_frames ({self.total_max_frames}) has been reached, stopping!"

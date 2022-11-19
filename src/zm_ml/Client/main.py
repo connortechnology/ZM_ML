@@ -1,31 +1,46 @@
+import copy
 import json
 import logging
 import logging.handlers
 import os
+import pickle
 import sys
-from decimal import Decimal
+import concurrent
 from hashlib import new
 from pathlib import Path
-from time import perf_counter
-from typing import Union, Dict, Optional, List, Any
+from shutil import which
+from time import perf_counter, sleep
+from typing import Union, Dict, Optional, List, Any, Tuple
 
-__version__ = "0.0.1"
-__version_type__ = "dev"
-
+import cv2
+import numpy as np
 import requests
 import requests_toolbelt
 import yaml
-from pydantic import BaseModel, Field, BaseSettings, validator, IPvAnyAddress, AnyUrl, SecretStr
-import cv2
-import numpy as np
+from shapely.geometry import Polygon
 
-from validators import str_2_path_validator
 from .Libs.Media import APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine
 from .Libs.api import ZMApi
-from .Models.config import ConfigFileModel, MLAPIRoute, Testing
 from .Libs.zmdb import ZMDB
+from .Models.config import (
+    ConfigFileModel,
+    MLAPIRoute,
+    Testing,
+    OverRideMatchFilters,
+    MonitorZones,
+    MatchFilters,
+    OverRideStaticObjects,
+    OverRideObjectFilters,
+    OverRideFaceFilters,
+    OverRideAlprFilters,
+)
+from ..Shared.configs import ClientEnvVars, GlobalConfig
 
+__version__: str = "0.0.1"
+__version_type__: str = "dev"
 logger = logging.getLogger("ML-Client")
+
+ZM_INSTALLED: Optional[str] = which("zmpkg.pl")
 formatter = logging.Formatter(
     "%(asctime)s.%(msecs)04d %(name)s[%(process)s] %(levelname)s %(module)s:%(lineno)d -> %(message)s",
     "%m/%d/%y %H:%M:%S",
@@ -34,83 +49,10 @@ stream_handler = logging.StreamHandler(stream=sys.stdout)
 stream_handler.setFormatter(formatter)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(stream_handler)
+logger.debug(f"added logger in {__name__}")
 
-
-class ZMEnvVars(BaseSettings):
-    conf_path: Path = Field(
-        None, description="Path to ZoneMinder config files", env="ZM_CONF_DIR"
-    )
-    config_file: Path = Field(None, description="Absolute Path to config file", env="CONFIG_FILE")
-    db_host: Union[IPvAnyAddress, AnyUrl] = Field("localhost", description="Database host", env="DBHOST")
-    db_user: str = Field("zmuser", description="Database user", env="DBUSER")
-    db_password: SecretStr = Field("zmpass", description="Database password", env="DBPASS")
-    db_name: str = Field("zm", description="Database name", env="DBNAME")
-    db_driver: str = Field("mysql+pymysql", description="Database driver", env="DBDRIVER")
-
-    @validator("db_host", pre=True)
-    def _validate_db_host(cls, v):
-        if v:
-            if v == 'localhost':
-                v = "127.0.0.1"
-        return v
-
-    @validator("conf_path", pre=True, always=True, allow_reuse=True)
-    def validate_conf_path(cls, v, **kwargs):
-        if not v:
-            v = "/etc/zm"
-        v = str_2_path_validator(v, **kwargs)
-        if not v.is_dir():
-            raise ValueError(f"Config path {v} does not exist")
-        return v
-
-    @validator("config_file", pre=True)
-    def val_config_file(cls, v, values):
-        if v:
-            if isinstance(v, str):
-                v = Path(v)
-            assert isinstance(v, Path)
-        return v
-
-    class Config:
-        env_prefix = "ML_"
-        check_fields = False
-
-
-ENV_VARS = ZMEnvVars()
-
-
-class GlobalConfig(BaseModel):
-    api: ZMApi = Field(None)
-    mid: int = None
-    config: ConfigFileModel = None
-    config_file: Union[str, Path] = None
-    configs_path: Union[str, Path] = None
-    eid: int = None
-    mon_name: str = None
-    mon_post: int = None
-    mon_pre: int = None
-    mon_fps: Decimal = None
-    reason: str = None
-    notes: str = None
-    event_path: Path = None
-    event_cause: str = None
-    past_event: bool = False
-    Event: Dict = None
-    Monitor: Dict = None
-    Frame: List = None
-    mon_image_buffer_count: int = None
-    mon_width: int = None
-    mon_height: int = None
-    mon_colorspace: int = None
-    frame_buffer: list = Field(default_factory=list)
-
-    Environment: ZMEnvVars = Field(ENV_VARS)
-
-    class Config:
-        arbitrary_types_allowed = True
-
-
-g = GlobalConfig()
+ENV_VARS: Optional[ClientEnvVars] = None
+g: Optional[GlobalConfig] = None
 
 
 def get_global_config() -> GlobalConfig:
@@ -121,6 +63,7 @@ def check_imports():
     logger.debug("Checking for required imports")
     try:
         import cv2
+
         maj, min_, patch = "", "", ""
         x = cv2.__version__.split(".")
         x_len = len(x)
@@ -131,7 +74,7 @@ def check_imports():
             maj, min_, patch = x
             patch = patch.replace("-dev", "") or "0"
         else:
-            logger.error(f"come and fix me again, cv2.__version__.split(\".\")={x}")
+            logger.error(f'come and fix me again, cv2.__version__.split(".")={x}')
 
         cv_ver = int(maj + min_ + patch)
         if cv_ver < 420:
@@ -165,14 +108,78 @@ def _cfg2path(config_file: Union[str, Path]) -> Path:
         if isinstance(config_file, (str, Path)):
             config_file = Path(config_file)
         else:
-            raise TypeError(f"config_file must be a string or Path, not {type(config_file)}")
+            raise TypeError(
+                f"config_file must be a string or Path, not {type(config_file)}"
+            )
         return Path(config_file)
+
+
+def static_pickle(
+        labels: Optional[List[str]] = None,
+        confs: Optional[List] = None,
+        bboxs: Optional[List] = None,
+        write: bool = False,
+) -> Optional[Tuple[List[str], List, List]]:
+    """Use the pickle module to save a python data structure to a file
+
+        :param write: save the data to a file
+        :param bboxs: list of bounding boxes
+        :param confs: list of confidence scores
+        :param labels: list of labels
+    """
+    lp: str = "pickle_static_objects:"
+    variable_data_path = g.config.system.variable_data_path
+    mon_file = Path(f"{variable_data_path}/mid-{g.mid}_past-detection.pkl")
+    logger.debug(f"{lp} mon_file[{type(mon_file)}]={mon_file}")
+
+    if not write:
+        logger.debug(
+            f"{lp} trying to load previous detection results from file: '{mon_file}'"
+        )
+        if mon_file.exists():
+            try:
+                with mon_file.open("rb") as f:
+                    labels = pickle.load(f)
+                    confs = pickle.load(f)
+                    bboxs = pickle.load(f)
+            except FileNotFoundError:
+                logger.debug(
+                    f"{lp}  no history data file found for monitor '{g.mid}'"
+                )
+            except EOFError:
+                logger.debug(f"{lp}  empty file found for monitor '{g.mid}'")
+                logger.debug(f"{lp}  going to remove '{mon_file}'")
+                try:
+                    mon_file.unlink()
+                except Exception as e:
+                    logger.error(f"{lp}  could not delete: {e}")
+            except Exception as e:
+                logger.error(f"{lp} error: {e}")
+            logger.debug(f"{lp} returning results: {labels}, {confs}, {bboxs}")
+        else:
+            logger.warning(f"{lp} no history data file found for monitor '{g.mid}'")
+    else:
+        try:
+            mon_file.touch(exist_ok=True)
+            with mon_file.open("wb") as f:
+                pickle.dump(labels, f)
+                pickle.dump(confs, f)
+                pickle.dump(bboxs, f)
+                logger.debug(
+                    f"{lp} saved_event: {g.eid} RESULTS to file: '{mon_file}' ::: {labels}, {confs}, {bboxs}",
+                )
+        except Exception as e:
+            logger.error(
+                f"{lp}  error writing to '{mon_file}' past detections not recorded, err msg -> {e}"
+            )
+    return labels, confs, bboxs
 
 
 class CFGHash:
     previous_hash: str
     config_file: Path
     hash: str
+
     def __init__(self, config_file: Union[str, Path, None] = None):
         self.previous_hash = ""
         self.hash = ""
@@ -245,33 +252,91 @@ class ZMClient:
     mid: int
     eid: int
     image_pipeline: Union[APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine]
+    _comb: Dict
 
-    def __init__(self, cfg_file: Union[str, Path]):
+    def check_permissions(self):
+        lp: str = "check_permissions:"
+        if not os.access(g.config.system.variable_data_path, os.W_OK):
+            logger.error(
+                f"{lp} system:variable_data_path [{g.config.system.variable_data_path}] is not writable by user {self.sys_user}"
+            )
+            raise PermissionError(
+                f"system:variable_data_path [{g.config.system.variable_data_path}] is not writable by user {self.sys_user}"
+            )
+        if not os.access(g.config.system.variable_data_path, os.R_OK):
+            logger.error(
+                f"{lp} system:variable_data_path [{g.config.system.variable_data_path}] is not readable by user {self.sys_user}"
+            )
+            raise PermissionError(
+                f"system:variable_data_path [{g.config.system.variable_data_path}] is not readable by user {self.sys_user}"
+            )
+
+    def __init__(self, cfg_file: Optional[Union[str, Path]] = None):
         """
-        Initialize the ZMDetect class
+        Initialize the ZoneMinder Client
         :param cfg_file: Path to the config file
         """
+        logger.debug("Initializing ZMClient")
+        self._comb_filters: Dict = {}
+        self.zones: Dict = {}
+        self.zone_filters: Dict = {}
+        import getpass
+        import grp
 
-        if isinstance(cfg_file, (str, Path)):
-            g.config_file = self.config_file = Path(cfg_file)
-        else:
-            raise TypeError("cfg_file must be a str or Path object")
+        self.sys_user: str = getpass.getuser()
+        self.sys_gid: int = os.getgid()
+        self.sys_group: str = grp.getgrgid(self.sys_gid).gr_name
+        self.sys_uid: int = os.getuid()
+        from collections import namedtuple
+        self.static_objects = namedtuple(
+            "PreviousResults",
+            [
+                "label",
+                "confidence",
+                "bbox"
+            ]
+        )
+
+        global g, ENV_VARS
+        ENV_VARS = ClientEnvVars()
+        g = GlobalConfig()
+        g.Environment = ENV_VARS
+        if not cfg_file:
+            logger.warning(
+                f"No config file specified, using defaults -> {g.Environment.conf_file}"
+            )
+            cfg_file = ENV_VARS.conf_file
+        if cfg_file:
+            if isinstance(cfg_file, (str, Path)):
+                g.config_file = self.config_file = Path(cfg_file)
+            else:
+                raise TypeError("cfg_file must be a str or Path object")
+        assert cfg_file, "No config file specified"
         g.config = self.config = self.load_config()
-        self.config_hash = CFGHash(self.config_file)
+        check_imports()
 
-        self.sort_routes()
+        futures: List[concurrent.futures.Future] = []
+        _hash: concurrent.futures.Future
+        try:
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                _hash = executor.submit(CFGHash, self.config_file)
+                executor.submit(self.check_permissions)
+                executor.submit(self.sort_routes)
+                futures.append(executor.submit(self.init_logs))
+                futures.append(executor.submit(self.init_db))
+                futures.append(executor.submit(self.init_api))
+                for future in concurrent.futures.as_completed(futures):
+                    logger.debug(f"INIT>>> Future completed: {future}")
+                    future.result()
+        except Exception as exc:
+            logger.exception(exc)
+            raise
+        # for future in futures:
+        #     future.result()
+        self.config_hash = _hash.result()
 
-        from concurrent.futures import ThreadPoolExecutor
-
-        tpe = ThreadPoolExecutor()
-        futures = []
-        with tpe as executor:
-            futures.append(executor.submit(self.init_logs))
-            futures.append(executor.submit(self.init_db))
-            futures.append(executor.submit(self.init_api))
-        for future in futures:
-            future.result()
-        del tpe
+    def init_static_objects(self):
+        return static_pickle()
 
     def sort_routes(self):
         self.routes = self.config.mlapi.routes
@@ -283,7 +348,7 @@ class ZMClient:
     def init_logs(self):
         """Initialize the logging system."""
         level = self.config.logging.level
-        level = level.casefold()
+        level = level.casefold().strip()
         if level == "debug":
             level = logging.DEBUG
         elif level == "warning":
@@ -296,22 +361,13 @@ class ZMClient:
             level = logging.INFO
         logger.setLevel(level)
 
-        if level == logging.DEBUG:
-            logger.debug(f"Logging level set to DEBUG")
-        elif self.config.logging.console is True:
-            pass
-        else:
+        if self.config.logging.console is False:
             logger.info(f"Removing console log output!")
             logger.removeHandler(stream_handler)
         file_from_config = self.config.logging.dir / self.config.logging.file_name
-        # Get user and group id and name
-        import getpass
-        import grp
+        if not file_from_config.exists():
+            file_from_config.touch(exist_ok=True)
 
-        uname = getpass.getuser()
-        gname = grp.getgrgid(os.getgid()).gr_name
-        uid = os.getuid()
-        gid = os.getgid()
         if os.access(file_from_config, os.W_OK):
             file_from_config.touch(exist_ok=True)
             # ZM /var/log/zm is handled by logrotate
@@ -324,13 +380,13 @@ class ZMClient:
 
             logger.debug(
                 f"Logging to file '{file_from_config}' with user: "
-                f"{uid} [{uname}] group: {gid} [{gname}]"
+                f"{self.sys_uid} [{self.sys_user}] group: {self.sys_gid} [{self.sys_group}]"
             )
         else:
             logger.warning(
                 f"Logging to file {file_from_config} disabled due to permissions"
                 f" - No write access to {file_from_config.as_posix()} for user: "
-                f"{uid} [{uname}] group: {gid} [{gname}]"
+                f"{self.sys_uid} [{self.sys_user}] group: {self.sys_gid} [{self.sys_group}]"
             )
         logger.info(f"Logging initialized...")
 
@@ -344,157 +400,977 @@ class ZMClient:
         global g
         g.eid = eid
         (
-            mid,
-            mon_name,
-            mon_post,
-            mon_pre,
-            mon_fps,
-            reason,
-            event_path,
+            g.mid,
+            g.mon_name,
+            g.mon_post,
+            g.mon_pre,
+            g.mon_fps,
+            g.event_cause,
+            g.event_path,
         ) = self.db.grab_all(g.eid)
-        g.mid = mid
-        g.mon_name = mon_name
-        g.mon_post = mon_post
-        g.mon_pre = mon_pre
-        g.mon_fps = mon_fps
-        g.reason = reason
-        g.event_path = event_path
+        logger.debug(f"\n\n\n Checking if configured to import zones for monitor {g.mid}\n\n\n\n")
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            executor.submit(self.api.import_zones)
+            executor.submit(self.init_static_objects)
 
     def init_api(self):
         g.api = self.api = ZMApi(self.config.zoneminder)
-        g.api.import_zones()
+
+    def combine_filters(
+            self,
+            filters_1: Union[Dict, MatchFilters, OverRideMatchFilters],
+            filters_2: Union[Dict, OverRideMatchFilters],
+    ):
+        lp: str = "combine filters::"
+        logger.debug(f"{lp} BASE filters [type: {type(filters_1)}]: {filters_1}")
+        logger.debug(f"{lp} OVERRIDE filters [type: {type(filters_2)}]: {filters_2}")
+        if isinstance(filters_1, (MatchFilters, OverRideMatchFilters)):
+            logger.debug(f"{lp} filters_1 is a MatchFilters object, converting to dict")
+            output_filters: Dict = filters_1.dict()
+        elif isinstance(filters_1, dict):
+            output_filters = filters_1
+        else:
+            raise TypeError("filters_1 must be a dict or (OverRide)MatchFilters object")
+        _base_obj_label: Dict = output_filters["object"]["labels"]
+        logger.debug(f"{lp} BASE object.labels: {_base_obj_label}")
+
+        if isinstance(filters_2, (MatchFilters, OverRideMatchFilters)):
+            logger.debug(
+                f"{lp} filters_2 is a {type(filters_2)} object, converting to dict"
+            )
+            override_filters: Dict = filters_2.dict()
+        elif isinstance(filters_2, dict):
+            override_filters = filters_2
+        else:
+            raise TypeError("filters_2 must be a dict or OverRideMatchFilters object")
+        _override_obj_label: Dict = override_filters["object"]["labels"]
+        logger.debug(f"{lp} OVERRIDE object.labels: {_override_obj_label}")
+        # if _base_obj_label is None:
+        #     _base_obj_label = {}
+        if output_filters:
+            if _override_obj_label:
+                for label, filter_data in _override_obj_label.items():
+                    if output_filters["object"]["labels"] is None:
+                        output_filters["object"]["labels"] = {}
+
+                    if _base_obj_label and label in _base_obj_label:
+                        for k, v in filter_data.items():
+                            if (
+                                    v is not None
+                                    and v != output_filters["object"]["labels"][label][k]
+                            ):
+                                logger.debug(
+                                    f"{lp} Overriding BASE filter 'object':'labels':'{label}':'{k}' with Monitor {g.mid} "
+                                    f"OVERRIDE filter VALUE '{v}'"
+                                )
+                                output_filters["object"]["labels"][label][k] = v
+                    else:
+                        logger.debug(
+                            f"{lp} Adding Monitor {g.mid} OVERRIDE filter 'object':'labels'"
+                            f":'{label}' with VALUE '{filter_data}'"
+                        )
+                        output_filters["object"]["labels"][label] = filter_data
+
+            for filter_type, filter_data in override_filters.items():
+                if filter_data is not None:
+                    for k, v in filter_data.items():
+                        if k == "labels":
+                            # Handled in the first loop
+                            continue
+                        if v is not None and v != output_filters[filter_type][k]:
+                            output_filters[filter_type][k] = v
+                            logger.debug(
+                                f"{lp} Overriding BASE filter '{filter_type}':'{k}' with Monitor {g.mid} "
+                                f"OVERRIDE filter VALUE '{v}'"
+                            )
+            logger.debug(f"{lp} Final combined output => {output_filters}")
+        if not output_filters["object"]["labels"]:
+            output_filters["object"]["labels"] = None
+        self._comb_filters = output_filters
+        return self._comb_filters
 
     def detect(self, eid: int, mid: int):
+        lp = _lp = "detect::"
+        image_name: Optional[Union[int, str]] = None
+        _start = perf_counter()
         global g
         g.mid = mid
-        logger.info(f"Running detection for event {eid}, obtaining monitor info...")
+        logger.info(
+            f"{lp} Running detection for event {eid}, obtaining monitor info using DB and API..."
+        )
         self.get_db_data(eid)
         # get monitor and event info
         g.Monitor = self.api.get_monitor_data(mid)
         g.Event, event_monitor_data, g.Frame = self.api.get_all_event_data(eid)
+        # import zones
+
         # init Image Pipeline
+        logger.debug(f"{lp} Initializing Image Pipeline...")
         how = self.config.detection_settings.images.pull_method
-        logger.debug(f"DBG>>> Image pull methods: {how}")
         if how.shm is True:
-            logger.debug("Using SHM for image source")
+            logger.debug(f"{lp} Using SHM for image source")
             # self.image_pipeline = SHMImagePipeLine()
         elif how.api.enabled is True:
-            logger.debug("Using ZM API for image source")
+            logger.debug(f"{lp} Using ZM API for image source")
             self.image_pipeline = APIImagePipeLine(how.api)
         elif how.zmu is True:
-            logger.debug("Using CLI 'zmu' for image source")
+            logger.debug(f"{lp} Using CLI 'zmu' for image source")
             pass
             # self.image_pipeline = ZMUImagePipeLine()
 
         models: Optional[Dict] = None
-        if g.mid in self.config.monitors:
+        if g.mid in self.config.monitors and self.config.monitors[g.mid].models:
+            logger.debug(f"{lp} Monitor {g.mid} has a config entry for MODELS")
             models = self.config.monitors.get(g.mid).models
         if not models:
             if self.config.detection_settings.models:
+                logger.debug(
+                    f"{lp} Monitor {g.mid} has NO config entry for MODELS, using global "
+                    f"models from detection_settings"
+                )
                 models = self.config.detection_settings.models
             else:
+                logger.debug(
+                    f"{lp} Monitor {g.mid} has NO config entry for MODELS, and global "
+                    f"models from detection_settings is empty using 'yolov4'"
+                )
                 models = {"yolov4": {}}
         else:
             _models = self.config.detection_settings.models
             # dont duplicate Models
             models = {**_models, **models}
+        logger.debug(f"{lp} Models to use: {models}")
         model_names = list(models.keys())
         models_str = ",".join(model_names)
-        logger.debug(f"{model_names = } --- {models_str = }")
+        logger.debug(f"'DBG'>>> {model_names = } --- {models_str = } <<<DBG")
 
         final_detections: dict = {}
         detections: dict = {}
-        _start_all = perf_counter()
-        # for image, image_name in self.image_pipeline:
-        i = 0
-        while self.image_pipeline.is_image_stream_active():
-            i += 1
-            image, image_name = self.image_pipeline.get_image()
+        _start_detections = perf_counter()
+        futures_data = []
+        futures = []
+        base_filters = g.config.matching.filters
+        monitor_filters = g.config.monitors.get(g.mid).filters
+        logger.debug(f"{lp} Combining GLOBAL filters with Monitor {g.mid} filters")
+        combined_filters = self.combine_filters(base_filters, monitor_filters)
+        if g.mid in self.config.monitors:
+            if self.config.monitors.get(g.mid).zones:
+                self.zones = self.config.monitors.get(g.mid).zones
+        if not self.zones:
+            logger.debug(f"{lp} No zones found, adding full image with base filters")
+            self.zones["full_image"] = MonitorZones.construct(
+                points=[
+                    (0, 0),
+                    (g.mon_width, 0),
+                    (g.mon_width, g.mon_height),
+                    (0, g.mon_height),
+                ],
+                resolution=f"{g.mon_width}x{g.mon_height}",
+                object_confirm=False,
+                static_objects=OverRideStaticObjects(),
+                filters=OverRideMatchFilters(),
+            )
+        # build each zones filters as they won't change in the loops
+        _i = 0
+        for zone in self.zones:
+            _i += 1
+            cp_fltrs = copy.deepcopy(combined_filters)
+            logger.debug(
+                f"'DBG'>>> \nBuilding filters using COMBINED global+monitor and overriding "
+                f"with zone filters for: {'zone'} BEFORE COMBINED_FILTERS = {cp_fltrs} <<<DBG"
+            )
+            self.zone_filters[zone] = self.combine_filters(
+                cp_fltrs, self.zones[zone].filters
+            )
+            logger.debug(f"'DBG'>>> AFTER COMBINED_FILTERS = {cp_fltrs} <<<DBG")
+            cp_fltrs = None
 
-            if image is None:
-                logger.warning(f"No image returned! trying again...")
-                continue
-            elif image is False:
-                logger.warning(f"Image source exhausted! Checking if more() will stop itself")
-                if i > 25:
-                    logger.warning(f"More() did not stop itself! stopping after 25 loops")
-                    break
-                continue
-            fid = image_name.split("fid_")[1].split(".")[0]
-            if any([g.config.animation.gif.enabled, g.config.animation.mp4.enabled]):
-                # Memory expensive?
-                # TODO: Add option to write to /tmp for low memory applications
-                g.frame_buffer.append((image, fid))
-            for route in self.routes:
-                if route.enabled:
-                    logger.debug(f"MLAPI route '{route.name}' is enabled!")
-                    url = f"{route.host}:{route.port}/detect/group"
-                    fields = {
-                        "model_hints": (
-                            None,
-                            json.dumps(models_str),
-                            "application/json",
-                        ),
-                        "image": (image_name, image, "image/jpeg"),
-                    }
-                    multipart_data = (
-                        requests_toolbelt.multipart.encoder.MultipartEncoder(
-                            fields=fields
+        logger.debug(f"'DBG'>>> Zone filters: \n\n{self.zone_filters} <<<DBG\n")
+        if g.config.matching.static_objects.enabled:
+            static_labels, static_conf, static_bbox = static_pickle()
+            self.static_objects.labels = static_labels
+            self.static_objects.confidence = static_conf
+            self.static_objects.bbox = static_bbox
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            while self.image_pipeline.is_image_stream_active():
+                image, image_name = self.image_pipeline.get_image()
+
+                if image is None:
+                    logger.warning(f"{lp} No image returned! trying again...")
+                    continue
+
+                if how.api.enabled is True:
+                    image_name = str(image_name).split("fid_")[1].split(".")[0]
+
+                if any(
+                        [g.config.animation.gif.enabled, g.config.animation.mp4.enabled]
+                ):
+                    # Memory expensive?
+                    # TODO: Add option to write to /tmp for low memory applications
+                    g.frame_buffer.append((image, image_name))
+
+                for route in self.routes:
+                    if route.enabled:
+                        url = f"{route.host}:{route.port}/detect/group"
+                        fields = {
+                            "model_hints": (
+                                None,
+                                json.dumps(models_str),
+                                "application/json",
+                            ),
+                            "image": (image_name, image, "image/jpeg"),
+                        }
+                        multipart_data = (
+                            requests_toolbelt.multipart.encoder.MultipartEncoder(
+                                fields=fields
+                            )
                         )
-                    )
-                    headers = {
-                        "Accept": "application/json",
-                        "Content-Type": multipart_data.content_type,
-                    }
-                    logger.debug(f"Sending image to '{route.name}' @ {url}")
-                    _perf = perf_counter()
-                    r = requests.post(
-                        url,
-                        data=multipart_data,
-                        headers=headers,
-                        timeout=route.timeout,
-                    )
-                    r.raise_for_status()
-                    _end = perf_counter() - _perf
-                    if fid in detections:
-                        detections[fid].update(r.json())
-                    else:
-                        detections[fid] = r.json()
-                    if route.name in final_detections:
-                        final_detections[route.name].update(detections)
-                    else:
-                        final_detections[route.name] = detections
-                    logger.debug(
-                        f"perf:: HTTP Detection request to '{route.name}' completed in {_end:.5f} seconds"
-                    )
-                else:
-                    logger.warning(f"Neo-MLAPI route '{route.name}' is disabled!")
+                        headers = {
+                            "Accept": "application/json",
+                            "Content-Type": multipart_data.content_type,
+                        }
+                        logger.debug(f"Sending image to '{route.name}' @ {url}")
+                        _perf = perf_counter()
+                        futures.append(
+                            executor.submit(
+                                requests.post,
+                                url,
+                                data=multipart_data,
+                                headers=headers,
+                                timeout=route.timeout,
+                            )
+                        )
+                        futures_data.append(
+                            {
+                                "route": route,
+                                "started": _perf,
+                                "fid": image_name,
+                            }
+                        )
 
-        _end_all = perf_counter() - _start_all
-        logger.debug(f"perf:: Total detections time {_end_all:.5f} seconds")
-        logger.info(f"After all images THESE ARE FINAL detections: {final_detections}")
-        # check if any successful detections
-        # if self.check_detections(detections):
-        #     # filter results
-        #     detections = self.filter_detections(detections)
-        #     # decide best match
-        #     best_match = self.compute_best_match(detections)
-        #     # post-processing (annotating, animations, notifications[mqtt, push])
-        #     self.post_process(best_match, image, image_name)
+                    else:
+                        logger.warning(f"Neo-MLAPI route '{route.name}' is disabled!")
+            for idx, future in enumerate(concurrent.futures.as_completed(futures)):
+                _st_results = perf_counter()
+                route = futures_data[idx]["route"]
+                _perf = futures_data[idx]["started"]
+                if how.api.enabled is True:
+                    image_name = int(futures_data[idx]["fid"])
+                fid_str = f":image_name={image_name}" if image_name else ""
+                logger.debug(
+                    f"\n\n'{route.name}{fid_str}' future ({idx + 1}/{len(futures)}) completed...\n\n"
+                )
+                r: requests.Response = future.result()
+                logger.debug(
+                    f"perf:: WAITED {perf_counter() - _st_results:.2f}s for a RESULT"
+                )
+                r.raise_for_status()
+                logger.debug(
+                    f"perf:: HTTP Detection request to '{route.name}' completed in {perf_counter() - _perf:.5f} seconds"
+                )
+
+                results: List[Dict[str, Any]] = r.json()
+                logger.debug(
+                    f"Results: {len(results)} Type: {type(results)} => {results}"
+                )
+                filter_start = perf_counter()
+                filtered_results = self.filter_detections(results, combined_filters)
+                final_detections[image_name] = filtered_results
+                logger.debug(
+                    f"'DBG'>>> RESULT LOOP {idx + 1}/{len(futures)} ==> {filtered_results} <<<DBG"
+                )
+                logger.debug(
+                    f"perf:: TOTAL Filtering took {perf_counter() - filter_start:.5f} seconds"
+                )
+
+        logger.debug(
+            f"perf:: Total detections time {perf_counter() - _start_detections:.5f} seconds"
+        )
+        logger.debug(f"\n\n\nFINAL RESULTS: {final_detections}\n\n\n")
+
+        if g.config.matching.static_objects.enabled:
+            static_labels, static_conf, static_bbox = [], [], []
+            for img_name, _results in final_detections.items():
+                for obj in _results:
+                    if obj['success']:
+                        static_labels.append(obj['label'])
+                        static_conf.append(obj['confidence'])
+                        static_bbox.append(obj['bbox'])
+            static_pickle(static_labels, static_conf, static_bbox, write=True)
+
         return final_detections
+
+    def filter_detections(self, results: List[Dict[str, Any]], combined_filters: Dict):
+        """Filter detections"""
+        lp: str = "filter detections::"
+        filtered_results: List[Dict[str, Any]] = []
+        r_idx = 0
+        for result in results:
+            r_idx += 1
+
+            if result["success"] is True:
+                labels, confidences, bboxes = [], [], []
+                final_label, final_confidence, final_bbox = [], [], []
+                labels, confidences, bboxs = self._filter(result)
+
+                for lbl, cnf, boxes in zip(labels, confidences, bboxs):
+                    if cnf not in final_confidence and boxes not in final_bbox:
+                        final_label.append(lbl)
+                        final_confidence.append(cnf)
+                        final_bbox.append(boxes)
+
+                filtered_result = {
+                    "success": False if not final_label else True,
+                    "type": result["type"],
+                    "processor": result["processor"],
+                    "model_name": result["model_name"],
+                    "label": final_label,
+                    "confidence": final_confidence,
+                    "bounding_box": final_bbox,
+                }
+                logger.debug(f"DBG>>> FILTERED RESULT: {filtered_result} <<<DBG")
+                filtered_results.append(filtered_result)
+            else:
+                logger.warning(f"{lp} Result was not successful...")
+
+        return filtered_results
+
+    @staticmethod
+    def _bbox2points(bbox: List) -> list[tuple[tuple[Any, Any], tuple[Any, Any]]]:
+        """Convert bounding box coords to a Polygon acceptable input for shapely."""
+        orig_ = list(bbox)
+        if isinstance(bbox[0], int):
+            it = iter(bbox)
+            bbox = list(zip(it, it))
+        bbox.insert(1, (bbox[1][0], bbox[0][1]))
+        bbox.insert(3, (bbox[0][0], bbox[2][1]))
+        # logger.debug(f"convert bbox:: {orig_} to Polygon points: {bbox}")
+        return bbox
+
+    def _filter(
+            self,
+            result: Dict[str, Any],
+            *args,
+            **kwargs,
+    ):
+        """Filter detections using 2 loops, first loop is t filter by object type, second loop is to filter by zone."""
+        r_label, r_conf, r_bbox = [], [], []
+        zones = self.zones
+        zone_filters = self.zone_filters
+        object_label_filters = {}
+        final_filters = None
+        base_filters = None
+        type_ = result["type"]
+        model_name = result["model_name"]
+        lp = f"_filter::{type_}::"
+        passed_zones: bool = False
+        # image_polygon = Polygon(
+        #     [
+        #         (0, 0),
+        #         (g.mon_width, 0),
+        #         (g.mon_width, g.mon_height),
+        #         (0, g.mon_height),
+        #     ]
+        # )
+        label, confidence, bbox = None, None, None
+        total_zones = len(zones)
+        total_labels = len(result["label"])
+        idx = 0
+        i = 0
+        zone_name: str
+        zone_data: MonitorZones
+        #
+        # Outer Loop
+        #
+        for (label, confidence, bbox) in zip(
+                result["label"],
+                result["confidence"],
+                result["bounding_box"],
+        ):
+            i += 1
+            logger.debug(
+                f"'DBG'>>>\n\n OUTER Label ['{label}'] Loop {i}/{total_labels}\n"
+            )
+
+            lp = (
+                _lp
+            ) = f"_filter::{model_name}::label #{i}/{total_labels}::{type_}='{label}'::"
+            #
+            # Inner Loop
+            #
+            idx = 0
+            for zone_name, zone_data in zones.items():
+                if zone_data.enabled is False:
+                    logger.debug(f"{lp} Zone '{zone_name}' is disabled...")
+                    continue
+                passed_zones = False
+                idx += 1
+                logger.debug(
+                    f"'DBG'>>>\n\n INNER Zone Loop {idx}/{total_zones} for {label=} :: '{zone_name}'\n"
+                )
+                if not zone_data.points:
+                    logger.warning(
+                        f"{_lp} Zone '{zone_name}' has no points! Did you rename a Zone in ZM"
+                        f" or forget to add points?"
+                    )
+                    continue
+                zone_polygon = Polygon(zone_data.points)
+                bbox_polygon = Polygon(self._bbox2points(bbox))
+
+                if bbox_polygon.intersects(zone_polygon):
+                    lp = f"{_lp}zone #{idx}/{total_zones}::"
+                    logger.debug(
+                        f"{lp} inside of Zone @ {list(zip(*zone_polygon.exterior.coords.xy))[:-1]}"
+                    )
+                    if zone_name in zone_filters and zone_filters[zone_name]:
+                        logger.debug(f"{lp} zone '{zone_name}' has filters")
+                        final_filters = zone_filters[zone_name]
+                    else:
+                        logger.debug(
+                            f"{lp} zone '{zone_name}' has NO filters, using COMBINED global+monitor filters"
+                        )
+                        final_filters = self._comb_filters
+                    if isinstance(final_filters, dict) and isinstance(
+                            final_filters.get("object"), dict
+                    ):
+                        object_label_filters = final_filters["object"]
+                        logger.debug(
+                            f"{type(final_filters)=} -- {type(object_label_filters)=}\n\n{final_filters=}\n\n"
+                        )
+                        object_label_filters = final_filters["object"]["labels"]
+                        logger.debug(f"\nFINAL FILTERS as DICT {final_filters=}\n\n")
+                        if object_label_filters and label in object_label_filters:
+                            if object_label_filters[label]:
+                                logger.debug(
+                                    f"{lp} '{label}' IS IN per label filters for zone '{zone_name}'"
+                                )
+
+                                for k, v in object_label_filters[label].items():
+                                    if (
+                                            v is not None
+                                            and final_filters["object"][k] != v
+                                    ):
+                                        logger.debug(
+                                            f"{lp} Overriding object:'{k}' [{final_filters['object'][k]}] "
+                                            f"with ZONE object:labels:{k} filter VALUE={v}"
+                                        )
+                                        final_filters["object"][k] = v
+                        else:
+                            logger.debug(f"{lp} NOT IN per label filters")
+
+                        final_filters = self.construct_filter(final_filters)
+                        logger.debug(
+                            f"\n\nFINAL FILTERS 'AFTER' CONSTRUCTING [{type(final_filters)}]\n\n"
+                        )
+                        self.zone_filters[zone_name] = final_filters
+                        logger.debug(
+                            f"\n\n'AFTER' SAVING TO ZONE FILTERS: {self.zone_filters=} \n\n"
+                        )
+
+                    type_filter: Union[
+                        OverRideObjectFilters,
+                        OverRideFaceFilters,
+                        OverRideAlprFilters,
+                        None,
+                    ] = None
+                    if type_ == "object":
+                        type_filter = final_filters.object
+                    elif type_ == "face":
+                        type_filter = final_filters.face
+                    elif type_ == "alpr":
+                        type_filter = final_filters.alpr
+
+                    logger.debug(
+                        f"{lp} SORTED by {type_} -- FINAL filters => \n{type_filter}\n"
+                    )
+                    pattern = type_filter.pattern
+                    #
+                    # Start filtering
+                    #
+                    match = pattern.match(label)
+                    if match:
+                        lp = f"{_lp}pattern matching::"
+                        if label in match.groups():
+                            logger.debug(
+                                f"{lp} matched ReGex pattern [{pattern.pattern}] ALLOWING..."
+                            )
+
+                            if confidence >= type_filter.min_conf:
+                                lp = f"{_lp}min conf::"
+                                logger.debug(
+                                    f"{lp} {confidence} IS GREATER THAN OR EQUAL TO "
+                                    f"min_conf={type_filter.min_conf}, ALLOWING..."
+                                )
+                                w, h = g.mon_width, g.mon_height
+                                max_object_area_of_image: Optional[
+                                    Union[float, int]
+                                ] = None
+                                min_object_area_of_image: Optional[
+                                    Union[float, int]
+                                ] = None
+                                max_object_area_of_zone: Optional[
+                                    Union[float, int]
+                                ] = None
+                                min_object_area_of_zone: Optional[
+                                    Union[float, int]
+                                ] = None
+
+                                # check total max area
+                                if tma := type_filter.total_max_area:
+                                    lp = f"{_lp}total max area::"
+                                    if isinstance(tma, float):
+                                        if tma >= 1.0:
+                                            tma = 1.0
+                                            max_object_area_of_image = h * w
+                                        else:
+                                            max_object_area_of_image = tma * (h * w)
+                                            logger.debug(
+                                                f"{lp} converted {tma * 100.00}% of {w}*{h}->{w * h:.2f} to "
+                                                f"{max_object_area_of_image:.2f} pixels",
+                                            )
+
+                                        if max_object_area_of_image > (h * w):
+                                            max_object_area_of_image = h * w
+                                    elif isinstance(tma, int):
+                                        max_object_area_of_image = tma
+                                    else:
+                                        logger.warning(
+                                            f"{lp} Unknown type for total_max_area, defaulting to PIXELS "
+                                            f"h*w of image ({h * w})"
+                                        )
+                                        max_object_area_of_image = h * w
+                                    if max_object_area_of_image:
+                                        if bbox_polygon.area > max_object_area_of_image:
+                                            logger.debug(
+                                                f"{lp} {bbox_polygon.area:.2f} is larger then the max allowed: "
+                                                f"{max_object_area_of_image:.2f},"
+                                                f"\n\nREMOVING REMOVING REMOVING REMOVING REMOVING REMOVING...\n\n"
+                                            )
+                                            passed_zones = False
+                                            continue
+                                        else:
+                                            logger.debug(
+                                                f"{lp} {bbox_polygon.area:.2f} is smaller then the TOTAL (image w*h) "
+                                                f"max allowed: {max_object_area_of_image:.2f}, ALLOWING..."
+                                            )
+                                else:
+                                    logger.debug(f"{lp} no total_max_area set")
+
+                                # check total min area
+                                if tmia := type_filter.total_min_area:
+                                    lp = f"{_lp}total min area=>"
+                                    if isinstance(tmia, float):
+                                        if tmia >= 1.0:
+                                            tmia = 1.0
+                                            min_object_area_of_image = h * w
+                                        else:
+                                            min_object_area_of_image = (
+                                                    tmia * zone_polygon.area
+                                            )
+                                            logger.debug(
+                                                f"{lp} converted {tmia * 100.00}% of {w}*{h}->{w * h:.2f} to "
+                                                f"{min_object_area_of_image:.2f} pixels",
+                                            )
+
+                                    elif isinstance(tmia, int):
+                                        min_object_area_of_image = tmia
+                                    else:
+                                        logger.warning(
+                                            f"{lp} Unknown type for total_min_area, defaulting to 1 PIXEL"
+                                        )
+                                        min_object_area_of_image = 1
+                                    if min_object_area_of_image:
+                                        if (
+                                                bbox_polygon.area
+                                                >= min_object_area_of_image
+                                        ):
+                                            logger.debug(
+                                                f"{lp} {bbox_polygon.area:.2f} is LARGER THEN OR EQUAL TO the "
+                                                f"TOTAL min allowed: {min_object_area_of_image:.2f}, ALLOWING..."
+                                            )
+                                        else:
+                                            logger.debug(
+                                                f"{lp} {bbox_polygon.area:.2f} is smaller then the TOTAL min allowed"
+                                                f": {min_object_area_of_image:.2f}, "
+                                                f"\n\nREMOVING REMOVING REMOVING REMOVING REMOVING REMOVING...\n\n"
+                                            )
+                                            passed_zones = False
+                                            continue
+                                else:
+                                    logger.debug(f"{lp} no total_min_area set")
+
+                                # check max area
+                                if max_area := type_filter.max_area:
+                                    lp = f"{_lp}zone max area=>"
+
+                                    if isinstance(max_area, float):
+                                        if max_area >= 1.0:
+                                            max_area = 1.0
+                                            max_object_area_of_zone = zone_polygon.area
+                                        else:
+                                            max_object_area_of_zone = (
+                                                    max_area * zone_polygon.area
+                                            )
+                                            logger.debug(
+                                                f"{lp} converted {max_area * 100.00}% of '{zone_name}'->"
+                                                f"{zone_polygon.area:.2f} to {max_object_area_of_zone} pixels",
+                                            )
+                                        if max_object_area_of_zone > zone_polygon.area:
+                                            max_object_area_of_zone = zone_polygon.area
+                                    elif isinstance(max_area, int):
+                                        max_object_area_of_zone = max_area
+                                    else:
+                                        logger.warning(
+                                            f"{lp} Unknown type for max_area, defaulting to PIXELS "
+                                            f"of zone ({zone_polygon.area})"
+                                        )
+                                        max_object_area_of_zone = zone_polygon.area
+                                    if max_object_area_of_zone:
+                                        if (
+                                                bbox_polygon.intersection(zone_polygon).area
+                                                > max_object_area_of_zone
+                                        ):
+                                            logger.debug(
+                                                f"{lp} BBOX AREA [{bbox_polygon.area:.2f}] is larger than the "
+                                                f"max allowed: {max_object_area_of_zone:.2f},"
+                                                f"\n\nREMOVING REMOVING REMOVING REMOVING REMOVING REMOVING...\n\n"
+                                            )
+                                            passed_zones = False
+                                            continue
+                                        else:
+                                            logger.debug(
+                                                f"{lp} '{label}' BBOX AREA [{bbox_polygon.area:.2f}] is smaller than the "
+                                                f"max allowed: {max_object_area_of_zone:.2f}, ALLOWING..."
+                                            )
+                                else:
+                                    logger.debug(f"{lp} no max_area set")
+
+                                # check min area
+                                if min_area := type_filter.min_area:
+                                    lp = f"{_lp}zone min area=>"
+
+                                    if isinstance(min_area, float):
+                                        if min_area >= 1.0:
+                                            min_area = 1.0
+                                            min_object_area_of_zone = zone_polygon.area
+                                        else:
+                                            min_object_area_of_zone = (
+                                                    min_area * zone_polygon.area
+                                            )
+                                            logger.debug(
+                                                f"{lp} converted {min_area * 100.00}% of '{zone_name}'->{zone_polygon.area:.5f}"
+                                                f" to {min_object_area_of_zone} pixels",
+                                            )
+                                        if (
+                                                min_object_area_of_zone
+                                                and min_object_area_of_zone
+                                                > zone_polygon.area
+                                        ):
+                                            min_object_area_of_zone = zone_polygon.area
+                                    elif isinstance(min_area, int):
+                                        min_object_area_of_zone = min_area
+                                    else:
+                                        min_object_area_of_zone = 1
+                                    if (
+                                            min_object_area_of_zone
+                                            and bbox_polygon.intersection(zone_polygon).area
+                                            > min_object_area_of_zone
+                                    ):
+                                        logger.debug(
+                                            f"{lp} '{label}' BBOX AREA [{bbox_polygon.area:.5f}] is larger then the "
+                                            f"min allowed: {min_object_area_of_zone:.5f}, ALLOWING..."
+                                        )
+
+                                    else:
+                                        logger.debug(
+                                            f"{lp} '{label}' BBOX AREA [{bbox_polygon.area:.5f}] is smaller then the "
+                                            f"min allowed: {min_object_area_of_zone:.5f},"
+                                            f"\n\nREMOVING REMOVING REMOVING REMOVING REMOVING REMOVING...\n\n"
+                                        )
+                                        continue
+                                else:
+                                    logger.debug(f"{lp} no min_area set")
+                                # !!!!!!!!!!!!!!!!!!!!
+                                # End of all filters
+                                # !!!!!!!!!!!!!!!!!!!!
+                                # todo: match past detections
+                                s_o = g.config.matching.static_objects.enabled
+                                mon_filt = g.config.monitors.get(g.mid)
+                                zone_filt: Optional[MonitorZones] = None
+                                if mon_filt and zone_name in mon_filt.zones:
+                                    zone_filt = mon_filt.zones[zone_name]
+
+                                # Override with monitor filters than zone filters
+                                if not s_o:
+                                    if mon_filt and mon_filt.static_objects.enabled:
+                                            s_o = True
+                                elif s_o:
+                                    if mon_filt and not mon_filt.static_objects.enabled:
+                                            s_o = False
+                                # zone filters override monitor filters
+                                if not s_o:
+                                    if zone_filt and zone_filt.static_objects.enabled is True:
+                                        s_o = True
+                                elif s_o:
+                                    if zone_filt and zone_filt.static_objects.enabled is False:
+                                        s_o = False
+                                if s_o:
+                                    logger.debug(
+                                        f"{_lp}static_objects enabled, checking for matches"
+                                    )
+                                    if self.check_for_static_objects(label, confidence, bbox_polygon, zone_name):
+                                        # success
+                                        pass
+                                    else:
+                                        # failed
+                                        continue
+                                else:
+                                    logger.debug(
+                                        f"{_lp} static_objects disabled, skipping match check"
+                                    )
+
+                                passed_zones = True
+                                break
+
+                            else:
+                                logger.debug(
+                                    f"{lp} confidence={confidence} IS LESS THAN "
+                                    f"min_confidence={type_filter.min_conf}, "
+                                    f"\n\nREMOVING REMOVING REMOVING REMOVING REMOVING REMOVING...\n\n"
+                                )
+                                continue
+
+                        else:
+                            logger.debug(
+                                f"{lp} NOT matched in RegEx pattern [{pattern.pattern}], "
+                                f"\n\nREMOVING REMOVING REMOVING REMOVING REMOVING REMOVING...\n\n"
+                            )
+                            continue
+
+                    else:
+                        logger.debug(
+                            f"{lp} MATCH FAILED [{match = }], "
+                            f"\n\nREMOVING REMOVING REMOVING REMOVING REMOVING REMOVING...\n\n"
+                        )
+                        continue
+                else:
+                    logger.debug(
+                        f"{lp} NOT in zone [{zone_name}], continuing to next zone..."
+                    )
+                    continue
+
+            if passed_zones:
+                logger.debug(f"THIS LABEL '{label}' MATCHED, ADDING TO FINAL LIST")
+                passed_zones = False
+                r_label.append(label)
+                r_conf.append(confidence)
+                r_bbox.append(bbox)
+                continue
+
+        logger.warning(
+            f"{lp} OUT OF BOTH LABEL AND ZONE LOOP "
+            f"FINAL LABELS={r_label}, CONFIDENCE={r_conf}, BBOX={r_bbox}"
+        )
+
+        return r_label, r_conf, r_bbox
+
+    def check_for_static_objects(self, current_label, current_confidence, current_bbox_polygon, zone_name) -> bool:
+        """Check for static objects in the frame
+        :param current_label:
+        :param current_confidence:
+        :param current_bbox_polygon:
+        """
+
+        lp = f"check_for_static_objects::"
+        logger.debug(f"{lp} STARTING...")
+        aliases: Dict = g.config.label_groups
+        mda = g.config.matching.static_objects.difference
+        if not mda:
+            pass
+        mon_filt = g.config.monitors.get(g.mid)
+        zone_filt: Optional[MonitorZones] = None
+        if mon_filt and zone_name in mon_filt.zones:
+            zone_filt = mon_filt.zones[zone_name]
+        # Override with monitor filters than zone filters
+        if mon_filt and mon_filt.static_objects.difference:
+            mda = mon_filt.static_objects.difference
+        if zone_filt and zone_filt.static_objects.difference:
+            mda = zone_filt.static_objects.difference
+
+        # todo: inherit ignore_labels from monitor and zone
+        ignore_labels: Optional[List[str]] = g.config.matching.static_objects.ignore_labels or []
+        if mon_filt and mon_filt.static_objects.labels:
+            for lbl in mon_filt.static_objects.labels:
+                if lbl not in ignore_labels:
+                    ignore_labels.append(lbl)
+        if zone_filt and zone_filt.static_objects.difference:
+            for lbl in zone_filt.static_objects.labels:
+                if lbl not in ignore_labels:
+                    ignore_labels.append(lbl)
+
+        if ignore_labels and current_label in ignore_labels:
+            logger.debug(
+                f"{lp} {current_label} is in static_objects:ignore_labels: {ignore_labels}, skipping",
+            )
+        else:
+            logger.debug(
+                f"{lp} max difference between current and past object area found! -> {mda}"
+            )
+            mda = None
+            if isinstance(mda, float):
+                if mda >= 1.0:
+                    mda = 1.0
+            elif isinstance(mda, int):
+                pass
+
+            else:
+                logger.warning(
+                    f"{lp} Unknown type for difference, defaulting to 5%"
+                )
+                mda = 0.05
+
+            for saved_label, saved_conf, saved_bbox in zip(
+                    self.static_objects.labels, self.static_objects.confidence, self.static_objects.bbox
+            ):
+
+                # compare current detection element with saved list from file
+                found_alias_grouping = False
+                # check if it is in a label group
+                if saved_label != current_label:
+                    if aliases:
+                        logger.debug(
+                            f"{lp} currently detected object does not match saved object, "
+                            f"checking label_groups for an aliased match"
+                        )
+
+                        for alias, alias_group in aliases.items():
+                            if saved_label in alias_group and current_label in alias_group:
+                                logger.debug(
+                                    f"{lp} saved and current object are in the same label group [{alias}]"
+                                )
+                                found_alias_grouping = True
+                                break
+
+                elif saved_label == current_label:
+                    found_alias_grouping = True
+                if not found_alias_grouping:
+                    continue
+                # Found a match by label/group, now compare the area using Polygon
+                past_label_polygon = Polygon(self._bbox2points(saved_bbox))
+                max_diff_pixels = None
+                diff_area = None
+                logger.debug(
+                    f"{lp} comparing '{current_label}' PAST->{saved_bbox} to CURR->{list(zip(*current_bbox_polygon.exterior.coords.xy))[:-1]}",
+                )
+                if past_label_polygon.intersects(
+                        current_bbox_polygon
+                ) or current_bbox_polygon.intersects(past_label_polygon):
+                    if past_label_polygon.intersects(current_bbox_polygon):
+                        logger.debug(
+                            f"{lp} the PAST object INTERSECTS the new object",
+                        )
+                    else:
+                        logger.debug(
+                            f"{lp} the current object INTERSECTS the PAST object",
+                        )
+
+                    if current_bbox_polygon.contains(past_label_polygon):
+                        diff_area = current_bbox_polygon.difference(
+                            past_label_polygon
+                        ).area
+                        if isinstance(mda, float):
+                            max_diff_pixels = (
+                                    current_bbox_polygon.area * mda
+                            )
+                            logger.debug(
+                                f"{lp} converted {mda*100:.2f}% difference from '{current_label}' "
+                                f"is {max_diff_pixels} pixels"
+                            )
+                        elif isinstance(mda, int):
+                            max_diff_pixels = mda
+                    else:
+                        diff_area = past_label_polygon.difference(
+                            current_bbox_polygon
+                        ).area
+                        if isinstance(mda, float):
+                            max_diff_pixels = past_label_polygon.area * mda
+                            logger.debug(
+                                f"{lp} converted {mda * 100:.2f}% difference from '{saved_label}' "
+                                f"is {max_diff_pixels} pixels"
+                            )
+                        elif isinstance(mda, int):
+                            max_diff_pixels = mda
+                    if diff_area is not None and diff_area <= max_diff_pixels:
+                        logger.debug(
+                            f"{lp} removing '{current_label}' as it seems to be approximately in the same spot"
+                            f" as it was detected last time based on '{mda}' -> Difference in pixels: {diff_area} "
+                            f"- Configured maximum difference in pixels: {max_diff_pixels}"
+                        )
+                        return False
+                        # if saved_bbox not in mpd_b:
+                        #     logger.debug(
+                        #         f"{lp} appending this saved object to the mpd "
+                        #         f"buffer as it has removed a detection and should be propagated "
+                        #         f"to the next event"
+                        #     )
+                        #     mpd_b.append(saved_bs[saved_idx])
+                        #     mpd_l.append(saved_label)
+                        #     mpd_c.append(saved_cs[saved_idx])
+                        # new_err.append(b)
+                    elif diff_area is not None and diff_area > max_diff_pixels:
+                        logger.debug(
+                            f"{lp} allowing '{current_label}' -> the difference in the area of last detection "
+                            f"to this detection is '{diff_area:.2f}', a minimum of {max_diff_pixels:.2f} "
+                            f"is needed to not be considered 'in the same spot'",
+                        )
+                        return True
+                    elif diff_area is None:
+                        logger.debug(f"DEBUG>>>'MPD' {diff_area = } - whats the issue?")
+                    else:
+                        logger.debug(
+                            f"WHATS GOING ON? {diff_area = } -- {max_diff_pixels = }"
+                        )
+                # Saved does not intersect the current object/label
+                else:
+                    logger.debug(
+                        f"{lp} current detection '{current_label}' is not near enough to '"
+                        f"{saved_label}' to evaluate for match past detection filter"
+                    )
+                    return False
+        return True
+
+    @staticmethod
+    def construct_filter(filters: Dict) -> OverRideMatchFilters:
+        # construct each object label filter
+        if filters["object"]["labels"]:
+            for label_ in filters["object"]["labels"]:
+                filters["object"]["labels"][label_] = OverRideObjectFilters.construct(
+                    **filters["object"]["labels"][label_],
+                )
+
+        filters["object"] = OverRideObjectFilters.construct(
+            **filters["object"],
+        )
+        filters["face"] = OverRideFaceFilters.construct(
+            **filters["face"],
+        )
+        filters["alpr"] = OverRideAlprFilters.construct(
+            **filters["alpr"],
+        )
+        return OverRideMatchFilters.construct(**filters)
 
     def load_config(self) -> Optional[ConfigFileModel]:
         """Parse the YAML configuration file. In the future this will read DB values"""
         cfg: Dict = {}
+        _start = perf_counter()
         self.raw_config = self.config_file.read_text()
 
         try:
             cfg = yaml.safe_load(self.raw_config)
         except yaml.YAMLError as e:
-            logger.error(
-                f"Error parsing the YAML configuration file!"
-            )
+            logger.error(f"Error parsing the YAML configuration file!")
             raise e
+
         substitutions = cfg.get("substitutions", {})
         testing = cfg.get("testing", {})
         testing = Testing(**testing)
@@ -511,28 +1387,34 @@ class ZMClient:
             logger.debug(f"PARSING IncludeFile: {inc_file.as_posix()}")
             if inc_file.is_file():
                 inc_vars = yaml.safe_load(inc_file.read_text())
-                logger.debug(
-                    f"Loaded {len(inc_vars)} substitution from IncludeFile {inc_file}"
-                )
-                # check for duplicates
-                for k in inc_vars:
-                    if k in substitutions:
-                        logger.warning(
-                            f"Duplicate substitution variable '{k}' in IncludeFile {inc_file} - "
-                            f"IncludeFile overrides config file"
-                        )
+                if "client" in inc_vars:
+                    inc_vars = inc_vars.get("client", {})
+                    logger.debug(
+                        f"Loaded {len(inc_vars)} substitution from IncludeFile {inc_file} => {inc_vars}"
+                    )
+                    # check for duplicates
+                    for k in inc_vars:
+                        if k in substitutions:
+                            logger.warning(
+                                f"Duplicate substitution variable '{k}' in IncludeFile {inc_file} - "
+                                f"IncludeFile overrides config file"
+                            )
 
-                substitutions.update(inc_vars)
+                    substitutions.update(inc_vars)
+                else:
+                    logger.warning(
+                        f"IncludeFile [{inc_file}] does not have a 'client' section - skipping"
+                    )
             else:
-                logger.warning(
-                    f"IncludeFile {inc_file} is not a file!"
-                )
-
+                logger.warning(f"IncludeFile {inc_file} is not a file!")
         logger.debug(f"Replacing ${{VARS}} in config")
         cfg = self.replace_vars(self.raw_config, substitutions)
         self.parsed_cfg = dict(cfg)
-        logger.debug(f"Config file about to be validated using pydantic!")
-        return ConfigFileModel(**cfg)
+        _x = ConfigFileModel(**cfg)
+        logger.debug(
+            f"perf:: Config file loaded and validated in {perf_counter() - _start:.5f} seconds"
+        )
+        return _x
 
     @staticmethod
     def replace_vars(search_str: str, var_pool: Dict) -> Dict:
@@ -549,9 +1431,7 @@ class ZMClient:
         if var_list := re.findall(r"\$\{(\w+)\}", search_str):
             # $ remove duplicates
             var_list = list(set(var_list))
-            logger.debug(
-                f"Found the following substitution variables: {var_list}"
-            )
+            logger.debug(f"Found the following substitution variables: {var_list}")
             # substitute variables
             _known_vars = []
             _unknown_vars = []
@@ -584,50 +1464,6 @@ class ZMClient:
             logger.debug(f"No substitution variables found.")
 
         return yaml.safe_load(search_str)
-
-    def check_detections(self, detections: Dict) -> bool:
-        """Check if any detections were successful"""
-        _ret = False
-
-        for route_name, detection in detections.items():
-            if detection["success"]:
-                _ret = True
-                break
-        return _ret
-
-    def filter_detections(self, detections: Dict) -> Dict:
-        """Filter detections"""
-        """
-                    { "route.name": 
-                        {
-                        "success": True if labels else False,
-                        "type": self.config.model_type,
-                        "processor": self.processor,
-                        "model_name": self.name,
-                        "label": labels,
-                        "confidence": confs,
-                        "bounding_box": b_boxes,
-                        },
-                    **repeat for each route** 
-                    }
-                """
-        monitor_ = self.config.monitors.get(g.mid)
-        for route_name, _detections in detections.items():
-            _detections: list
-            for _detection in _detections:
-                if not _detection["success"]:
-                    continue
-                model_type = _detection["type"]
-                processor = _detection["processor"]
-                model_name = _detection["model_name"]
-                labels = _detection["label"]
-                confs = _detection["confidence"]
-                b_boxes = _detection["bounding_box"]
-                _det = {}
-                for label, conf, bbox in zip(labels, confs, b_boxes):
-                    _det[label] = {"conf": conf, "bbox": bbox}
-
-        return detections
 
     def compute_best_match(self, detections: Dict) -> Dict:
         """Compute best match"""

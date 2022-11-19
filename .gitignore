@@ -2,7 +2,7 @@
 data/
 data/*
 configs/secrets.yml
-configs/zm_ml.yml
+configs/client.yml
 
 ### Example user template
 # IntelliJ project files

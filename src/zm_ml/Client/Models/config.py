@@ -1,6 +1,7 @@
 import logging
+import re
 from pathlib import Path
-from typing import Dict, List, Tuple, Pattern, Union, Any
+from typing import Dict, List, Tuple, Pattern, Union, Any, Optional
 
 from pydantic import BaseModel, Field, AnyUrl, validator, IPvAnyAddress, SecretStr
 
@@ -21,15 +22,16 @@ class ZMAPISettings(BaseModel):
     ssl_verify: bool = Field(True)
 
     # validators
-    _validate_host_portal = validator(
-        "api", "portal", allow_reuse=True, pre=True
-    )(no_scheme_url_validator)
+    _validate_host_portal = validator("api", "portal", allow_reuse=True, pre=True)(
+        no_scheme_url_validator
+    )
 
 
 class LoggingSettings(BaseModel):
     level: str = Field(logging.INFO)
     console: bool = Field(True)
     integrate_zm: bool = Field(False)
+    log_to_file: bool = Field(False)
     dir: Path = Field(Path("/var/log/zm"))
     file_name: str = Field(default="zm_ml.log")
     user: str = Field(default="www-data")
@@ -47,9 +49,9 @@ class MLAPIRoute(BaseModel):
     timeout: int = Field(90)
 
     # validators
-    _validate_host_portal = validator(
-        "host", allow_reuse=True, pre=True
-    )(no_scheme_url_validator)
+    _validate_host_portal = validator("host", allow_reuse=True, pre=True)(
+        no_scheme_url_validator
+    )
 
 
 class MLAPIRoutes(BaseModel):
@@ -99,13 +101,14 @@ class MLNotificationSettings(BaseModel):
         host: AnyUrl = Field(None)
         token: str = Field(None)
         portal: AnyUrl = Field(None)
-        url_opts: NotificationZMURLOptions = Field(default_factory=NotificationZMURLOptions)
+        url_opts: NotificationZMURLOptions = Field(
+            default_factory=NotificationZMURLOptions
+        )
 
         # validators
-        _validate_host_portal = validator(
-            "host", "portal",  allow_reuse=True, pre=True
-        )(no_scheme_url_validator)
-
+        _validate_host_portal = validator("host", "portal", allow_reuse=True, pre=True)(
+            no_scheme_url_validator
+        )
 
     class PushoverNotificationSettings(BaseModel):
         class SendAnimations(BaseModel):
@@ -118,12 +121,14 @@ class MLNotificationSettings(BaseModel):
         key: str = Field(None)
         portal: Union[IPvAnyAddress, AnyUrl] = Field(None)
         animation: SendAnimations = Field(default_factory=SendAnimations)
-        url_opts: NotificationZMURLOptions = Field(default_factory=NotificationZMURLOptions)
+        url_opts: NotificationZMURLOptions = Field(
+            default_factory=NotificationZMURLOptions
+        )
 
         # validators
-        _validate_host_portal = validator(
-            "portal", allow_reuse=True, pre=True
-        )(no_scheme_url_validator)
+        _validate_host_portal = validator("portal", allow_reuse=True, pre=True)(
+            no_scheme_url_validator
+        )
 
     class ShellScriptNotificationSettings(BaseModel):
         enabled: bool = Field(False)
@@ -136,14 +141,22 @@ class MLNotificationSettings(BaseModel):
         ssl_verify: bool = Field(True)
 
         # validators
-        _validate_host_portal = validator(
-            "host", allow_reuse=True, pre=True
-        )(no_scheme_url_validator)
+        _validate_host_portal = validator("host", allow_reuse=True, pre=True)(
+            no_scheme_url_validator
+        )
 
-    zmninja: ZMNinjaNotificationSettings = Field(default_factory=ZMNinjaNotificationSettings)
-    gotify: GotifyNotificationSettings = Field(default_factory=GotifyNotificationSettings)
-    pushover: PushoverNotificationSettings = Field(default_factory=PushoverNotificationSettings)
-    shell_script: ShellScriptNotificationSettings = Field(default_factory=ShellScriptNotificationSettings)
+    zmninja: ZMNinjaNotificationSettings = Field(
+        default_factory=ZMNinjaNotificationSettings
+    )
+    gotify: GotifyNotificationSettings = Field(
+        default_factory=GotifyNotificationSettings
+    )
+    pushover: PushoverNotificationSettings = Field(
+        default_factory=PushoverNotificationSettings
+    )
+    shell_script: ShellScriptNotificationSettings = Field(
+        default_factory=ShellScriptNotificationSettings
+    )
     hass: HassNotificationSettings = Field(default_factory=HassNotificationSettings)
 
 
@@ -198,11 +211,11 @@ class DetectionSettings(BaseModel):
 
 
 class BaseObjectFilters(BaseModel):
-    min_conf: float = Field(ge=0.0, le=1.0, default=None)
-    total_max_area: Union[float, int, str] = Field(default=None)
-    total_min_area: Union[float, int, str] = Field(default=None)
-    max_area: Union[float, int, str] = Field(default=None)
-    min_area: Union[float, int, str] = Field(default=None)
+    min_conf: Optional[float] = Field(ge=0.0, le=1.0, default=None)
+    total_max_area: Union[float, int, str, None] = Field(default=None)
+    total_min_area: Union[float, int, str, None] = Field(default=None)
+    max_area: Union[float, int, str, None] = Field(default=None)
+    min_area: Union[float, int, str, None] = Field(default=None)
 
     # validators
     _normalize_areas = validator(
@@ -210,34 +223,74 @@ class BaseObjectFilters(BaseModel):
     )(percentage_and_pixels_validator)
 
 
+class OverRideObjectFilters(BaseObjectFilters):
+    pattern: Optional[Pattern] = None
+    labels: Optional[
+        Dict[str, Union[BaseObjectFilters, "OverRideObjectFilters", Dict]]
+    ] = None
+
+    # _normalize_areas = validator(
+    #     "total_max_area", "total_min_area", "max_area", "min_area", allow_reuse=True, pre=True, always=True
+    # )(percentage_and_pixels_validator)
+
+
 class ObjectFilters(BaseObjectFilters):
-    pattern: Pattern = Field(default=".*")
-    labels: Dict[str, BaseObjectFilters] = Field(None)
+    pattern: Optional[Pattern] = None
+    labels: Optional[
+        Dict[str, Union[BaseObjectFilters, OverRideObjectFilters]]
+    ] = Field(None)
 
 
 class FaceFilters(BaseModel):
-    pattern: Pattern = Field(default=".*")
+    pattern: Optional[Pattern] = Field(default=re.compile("(.*)"))
+
+
+class OverRideFaceFilters(BaseModel):
+    pattern: Optional[Pattern] = None
 
 
 class AlprFilters(BaseModel):
-    pattern: Pattern = Field(default=".*")
-    min_conf: float = Field(ge=0.0, le=1.0, default=0.35)
+    pattern: Optional[Pattern] = Field(default=re.compile("(.*)"))
+    min_conf: Optional[float] = Field(ge=0.0, le=1.0, default=0.35)
+
+
+class OverRideAlprFilters(BaseModel):
+    pattern: Optional[Pattern] = None
+    min_conf: Optional[float] = Field(ge=0.0, le=1.0, default=None)
 
 
 class StaticObjects(DefaultEnabled):
-    enabled: bool = Field(False)
-    difference: Union[float, int] = Field(0.1)
+    enabled: Optional[bool] = Field(False)
+    difference: Optional[Union[float, int]] = Field(0.1)
     labels: List[str] = Field(default_factory=list)
+    ignore_labels: List[str] = Field(default_factory=list)
 
     _validate_difference = validator("difference", allow_reuse=True)(
         percentage_and_pixels_validator
     )
 
 
+class OverRideStaticObjects(BaseModel):
+    enabled: bool = None
+    difference: Optional[Union[float, int]] = None
+    labels: Optional[List[str]] = Field(None)
+    ignore_labels: Optional[List[str]] = Field(None)
+
+    _validate_difference = validator(
+        "difference", allow_reuse=True, pre=True, always=True
+    )(percentage_and_pixels_validator)
+
+
 class MatchFilters(BaseModel):
     object: ObjectFilters = Field(default_factory=ObjectFilters)
     face: FaceFilters = Field(default_factory=FaceFilters)
     alpr: AlprFilters = Field(default_factory=AlprFilters)
+
+
+class OverRideMatchFilters(BaseModel):
+    object: OverRideObjectFilters = Field(default_factory=OverRideObjectFilters)
+    face: OverRideFaceFilters = Field(default_factory=OverRideFaceFilters)
+    alpr: OverRideAlprFilters = Field(default_factory=OverRideAlprFilters)
 
 
 class MatchingSettings(BaseModel):
@@ -247,18 +300,84 @@ class MatchingSettings(BaseModel):
 
 
 class MonitorZones(BaseModel):
-    pattern: Pattern = Field(None)
-    points: List = Field(None)
-    resolution: str = Field(None)
-    static_objects: StaticObjects = Field(None)
-    filters: MatchFilters = Field(None)
+    enabled: bool = Field(True)
+    points: List[Tuple[int, int]] = None
+    resolution: Optional[Tuple[int, int]] = None
+    object_confirm: Optional[bool] = None
+    static_objects: Union[OverRideStaticObjects, StaticObjects] = Field(
+        default_factory=OverRideStaticObjects
+    )
+    filters: Union[MatchFilters, OverRideMatchFilters] = Field(
+        default_factory=OverRideMatchFilters
+    )
+
+    _RESOLUTION_STRINGS: Dict[str, Tuple[int, int]] = {
+        # pixel resolution string to tuple, feed it .casefold().strip()'d string's
+        "4kuhd": (3840, 2160),
+        "uhd": (3840, 2160),
+        "4k": (4096, 2160),
+        "6MP": (3072, 2048),
+        "5MP": (2592, 1944),
+        "4MP": (2688, 1520),
+        "3MP": (2048, 1536),
+        "2MP": (1600, 1200),
+        "1MP": (1280, 1024),
+        "1440p": (2560, 1440),
+        "2k": (2048, 1080),
+        "1080p": (1920, 1080),
+        "960p": (1280, 960),
+        "720p": (1280, 720),
+        "fullpal": (720, 576),
+        "fullntsc": (720, 480),
+        "pal": (704, 576),
+        "ntsc": (704, 480),
+        "4cif": (704, 480),
+        "2cif": (704, 240),
+        "cif": (352, 240),
+        "qcif": (176, 120),
+        "480p": (854, 480),
+        "360p": (640, 360),
+        "240p": (426, 240),
+        "144p": (256, 144),
+    }
+
+    @validator("resolution", pre=True, always=True)
+    def _validate_resolution(cls, v):
+        logger.debug(f"Validating Monitor Zone resolution: {v}")
+        if not v:
+            logger.warning("No resolution provided for monitor zone, will not be able to scale "
+                           "zone Polygon if resolution changes")
+        elif isinstance(v, str):
+            v = v.casefold().strip()
+            if v in cls._RESOLUTION_STRINGS:
+                v = cls._RESOLUTION_STRINGS[v]
+            elif v not in cls._RESOLUTION_STRINGS:
+                # check for a valid resolution string
+                import re
+                # WxH
+                if re.match(r"^\d+x\d+$", v):
+                    v = tuple(int(x) for x in v.split("x"))
+                # W*H
+                elif re.match(r"^\d+\*\d+$", v):
+                    v = tuple(int(x) for x in v.split("*"))
+                # W,H
+                elif re.match(r"^\d+,\d+$", v):
+                    v = tuple(int(x) for x in v.split(","))
+                else:
+                    logger.warning(
+                        f"Invalid resolution string: {v}. Valid strings are: W*H WxH W,H OR {', '.join(cls._RESOLUTION_STRINGS)}"
+                    )
+        logger.debug(f"Validated Monitor Zone resolution: {v}")
+        return v
 
     @validator("points", pre=True, always=True)
     def validate_points(cls, v, field):
         if v:
             orig = str(v)
             if not isinstance(v, (str, list)):
-                raise TypeError(f"'{field.name}' Can only be List or string! type={type(v)}")
+                raise TypeError(
+                    f"'{field.name}' Can only be List or string! type={type(v)}"
+                )
             elif isinstance(v, str):
                 v = [tuple(map(int, x.strip().split(","))) for x in v.split(" ")]
             from shapely.geometry import Polygon
@@ -278,19 +397,27 @@ class MonitorZones(BaseModel):
 
 
 class MonitorsSettings(BaseModel):
-    models: Dict[str, Any] = Field(default_factory=dict)
-    zones: Dict[str, MonitorZones] = Field(default_factory=dict)
+    models: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    object_confirm: Optional[bool] = None
+    static_objects: Optional[OverRideStaticObjects] = Field(default_factory=OverRideStaticObjects)
+    filters: Optional[OverRideMatchFilters] = Field(default_factory=OverRideMatchFilters)
+    zones: Optional[Dict[str, MonitorZones]] = Field(default_factory=dict)
 
 
 class Testing(BaseModel):
     enabled: bool = Field(False)
-    substitutions:  Dict[str, str] = Field(default_factory=dict)
+    substitutions: Dict[str, str] = Field(default_factory=dict)
+
+
+class SystemSettings(BaseModel):
+    variable_data_path: Path = Field(Path("/var/lib/zm_ml"))
 
 
 class ConfigFileModel(BaseModel):
     testing: Testing = Field(default_factory=Testing)
     substitutions: Dict[str, str] = Field(default_factory=dict)
-    config_path: Path = Field(Path('/etc/zm/ml'))
+    config_path: Path = Field(Path("/etc/zm/ml"))
+    system: SystemSettings = Field(default_factory=SystemSettings)
     zoneminder: ZMAPISettings = Field(default_factory=ZMAPISettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     mlapi: MLAPIRoutes = Field(default_factory=MLAPIRoutes)
@@ -310,4 +437,3 @@ class ConfigFileModel(BaseModel):
             if isinstance(v, str):
                 v = Path(v)
         return v
-

@@ -51,12 +51,11 @@ class ZMDB:
         """A private function to interface with the ZoneMinder DataBase"""
         # From @pliablepixels SQLAlchemy work - all credit goes to them.
         lp: str = "ZM-DB:"
-        from ..main import ZMEnvVars, get_global_config
-        g = get_global_config()
-        db_config: ZMEnvVars = g.Environment
+        from ...Shared.configs import ClientEnvVars
+        db_config: ClientEnvVars = g.Environment
         # TODO: grab data from ZM DB about logging stuff?
         files = []
-        conf_path = db_config.conf_path
+        conf_path = db_config.zm_conf_dir
         if conf_path.is_dir():
             for fi in glob.glob(f"{conf_path}/conf.d/*.conf"):
                 files.append(fi)
@@ -141,6 +140,7 @@ class ZMDB:
             logger.warning(
                 f"{lp} the database query did not return a monitor ID for this event?"
             )
+            raise ValueError("No Monitor ID returned from DB query")
 
         mid_name_select: select = select([self.meta.tables["Monitors"].c.Name]).where(
             self.meta.tables["Monitors"].c.Id == mid
@@ -324,27 +324,27 @@ class ZMDB:
         colours_result.close()
 
         if g.mon_image_buffer_count:
-            print(f"Got ImageBufferCount for monitor {g.mid} -=> {g.mon_image_buffer_count = }")
+            logger.debug(f"Got ImageBufferCount for monitor {g.mid} -=> {g.mon_image_buffer_count = }")
         else:
-            print(
+            logger.debug(
                 f"{lp} the database query did not return ImageBufferCount for monitor {g.mid}"
             )
         if g.mon_width:
-            print(f"Got Width for monitor {g.mid} -=> {g.mon_width}")
+            logger.debug(f"Got Width for monitor {g.mid} -=> {g.mon_width}")
         else:
-            print(
+            logger.debug(
                 f"{lp} the database query did not return Width for monitor {g.mid}"
             )
         if g.mon_height:
-            print(f"Got Height for monitor {g.mid} -=> {g.mon_height}")
+            logger.debug(f"Got Height for monitor {g.mid} -=> {g.mon_height}")
         else:
-            print(
+            logger.debug(
                 f"{lp} the database query did not return Height for monitor {g.mid}"
             )
         if g.mon_colorspace:
-            print(f"Got Colours for monitor {g.mid} -=> {g.mon_colorspace}")
+            logger.debug(f"Got Colours for monitor {g.mid} -=> {g.mon_colorspace}")
         else:
-            print(
+            logger.debug(
                 f"{lp} the database query did not return Colours for monitor {g.mid}"
             )
 
@@ -352,6 +352,6 @@ class ZMDB:
         g.mon_post = mon_post
         g.mon_pre = mon_pre
         g.mon_fps = mon_fps
-        g.reason = reason
+        g.event_cause = reason
         g.event_path = event_path
         return mid, mon_name, mon_post, mon_pre, mon_fps, reason, event_path

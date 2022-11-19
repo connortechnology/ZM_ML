@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+
+# Check if root
+if [ "$(id -u)" != "0" ]; then
+    echo "This script must be run as root" 1>&2
+    exit 1
+fi
+
+# NOTE: This requires GNU getopt.  On Mac OS X and FreeBSD, you have to install this
+# separately; see below.
+TEMP=$(getopt -o IAC: --long interactive,all,compute: \
+              -n 'build-opencv-gpu' -- "$@")
+
+if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
+
+# Note the quotes around '$TEMP': they are essential!
+eval set -- "$TEMP"
+
+
+ALL_CC=false
+CLI_CC=
+INTERACTIVE=false
+while true; do
+  case "$1" in
+    -A | --all ) ALL_CC=true; shift ;;
+    -C | --compute ) CLI_CC="$2"; shift 2 ;;
+    -I | --interactive ) INTERACTIVE=true; shift ;;
+    -- ) shift; break ;;
+    * ) break ;;
+  esac
+done
+
+# Check if we have to install all the CC
+
+
+
+if [ "$INTERACTIVE" = true ]; then
+# Get input for type of Nvidia GPU
+echo "What type of Nvidia GPU do you have? (Used to determine Compute Capability)"
+echo "0) I use AMD GPUs"
+echo "1) Nvidia GeForce 10xx, TITAN(NON GTX) [X, Xp], series (CC 6.1)"
+echo "2) Nvidia GeForce TITAN(NON GTX) V (CC 7.0)"
+echo "3) Nvidia GeForce TITAN(NON GTX) RTX, 16xx, 20xx series (CC 7.5)"
+echo "4) Nvidia GeForce 30xx series (CC 8.5)"
+echo "5) Nvidia GeForce 40xx series (CC 8.9)"
+read -rp "Enter your choice: " GPU_TYPE
+# check if input is space separated, if so make an array
+if [[ $GPU_TYPE == *" "* ]]; then
+    GPU_TYPE=("$GPU_TYPE")
+fi
+# Convert array to CC
+for i in $GPU_TYPE["@"]; do
+    case $i in
+        0) CC=() ;;
+        1) CC+=("6.1") ;;
+        2) CC+=("7.0") ;;
+        3) CC+=("7.5") ;;
+        4) CC+=("8.5") ;;
+        5) CC+=("8.9") ;;
+    esac
+done
+
+
+# check if input is valid
+if [ "$GPU_TYPE" -lt 0 ] || [ "$GPU_TYPE" -gt 5 ]; then
+    echo "Invalid input"
+    exit 1
+fi
+if [ "$GPU_TYPE" -eq 0 ]; then
+    echo "You have selected AMD GPUs which are unsupported by OpenCV"
+    echo "Exiting..."
+    exit 0
+fi
+
+
+
+fi
+
+
+if [ "$ALL_CC" = true ]; then
+    CC="3.0 3.5 5.0 5.2 5.3 6.0 6.1 6.2 7.0 7.2 7.5 8.5 8.9"
+    echo "Compiling with all the Compute Capabilities => ${CC}"
+elif [ -n "$CLI_CC" ]; then
+    echo "Installing CLI user supplied CC => $CLI_CC"
+    CC="$CLI_CC"
+else
+    CC="6.1 7.5 8.5 8.9"
+    echo "Installing default CC => ${CC}"
+fi
+
+
+
