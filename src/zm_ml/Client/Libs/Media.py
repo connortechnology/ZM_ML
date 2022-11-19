@@ -86,7 +86,7 @@ class APIImagePipeLine:
                 logger.debug(f"{LP}read>event_data: {msg}")
             if not self.event_ended:
                 try:
-                    g.Event, g.Monitor, g.Frame = g.api.get_all_event_data(g.eid)
+                    g.Event, g.Monitor, g.Frame, _ = g.api.get_all_event_data(g.eid)
                 except Exception as e:
                     logger.error(f"{lp} error grabbing event data from API -> {e}")
                     raise e
@@ -253,7 +253,7 @@ class APIImagePipeLine:
                 f"{lp} incrementing next frame ID to read by {self.fps} = {self.current_frame}"
             )
         if image:
-            # (bytearray, image_file_name)
+            # (bytes, image_file_name)
             return image, f"mid_{g.mid}-eid_{g.eid}-fid_{self.current_frame}.jpg"
         return None, None
 

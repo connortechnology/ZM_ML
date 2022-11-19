@@ -8,7 +8,6 @@ formatter = logging.Formatter(
     "%(asctime)s.%(msecs)04d %(name)s[%(process)s] %(levelname)s %(module)s:%(lineno)d->[%(message)s]",
     "%m/%d/%y %H:%M:%S",
 )
-# 08/28/22 11:17:10.794009 zm_mlapi[170] DBG1 pyzm_utils:1567->
 stream_handler = logging.StreamHandler(stream=sys.stdout)
 stream_handler.setFormatter(formatter)
 logger.addHandler(stream_handler)

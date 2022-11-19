@@ -418,26 +418,14 @@ class ZMApi:
         event: Optional[Dict] = None
         monitor: Optional[Dict] = None
         frame: Optional[List] = None
-        new_mon: Optional[Dict] = None
+        event_tot_frames: Union[int, float, None] = None
         events_url = f"{self.api_url}/events/{event_id}.json"
-        try:
-            api_event_response = self.make_request(url=events_url, quiet=True)
-        except Exception as e:
-            logger.error(f"{lp} Error during Event data retrieval: {str(e)}")
-            logger.debug(f"{lp} EXCEPTION>>> {e}")
-        else:
-            event = api_event_response.get("event", {}).get("Event")
-            monitor = api_event_response.get("event", {}).get("Monitor")
-            frame = api_event_response.get("event", {}).get("Frame")
-            mon_name = monitor.get("Name")
-            event_tot_frames = len(frame)
-        finally:
-            # logger.debug(f" DEBUG Event data: {event}", caller=caller)
-            # logger.debug(f" DEBUG Monitor data: {monitor}", caller=caller)
-            # logger.debug(f" DEBUG Frame data: {frame}", caller=caller)
-            # logger.debug(f" DEBUG NEW MONITOR data: {new_mon}", caller=caller)
-
-            return event, monitor, frame
+        api_event_response = self.make_request(url=events_url, quiet=True)
+        event = api_event_response.get("event", {}).get("Event")
+        monitor = api_event_response.get("event", {}).get("Monitor")
+        frame = api_event_response.get("event", {}).get("Frame")
+        event_tot_frames = len(frame)
+        return event, monitor, frame, event_tot_frames
 
     def get_portalbase(self):
         """Returns the portal base URL"""

@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 
 files=''
-config='/home/zmadmin/zm_ml/configs/client.yml'
-detect_script='/home/zmadmin/zm_ml/examples/eventstart.py'
+
+config="'${ML_CLIENT_CONF_FILE:-/home/zmadmin/zm_ml/configs/client.yml}"
+detect_script="${ML_CLIENT_EVENT_START:-/home/zmadmin/zm_ml/examples/eventstart.py}"
+
 _WEB_OWNER_FROM_PS=$(ps xao user,group,comm | grep -E '(httpd|hiawatha|apache|apache2|nginx)' | grep -v whoami | grep -v root | head -n1 | awk '{print $1}')
 #_WEB_OWNER='www-data' # uncomment this if the above mechanism fails
 
@@ -74,7 +76,6 @@ bat_theme='Coldark-Dark'
 if [[ -n "${bat_}" ]]; then
   use_random_bat_theme="${ML_BAT_RANDOM:-false}"
   if [[ "${use_random_bat_theme}" == 'true' ]]; then
-    # grab a random theme from the list
     bat_theme="${bat_themes[$RANDOM % ${#bat_themes[@]}]}"
     echo "Using RANDOM bat theme: ${bat_theme}"
 
@@ -83,8 +84,8 @@ if [[ -n "${bat_}" ]]; then
 fi
 
 usage() {
-  echo "ZM-ML Client helper script, NOTE: Must use only numerical arguments"
-  echo "Usage: $0 Event-ID [Monitor-ID: Optional]"
+  echo "ZM-ML Client EventStartCommand helper shell script, NOTE: Must use only numerical arguments"
+  echo "Usage: '$0 Event-ID [Monitor-ID: Optional]'"
 }
 
 # Check we have 1 to 2 arguments

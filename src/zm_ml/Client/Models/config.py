@@ -1,5 +1,6 @@
 import logging
 import re
+import tempfile
 from pathlib import Path
 from typing import Dict, List, Tuple, Pattern, Union, Any, Optional
 
@@ -38,7 +39,7 @@ class LoggingSettings(BaseModel):
     group: str = Field(default="www-data")
 
 
-class MLAPIRoute(BaseModel):
+class ServerRoute(BaseModel):
     name: str = Field(...)
     enabled: bool = Field(True)
     weight: int = Field(0)
@@ -54,22 +55,25 @@ class MLAPIRoute(BaseModel):
     )
 
 
-class MLAPIRoutes(BaseModel):
-    routes: List[MLAPIRoute] = Field(default_factory=list)
+class ServerRoutes(BaseModel):
+    routes: List[ServerRoute] = Field(default_factory=list)
 
 
-class MLAPIAnimationSettings(BaseModel):
+class AnimationSettings(BaseModel):
     class AnimationBaseSettings(BaseModel):
         enabled: bool = Field(False)
-        fps: int = Field(ge=0, default=10)
-        duration: int = Field(le=120, ge=1, default=10)
-        width: int = Field(640)
 
     class AnimationGIFSettings(AnimationBaseSettings):
         fast: bool = Field(False)
 
     gif: AnimationGIFSettings = Field(default_factory=AnimationGIFSettings)
     mp4: AnimationBaseSettings = Field(default_factory=AnimationBaseSettings)
+    width: int = Field(640)
+
+    low_memory: bool = Field(False)
+    overwrite: bool = Field(False)
+    max_attempts: int = Field(ge=1, default=3)
+    attempt_delay: float = Field(ge=0.1, default=2.9, description="Delay between attempts in seconds")
 
 
 class NotificationZMURLOptions(BaseModel):
@@ -410,7 +414,8 @@ class Testing(BaseModel):
 
 
 class SystemSettings(BaseModel):
-    variable_data_path: Path = Field(Path("/var/lib/zm_ml"))
+    variable_data_path: Optional[Path] = Field(Path("/var/lib/zm_ml"))
+    tmp_path: Optional[Path] = Field(Path(tempfile.gettempdir()) / "zm_ml")
 
 
 class ConfigFileModel(BaseModel):
@@ -420,8 +425,8 @@ class ConfigFileModel(BaseModel):
     system: SystemSettings = Field(default_factory=SystemSettings)
     zoneminder: ZMAPISettings = Field(default_factory=ZMAPISettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
-    mlapi: MLAPIRoutes = Field(default_factory=MLAPIRoutes)
-    animation: MLAPIAnimationSettings = Field(default_factory=MLAPIAnimationSettings)
+    mlapi: ServerRoutes = Field(default_factory=ServerRoutes)
+    animation: AnimationSettings = Field(default_factory=AnimationSettings)
     notifications: MLNotificationSettings = Field(
         default_factory=MLNotificationSettings
     )

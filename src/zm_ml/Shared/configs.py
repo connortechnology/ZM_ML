@@ -118,7 +118,7 @@ class GlobalConfig(BaseModel):
     mon_width: int = None
     mon_height: int = None
     mon_colorspace: int = None
-    frame_buffer: list = Field(default_factory=list)
+    frame_buffer: Dict = Field(default_factory=dict)
 
     Environment: ClientEnvVars = None
     imported_zones: list = Field(default_factory=list)

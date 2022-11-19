@@ -6,12 +6,11 @@ cleanup() {
 
 MID=$2
 EID=$1
-
-[[ -z $ML_CLIENT_CONF_FILE ]] && ML_CLIENT_CONF_FILE='/var/lib/zm_ml/scripts/eventstart.py'
+config="${ML_CLIENT_CONF_FILE:-/var/lib/zm_ml/scripts/eventstart.py}"
 
 event_start_command=(
   python3
-  "${ML_CLIENT_CONF_FILE}"
+  "${config}"
   --eid "${EID}"
    --mid "${MID}"
    --live

@@ -12,7 +12,7 @@ from typing import Optional
 from zm_ml.Client.main import ZMClient
 
 
-logger = logging.getLogger("ZM ML Example")
+logger = logging.getLogger("EventStart")
 formatter = logging.Formatter(
     "%(asctime)s.%(msecs)04d %(name)s[%(process)s] %(levelname)s -> %(message)s",
     "%m/%d/%y %H:%M:%S",
