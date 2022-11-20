@@ -6,16 +6,18 @@ import os
 import pickle
 import sys
 import concurrent
+from concurrent.futures import Future
 from hashlib import new
 from pathlib import Path
 from shutil import which
-from time import perf_counter, sleep
+from time import perf_counter, sleep, time
 from typing import Union, Dict, Optional, List, Any, Tuple
 
 import cv2
 import numpy as np
 import requests
 import requests_toolbelt
+import urllib3.exceptions
 import yaml
 from shapely.geometry import Polygon
 
@@ -33,6 +35,7 @@ from .Models.config import (
     OverRideObjectFilters,
     OverRideFaceFilters,
     OverRideAlprFilters,
+    MatchStrategy,
 )
 from ..Shared.configs import ClientEnvVars, GlobalConfig
 
@@ -49,7 +52,6 @@ stream_handler = logging.StreamHandler(stream=sys.stdout)
 stream_handler.setFormatter(formatter)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(stream_handler)
-logger.debug(f"added logger in {__name__}")
 
 ENV_VARS: Optional[ClientEnvVars] = None
 g: Optional[GlobalConfig] = None
@@ -60,7 +62,6 @@ def get_global_config() -> GlobalConfig:
 
 
 def check_imports():
-    logger.debug("Checking for required imports")
     try:
         import cv2
 
@@ -88,7 +89,9 @@ def check_imports():
             import cv2.dnn
         except ImportError:
             logger.error(
-                f"OpenCV does not have DNN support! If you installed from pip you need to install opencv-contrib-python"
+                f"OpenCV does not have DNN support! If you installed from "
+                f"pip you need to install 'opencv-contrib-python'. If you built from source, "
+                f"you did not compile with CUDA/cuDNN"
             )
             raise
     except ImportError as e:
@@ -100,7 +103,7 @@ def check_imports():
     except ImportError as e:
         logger.error(f"Missing numpy: {e}")
         raise
-    logger.debug("All imports found")
+    logger.debug("check imports:: All imports found!")
 
 
 def _cfg2path(config_file: Union[str, Path]) -> Path:
@@ -202,7 +205,7 @@ class CFGHash:
          hashlib.algorithms_available for available algorithms
         """
 
-        lp: str = "conf:hash:"
+        lp: str = f"config file::hash {algorithm}::"
         checksum = new(algorithm)  # Raises appropriate exceptions.
         self.previous_hash = str(self.hash)
         self.hash = ""
@@ -222,7 +225,7 @@ class CFGHash:
         else:
             self.hash = checksum.hexdigest()
             logger.debug(
-                f"{lp} the {algorithm} hex digest for file '{self.config_file.as_posix()}' -> {self.hash}"
+                f"{lp} the hex-digest for file '{self.config_file.as_posix()}' -> {self.hash}"
             )
         return self.hash
 
@@ -253,7 +256,7 @@ class ZMClient:
     _comb: Dict
 
     def check_permissions(self):
-        lp: str = "check_permissions:"
+        lp: str = "check_permissions::"
         if not os.access(g.config.system.variable_data_path, os.W_OK):
             logger.error(
                 f"{lp} system:variable_data_path [{g.config.system.variable_data_path}] is not writable by user {self.sys_user}"
@@ -275,8 +278,12 @@ class ZMClient:
         :param cfg_file: Path to the config file
         """
         logger.debug("Initializing ZMClient")
+        self.pushed_labels = []
+        from src.zm_ml.Client.Notifications.Pushover import Pushover
+        self.pushover: Pushover = Pushover()
         self._comb_filters: Dict = {}
         self.zones: Dict = {}
+        self.zone_polygons: List[Polygon] = []
         self.zone_filters: Dict = {}
         self.filtered_labels: Dict = {}
         import getpass
@@ -298,12 +305,15 @@ class ZMClient:
         g.Environment = ENV_VARS
         if not cfg_file:
             logger.warning(
-                f"No config file specified, using defaults -> {g.Environment.conf_file}"
+                f"No config file specified, using defaults from ENV -> {g.Environment.conf_file}"
             )
             cfg_file = ENV_VARS.conf_file
         if cfg_file:
             if isinstance(cfg_file, (str, Path)):
-                g.config_file = self.config_file = Path(cfg_file)
+
+                g.config_file = self.config_file = (
+                    Path(cfg_file) if isinstance(cfg_file, str) else cfg_file
+                )
             else:
                 raise TypeError("cfg_file must be a str or Path object")
         assert cfg_file, "No config file specified"
@@ -312,35 +322,27 @@ class ZMClient:
 
         futures: List[concurrent.futures.Future] = []
         _hash: concurrent.futures.Future
-        try:
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                _hash = executor.submit(CFGHash, self.config_file)
-                executor.submit(self.check_permissions)
-                executor.submit(self.sort_routes)
-                futures.append(executor.submit(self.init_logs))
-                futures.append(executor.submit(self.init_db))
-                futures.append(executor.submit(self.init_api))
-                for future in concurrent.futures.as_completed(futures):
-                    logger.debug(f"INIT>>> Future completed: {future}")
-                    future.result()
-        except Exception as exc:
-            logger.exception(exc)
-            raise
-        # for future in futures:
-        #     future.result()
+        with concurrent.futures.ThreadPoolExecutor(
+            thread_name_prefix="init", max_workers=g.config.system.thread_workers
+        ) as executor:
+            _hash = executor.submit(CFGHash, self.config_file)
+            executor.submit(self.check_permissions)
+            executor.submit(self._sort_routes)
+            futures.append(executor.submit(self._init_logs))
+            futures.append(executor.submit(self._init_db))
+            futures.append(executor.submit(self._init_api))
+            for future in concurrent.futures.as_completed(futures):
+                future.result()
         self.config_hash = _hash.result()
 
-    def init_static_objects(self):
-        return static_pickle()
-
-    def sort_routes(self):
+    def _sort_routes(self):
         self.routes = self.config.mlapi.routes
         if len(self.routes) > 1:
             logger.debug(f"Routes: BEFORE sorting >> {self.routes}")
             self.routes.sort(key=lambda x: x.weight)
             logger.debug(f"Routes: AFTER sorting >> {self.routes}")
 
-    def init_logs(self):
+    def _init_logs(self):
         """Initialize the logging system."""
         level = self.config.logging.level
         level = level.casefold().strip()
@@ -385,12 +387,12 @@ class ZMClient:
             )
         logger.info(f"Logging initialized...")
 
-    def init_db(self):
+    def _init_db(self):
         logger.debug("Initializing DB")
         self.db = ZMDB()
         logger.debug("DB initialized...")
 
-    def get_db_data(self, eid: int):
+    def _get_db_data(self, eid: int):
         """Get data from the database"""
         global g
         g.eid = eid
@@ -406,11 +408,13 @@ class ZMClient:
         logger.debug(
             f"\n\n\n Checking if configured to import zones for monitor {g.mid}\n\n\n\n"
         )
-        with concurrent.futures.ThreadPoolExecutor() as executor:
+        with concurrent.futures.ThreadPoolExecutor(
+            thread_name_prefix="init-2", max_workers=g.config.system.thread_workers
+        ) as executor:
             executor.submit(self.api.import_zones)
-            executor.submit(self.init_static_objects)
+            executor.submit(lambda: static_pickle)
 
-    def init_api(self):
+    def _init_api(self):
         g.api = self.api = ZMApi(self.config.zoneminder)
 
     def combine_filters(
@@ -419,29 +423,29 @@ class ZMClient:
         filters_2: Union[Dict, OverRideMatchFilters],
     ):
         lp: str = "combine filters::"
-        logger.debug(f"{lp} BASE filters [type: {type(filters_1)}]: {filters_1}")
-        logger.debug(f"{lp} OVERRIDE filters [type: {type(filters_2)}]: {filters_2}")
+        # logger.debug(f"{lp} BASE filters [type: {type(filters_1)}]: {filters_1}")
+        # logger.debug(f"{lp} OVERRIDE filters [type: {type(filters_2)}]: {filters_2}")
         if isinstance(filters_1, (MatchFilters, OverRideMatchFilters)):
-            logger.debug(f"{lp} filters_1 is a MatchFilters object, converting to dict")
+            # logger.debug(f"{lp} filters_1 is a MatchFilters object, converting to dict")
             output_filters: Dict = filters_1.dict()
         elif isinstance(filters_1, dict):
             output_filters = filters_1
         else:
             raise TypeError("filters_1 must be a dict or (OverRide)MatchFilters object")
         _base_obj_label: Dict = output_filters["object"]["labels"]
-        logger.debug(f"{lp} BASE object.labels: {_base_obj_label}")
+        # logger.debug(f"{lp} BASE object.labels: {_base_obj_label}")
 
         if isinstance(filters_2, (MatchFilters, OverRideMatchFilters)):
-            logger.debug(
-                f"{lp} filters_2 is a {type(filters_2)} object, converting to dict"
-            )
+            # logger.debug(
+            #     f"{lp} filters_2 is a {type(filters_2)} object, converting to dict"
+            # )
             override_filters: Dict = filters_2.dict()
         elif isinstance(filters_2, dict):
             override_filters = filters_2
         else:
             raise TypeError("filters_2 must be a dict or OverRideMatchFilters object")
         _override_obj_label: Dict = override_filters["object"]["labels"]
-        logger.debug(f"{lp} OVERRIDE object.labels: {_override_obj_label}")
+        # logger.debug(f"{lp} OVERRIDE object.labels: {_override_obj_label}")
         # if _base_obj_label is None:
         #     _base_obj_label = {}
         if output_filters:
@@ -456,16 +460,16 @@ class ZMClient:
                                 v is not None
                                 and v != output_filters["object"]["labels"][label][k]
                             ):
-                                logger.debug(
-                                    f"{lp} Overriding BASE filter 'object':'labels':'{label}':'{k}' with Monitor {g.mid} "
-                                    f"OVERRIDE filter VALUE '{v}'"
-                                )
+                                # logger.debug(
+                                #     f"{lp} Overriding BASE filter 'object':'labels':'{label}':'{k}' with Monitor {g.mid} "
+                                #     f"OVERRIDE filter VALUE '{v}'"
+                                # )
                                 output_filters["object"]["labels"][label][k] = v
                     else:
-                        logger.debug(
-                            f"{lp} Adding Monitor {g.mid} OVERRIDE filter 'object':'labels'"
-                            f":'{label}' with VALUE '{filter_data}'"
-                        )
+                        # logger.debug(
+                        #     f"{lp} Adding Monitor {g.mid} OVERRIDE filter 'object':'labels'"
+                        #     f":'{label}' with VALUE '{filter_data}'"
+                        # )
                         output_filters["object"]["labels"][label] = filter_data
 
             for filter_type, filter_data in override_filters.items():
@@ -476,11 +480,11 @@ class ZMClient:
                             continue
                         if v is not None and v != output_filters[filter_type][k]:
                             output_filters[filter_type][k] = v
-                            logger.debug(
-                                f"{lp} Overriding BASE filter '{filter_type}':'{k}' with Monitor {g.mid} "
-                                f"OVERRIDE filter VALUE '{v}'"
-                            )
-            logger.debug(f"{lp} Final combined output => {output_filters}")
+                            # logger.debug(
+                            #     f"{lp} Overriding BASE filter '{filter_type}':'{k}' with Monitor {g.mid} "
+                            #     f"OVERRIDE filter VALUE '{v}'"
+                            # )
+            # logger.debug(f"{lp} Final combined output => {output_filters}")
         if not output_filters["object"]["labels"]:
             output_filters["object"]["labels"] = None
         self._comb_filters = output_filters
@@ -495,11 +499,15 @@ class ZMClient:
         logger.info(
             f"{lp} Running detection for event {eid}, obtaining monitor info using DB and API..."
         )
-        self.get_db_data(eid)
+        self._get_db_data(eid)
         if not mid and g.mid:
-            logger.debug(f"{lp} No monitor ID provided, using monitor ID from DB: {g.mid}")
+            logger.debug(
+                f"{lp} No monitor ID provided, using monitor ID from DB: {g.mid}"
+            )
         elif not mid and not g.mid:
-            raise ValueError(f"{lp} No monitor ID provided, and no monitor ID from DB: Exiting...")
+            raise ValueError(
+                f"{lp} No monitor ID provided, and no monitor ID from DB: Exiting..."
+            )
         # get monitor and event info
         g.Monitor = self.api.get_monitor_data(g.mid)
         g.Event, event_monitor_data, g.Frame, _ = self.api.get_all_event_data(eid)
@@ -535,13 +543,13 @@ class ZMClient:
                 )
                 models = {"yolov4": {}}
         else:
-            _models = self.config.detection_settings.models
             # dont duplicate Models
-            models = {**_models, **models}
-        logger.debug(f"{lp} Models to use: {models}")
+            models = {**self.config.detection_settings.models, **models}
         model_names = list(models.keys())
         models_str = ",".join(model_names)
-        logger.debug(f"'DBG'>>> {model_names = } --- {models_str = } <<<DBG")
+        logger.debug(
+            f"'DBG'>>> {models = } --- {model_names = } --- {models_str = } <<<DBG"
+        )
 
         final_detections: dict = {}
         detections: dict = {}
@@ -550,7 +558,7 @@ class ZMClient:
         futures = []
         base_filters = g.config.matching.filters
         monitor_filters = g.config.monitors.get(g.mid).filters
-        logger.debug(f"{lp} Combining GLOBAL filters with Monitor {g.mid} filters")
+        # logger.debug(f"{lp} Combining GLOBAL filters with Monitor {g.mid} filters")
         combined_filters = self.combine_filters(base_filters, monitor_filters)
         if g.mid in self.config.monitors:
             if self.config.monitors.get(g.mid).zones:
@@ -573,24 +581,28 @@ class ZMClient:
         _i = 0
         for zone in self.zones:
             _i += 1
+            # Break referencing, we want a copy
             cp_fltrs = copy.deepcopy(combined_filters)
-            logger.debug(
-                f"'DBG'>>> \nBuilding filters using COMBINED global+monitor and overriding "
-                f"with zone filters for: {'zone'} BEFORE COMBINED_FILTERS = {cp_fltrs} <<<DBG"
-            )
+            # logger.debug(
+            #     f"'DBG'>>> \nBuilding filters using COMBINED global+monitor and overriding "
+            #     f"with zone filters for: {'zone'} BEFORE COMBINED_FILTERS = {cp_fltrs} <<<DBG"
+            # )
             self.zone_filters[zone] = self.combine_filters(
                 cp_fltrs, self.zones[zone].filters
             )
-            logger.debug(f"'DBG'>>> AFTER COMBINED_FILTERS = {cp_fltrs} <<<DBG")
+            # logger.debug(f"'DBG'>>> AFTER COMBINED_FILTERS = {cp_fltrs} <<<DBG")
             cp_fltrs = None
 
-        logger.debug(f"'DBG'>>> Zone filters: \n\n{self.zone_filters} <<<DBG\n")
+        # logger.debug(f"'DBG'>>> Zone filters: \n\n{self.zone_filters} <<<DBG\n")
         if g.config.matching.static_objects.enabled:
             static_labels, static_conf, static_bbox = static_pickle()
             self.static_objects.labels = static_labels
             self.static_objects.confidence = static_conf
             self.static_objects.bbox = static_bbox
-        with concurrent.futures.ThreadPoolExecutor() as executor:
+        with concurrent.futures.ThreadPoolExecutor(
+            thread_name_prefix="detection-request",
+            max_workers=g.config.system.thread_workers,
+        ) as executor:
             while self.image_pipeline.is_image_stream_active():
                 image, image_name = self.image_pipeline.get_image()
 
@@ -600,16 +612,16 @@ class ZMClient:
 
                 if how.api.enabled is True:
                     image_name = str(image_name).split("fid_")[1].split(".")[0]
-
+                cv2_image = np.asarray(bytearray(image), dtype="uint8")
+                cv2_image = cv2.imdecode(cv2_image, cv2.IMREAD_COLOR)
+                cv2_image = cv2.cvtColor(cv2_image, cv2.COLOR_BGR2RGB)
                 if any(
                     [g.config.animation.gif.enabled, g.config.animation.mp4.enabled]
                 ):
-                    cv2_image = np.asarray(bytearray(image), dtype="uint8")
-                    cv2_image = cv2.imdecode(cv2_image, cv2.IMREAD_COLOR)
-                    cv2_image = cv2.cvtColor(cv2_image, cv2.COLOR_BGR2RGB)
+
                     if g.config.animation.low_memory:
                         # save to file
-                        _tmp = g.config.system.tmp_path / 'animations'
+                        _tmp = g.config.system.tmp_path / "animations"
                         _tmp.mkdir(parents=True, exist_ok=True)
                         cv2.imwrite(str(_tmp / f"{image_name}.jpg"), cv2_image)
                         # Add Path pbject pointing to the image on disk
@@ -651,27 +663,41 @@ class ZMClient:
                         )
                         futures_data.append(
                             {
+                                "image": cv2_image,
                                 "route": route,
                                 "started": _perf,
-                                "fid": image_name,
+                                "image_name": image_name,
                             }
                         )
 
                     else:
                         logger.warning(f"Neo-MLAPI route '{route.name}' is disabled!")
-            for idx, future in enumerate(concurrent.futures.as_completed(futures)):
-                route = futures_data[idx]["route"]
-                _perf = futures_data[idx]["started"]
+            for future, f_data in zip(
+                concurrent.futures.as_completed(futures), futures_data
+            ):
+                future: Future
+                route = f_data["route"]
+                _perf = f_data["started"]
+                image = f_data["image"]
+                image_name = f_data["image_name"]
                 if how.api.enabled is True:
-                    image_name = int(futures_data[idx]["fid"])
+                    image_name = int(image_name)
                 else:
-                    image_name = futures_data[idx]["fid"]
-                fid_str = f":image_name={image_name}" if image_name else ""
-                logger.debug(
-                    f"\n\n'{route.name}'{fid_str} future ({idx + 1}/{len(futures)}) completed...\n\n"
-                )
-                r: requests.Response = future.result()
-                r.raise_for_status()
+                    image_name = image_name
+                try:
+                    exception_ = future.exception(timeout=60)
+                    if exception_:
+                        raise exception_
+                    r: requests.Response = future.result()
+                except requests.exceptions.ConnectionError as e:
+                    logger.debug(f"{e.args=}")
+                    logger.warning(f"{lp} Route: {route.name} ConnectionError: {e}")
+                    continue
+
+                except Exception as e:
+                    logger.warning(f"DBG>>>DBG??? {e.args=} {type(e)=}")
+                    continue
+
                 logger.debug(
                     f"perf:: HTTP Detection request to '{route.name}' completed in {perf_counter() - _perf:.5f} seconds"
                 )
@@ -681,19 +707,14 @@ class ZMClient:
                     f"Results: {len(results)} Type: {type(results)} => {results}"
                 )
                 filter_start = perf_counter()
-                filtered_results = self.filter_detections(
-                    results, combined_filters, image, image_name
-                )
+                filtered_results = self.filter_detections(results, image, image_name)
                 final_detections[image_name] = filtered_results
-                logger.debug(
-                    f"'DBG'>>> RESULT LOOP {idx + 1}/{len(futures)} ==> {filtered_results} <<<DBG"
-                )
                 logger.debug(
                     f"perf:: TOTAL Filtering took {perf_counter() - filter_start:.5f} seconds"
                 )
 
         logger.debug(
-            f"perf:: Total detections time {perf_counter() - _start_detections:.5f} seconds"
+            f"perf:: Total detections time {perf_counter() - _start:.5f} seconds"
         )
         # logger.debug(f"\n\n\nFINAL RESULTS: {final_detections}\n\n\n")
 
@@ -712,7 +733,6 @@ class ZMClient:
     def filter_detections(
         self,
         results: List[Dict[str, Any]],
-        combined_filters: Dict,
         image: np.ndarray,
         image_name: str,
     ) -> List[Dict[str, Any]]:
@@ -738,6 +758,7 @@ class ZMClient:
                         final_label.append(lbl)
                         final_confidence.append(cnf)
                         final_bbox.append(boxes)
+
                     else:
                         logger.debug(
                             f"DBG>>> \n\n {lbl} {cnf} {boxes} IS IN FINAL LIST... "
@@ -755,6 +776,11 @@ class ZMClient:
                 }
                 logger.debug(f"DBG>>> FILTERED RESULT: {filtered_result} <<<DBG")
                 filtered_results.append(filtered_result)
+                # send notifications
+                self.send_notifications(
+                    (final_label, final_confidence, final_bbox), image, image_name
+                )
+
             else:
                 logger.warning(f"{lp} Result was not successful...")
 
@@ -780,17 +806,18 @@ class ZMClient:
         *args,
         **kwargs,
     ):
-        """Filter detections using 2 loops, first loop is t filter by object type, second loop is to filter by zone."""
+        """Filter detections using 2 loops, first loop is filter by object label, second loop is to filter by zone."""
         r_label, r_conf, r_bbox = [], [], []
         zones = self.zones
         zone_filters = self.zone_filters
         object_label_filters = {}
         final_filters = None
         base_filters = None
+        strategy: MatchStrategy = g.config.matching.strategy
         type_ = result["type"]
         model_name = result["model_name"]
         processor = result["processor"]
-        lp = f"_filter::{type_}::"
+        lp = f"_filter:{image_name}:'{model_name}'::{type_}::"
         passed_zones: bool = False
         # image_polygon = Polygon(
         #     [
@@ -816,13 +843,9 @@ class ZMClient:
             result["bounding_box"],
         ):
             i += 1
-            logger.debug(
-                f"'DBG'>>>\n\n Result for {image_name=} ['{model_name}'] OUTER Label ['{label}'] Loop {i}/{_lbl_tot}\n"
-            )
 
-            lp = (
-                _lp
-            ) = f"_filter:{image_name}:'{model_name}'::{type_}='{label}' {i}/{_lbl_tot}::"
+            _lp = f"{lp}'{label}' {i}/{_lbl_tot}::"
+
             #
             # Inner Loop
             #
@@ -830,43 +853,42 @@ class ZMClient:
             for zone_name, zone_data in zones.items():
                 passed_zones = False
                 idx += 1
-                lp = f"{_lp}zone {idx}/{_zn_tot}::"
-                logger.debug(
-                    f"'DBG'>>>\n\n INNER Zone Loop {idx}/{_zn_tot} for {label=} :: '{zone_name}'\n"
-                )
+                __lp = f"{_lp}zone {idx}/{_zn_tot}::"
                 if zone_data.enabled is False:
-                    logger.debug(f"{lp} Zone '{zone_name}' is disabled...")
+                    logger.debug(f"{__lp} Zone '{zone_name}' is disabled...")
                     continue
                 if not zone_data.points:
                     logger.warning(
-                        f"{_lp} Zone '{zone_name}' has no points! Did you rename a Zone in ZM"
+                        f"{__lp} Zone '{zone_name}' has no points! Did you rename a Zone in ZM"
                         f" or forget to add points? SKIPPING..."
                     )
                     continue
                 zone_polygon = Polygon(zone_data.points)
+                if zone_polygon not in self.zone_polygons:
+                    self.zone_polygons.append(zone_polygon)
                 bbox_polygon = Polygon(self._bbox2points(bbox))
 
                 if bbox_polygon.intersects(zone_polygon):
                     logger.debug(
-                        f"{lp} inside of Zone @ {list(zip(*zone_polygon.exterior.coords.xy))[:-1]}"
+                        f"{__lp} inside of Zone @ {list(zip(*zone_polygon.exterior.coords.xy))[:-1]}"
                     )
                     if zone_name in zone_filters and zone_filters[zone_name]:
-                        logger.debug(f"{lp} zone '{zone_name}' has filters")
+                        # logger.debug(f"{lp} zone '{zone_name}' has filters")
                         final_filters = zone_filters[zone_name]
                     else:
-                        logger.debug(
-                            f"{lp} zone '{zone_name}' has NO filters, using COMBINED global+monitor filters"
-                        )
+                        # logger.debug(
+                        #     f"{lp} zone '{zone_name}' has NO filters, using COMBINED global+monitor filters"
+                        # )
                         final_filters = self._comb_filters
                     if isinstance(final_filters, dict) and isinstance(
                         final_filters.get("object"), dict
                     ):
-                        object_label_filters = final_filters["object"]
-                        logger.debug(
-                            f"{type(final_filters)=} -- {type(object_label_filters)=}\n\n{final_filters=}\n\n"
-                        )
+
+                        # logger.debug(
+                        #     f"{type(final_filters)=} -- {type(object_label_filters)=}\n\n{final_filters=}\n\n"
+                        # )
                         object_label_filters = final_filters["object"]["labels"]
-                        logger.debug(f"\nFINAL FILTERS as DICT {final_filters=}\n\n")
+                        # logger.debug(f"\nFINAL FILTERS as DICT {final_filters=}\n\n")
                         if object_label_filters and label in object_label_filters:
                             if object_label_filters[label]:
                                 logger.debug(
@@ -878,22 +900,22 @@ class ZMClient:
                                         v is not None
                                         and final_filters["object"][k] != v
                                     ):
-                                        logger.debug(
-                                            f"{lp} Overriding object:'{k}' [{final_filters['object'][k]}] "
-                                            f"with ZONE object:labels:{k} filter VALUE={v}"
-                                        )
+                                        # logger.debug(
+                                        #     f"{lp} Overriding object:'{k}' [{final_filters['object'][k]}] "
+                                        #     f"with ZONE object:labels:{k} filter VALUE={v}"
+                                        # )
                                         final_filters["object"][k] = v
                         else:
                             logger.debug(f"{lp} NOT IN per label filters")
 
                         final_filters = self.construct_filter(final_filters)
-                        logger.debug(
-                            f"\n\nFINAL FILTERS 'AFTER' CONSTRUCTING [{type(final_filters)}]\n\n"
-                        )
+                        # logger.debug(
+                        #     f"\n\nFINAL FILTERS 'AFTER' CONSTRUCTING [{type(final_filters)}]\n\n"
+                        # )
                         self.zone_filters[zone_name] = final_filters
-                        logger.debug(
-                            f"\n\n'AFTER' SAVING TO ZONE FILTERS: {self.zone_filters=} \n\n"
-                        )
+                        # logger.debug(
+                        #     f"\n\n'AFTER' SAVING TO ZONE FILTERS: {self.zone_filters=} \n\n"
+                        # )
 
                     type_filter: Union[
                         OverRideObjectFilters,
@@ -908,22 +930,22 @@ class ZMClient:
                     elif type_ == "alpr":
                         type_filter = final_filters.alpr
 
-                    logger.debug(
-                        f"{lp} SORTED by {type_} -- FINAL filters => \n{type_filter}\n"
-                    )
+                    # logger.debug(
+                    #     f"{_lp} SORTED by {type_} -- FINAL filters => \n{type_filter}\n"
+                    # )
                     pattern = type_filter.pattern
                     #
                     # Start filtering
                     #
+                    lp = f"{__lp}pattern match::"
                     if match := pattern.match(label):
-                        lp = f"{_lp}pattern matching::"
                         if label in match.groups():
                             logger.debug(
                                 f"{lp} matched ReGex pattern [{pattern.pattern}] ALLOWING..."
                             )
 
+                            lp = f"{__lp}min conf::"
                             if confidence >= type_filter.min_conf:
-                                lp = f"{_lp}min conf::"
                                 logger.debug(
                                     f"{lp} {confidence} IS GREATER THAN OR EQUAL TO "
                                     f"min_conf={type_filter.min_conf}, ALLOWING..."
@@ -944,7 +966,7 @@ class ZMClient:
 
                                 # check total max area
                                 if tma := type_filter.total_max_area:
-                                    lp = f"{_lp}total max area::"
+                                    lp = f"{__lp}total max area::"
                                     if isinstance(tma, float):
                                         if tma >= 1.0:
                                             tma = 1.0
@@ -985,7 +1007,7 @@ class ZMClient:
 
                                 # check total min area
                                 if tmia := type_filter.total_min_area:
-                                    lp = f"{_lp}total min area=>"
+                                    lp = f"{__lp}total min area=>"
                                     if isinstance(tmia, float):
                                         if tmia >= 1.0:
                                             tmia = 1.0
@@ -1028,7 +1050,7 @@ class ZMClient:
 
                                 # check max area
                                 if max_area := type_filter.max_area:
-                                    lp = f"{_lp}zone max area=>"
+                                    lp = f"{__lp}zone max area=>"
 
                                     if isinstance(max_area, float):
                                         if max_area >= 1.0:
@@ -1074,7 +1096,7 @@ class ZMClient:
 
                                 # check min area
                                 if min_area := type_filter.min_area:
-                                    lp = f"{_lp}zone min area=>"
+                                    lp = f"{__lp}zone min area=>"
 
                                     if isinstance(min_area, float):
                                         if min_area >= 1.0:
@@ -1122,10 +1144,6 @@ class ZMClient:
                                         continue
                                 else:
                                     logger.debug(f"{lp} no min_area set")
-                                # !!!!!!!!!!!!!!!!!!!!
-                                # End of all filters
-                                # !!!!!!!!!!!!!!!!!!!!
-                                # todo: match past detections
                                 s_o = g.config.matching.static_objects.enabled
                                 mon_filt = g.config.monitors.get(g.mid)
                                 zone_filt: Optional[MonitorZones] = None
@@ -1154,7 +1172,7 @@ class ZMClient:
                                         s_o = False
                                 if s_o:
                                     logger.debug(
-                                        f"{_lp}static_objects enabled, checking for matches"
+                                        f"{__lp} 'static_objects' enabled, checking for matches"
                                     )
                                     if self.check_for_static_objects(
                                         label, confidence, bbox_polygon, zone_name
@@ -1166,8 +1184,11 @@ class ZMClient:
                                         continue
                                 else:
                                     logger.debug(
-                                        f"{_lp} static_objects disabled, skipping match check"
+                                        f"{__lp} 'static_objects' disabled, skipping match check"
                                     )
+                                # !!!!!!!!!!!!!!!!!!!!
+                                # End of all filters
+                                # !!!!!!!!!!!!!!!!!!!!
 
                                 passed_zones = True
                                 break
@@ -1210,43 +1231,23 @@ class ZMClient:
                         continue
                 else:
                     logger.debug(
-                        f"{lp} NOT in zone [{zone_name}], continuing to next zone..."
+                        f"{__lp} NOT in zone [{zone_name}], continuing to next zone..."
                     )
 
             if passed_zones:
-                logger.debug(f"THIS LABEL '{label}' MATCHED, ADDING TO FINAL LIST")
+                logger.debug(f"PASSED FILTERING, ADDING TO FINAL LIST")
                 passed_zones = False
                 r_label.append(label)
                 r_conf.append(confidence)
                 r_bbox.append(bbox)
-                # Threaded create animations, annotate images, save to disk and send notifications
-
                 continue
 
         logger.warning(
-            f"{lp} OUT OF BOTH LABEL AND ZONE LOOP "
+            f"{_lp} OUT OF BOTH LABEL AND ZONE LOOP {strategy=} "
             f"FINAL LABELS={r_label}, CONFIDENCE={r_conf}, BBOX={r_bbox}"
         )
 
         return r_label, r_conf, r_bbox
-
-    def add_filtered_label(self, label, confidence, bbox, model_name, processor):
-        if image_name not in self.filtered_labels:
-            self.filtered_labels[image_name] = [
-                (
-                    label,
-                    confidence,
-                    bbox,
-                )
-            ]
-        else:
-            self.filtered_labels[image_name].append(
-                label,
-                confidence,
-                bbox,
-                model_name,
-                processor,
-            )
 
     def annotate_image(
         self,
@@ -1254,20 +1255,56 @@ class ZMClient:
         labels: List[str],
         confidences: List[float],
         bboxes: List[List[int]],
+        filtered_bboxes: List[List[int]],
+        zones: List[Polygon],
+        model_name: str,
+        processor: str,
     ):
         """
         Annotate the image with the labels, confidences and bboxes
-        :param image: the image to annotate
-        :param labels: the labels to annotate
-        :param confidences: the confidences to annotate
-        :param bboxes: the bboxes to annotate
-        :param frame_id: the frame id
+        :param image: the image to draw
+        :param labels: the labels to draw
+        :param confidences: the confidences to draw
+        :param bboxes: the bounding boxes to draw
+        :param zones: the zones to draw
         :return: the annotated image
         """
+        from .Models.utils import draw_bounding_boxes
+
         lp = f"{self.__class__.__name__}.{sys._getframe().f_code.co_name}() "
         logger.debug(f"{lp} annotating image with labels={labels}")
-        if not labels:
-            return image
+        img = image.copy()
+        img = draw_bounding_boxes(
+            img,
+            labels,
+            confidences,
+            bboxes,
+            model_name,
+            processor,
+            g.config.detection_settings.images.annotation.confidence,
+            g.config.detection_settings.images.annotation.models.enabled,
+            g.config.detection_settings.images.annotation.models.processor,
+        )
+        if g.config.detection_settings.images.annotation.zones.enabled:
+            from src.zm_ml.Client.Models.utils import draw_zones
+
+            img = draw_zones(
+                img,
+                zones,
+                g.config.detection_settings.images.annotation.zones.color,
+                g.config.detection_settings.images.annotation.zones.thickness,
+            )
+        if g.config.detection_settings.images.debug.enabled:
+            from src.zm_ml.Client.Models.utils import draw_filtered_bboxes
+
+            debug_image = draw_filtered_bboxes(img, filtered_bboxes)
+            from datetime import datetime
+
+            cv2.imwrite(
+                g.config.detection_settings.images.debug.path
+                / f"debug-img_{datetime.now()}",
+                debug_image,
+            )
 
     def create_animations(self, label, confidence, bbox):
         """
@@ -1577,34 +1614,31 @@ class ZMClient:
 
         return yaml.safe_load(search_str)
 
-    def compute_best_match(self, detections: Dict) -> Dict:
+    def compute_best_match(self, detections: Dict, type_: str = "zone") -> Dict:
         """Compute best match"""
+        if type_ not in ("zone", "label"):
+            raise ValueError(f"Invalid type_ '{type_}' [zone|label]")
+
         return {}
 
-    def post_process(self, best_match: Dict, image: bytearray, image_name: str):
-        """Post-processing"""
-        logger.debug(f"in post_process() -> best_match: {best_match}")
-        # convert bytearray to cv2 image
-        image = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
-        # annotate image
-        image = self.annotate_image(best_match, image)
-        # create animations
-        self.create_animations(best_match, image, image_name)
-        # send notifications
-        self.send_notifications(best_match, image, image_name)
-
-    def send_notifications(self, best_match: Dict, image: bytearray, image_name: str):
+    def send_notifications(
+        self,
+        best_match: Tuple[List[str], List[float], List[List[int]]],
+        image: np.ndarray,
+        image_name: str,
+    ):
         """Send notifications"""
         # TODO: mqtt, push, email, webhook
-        pass
+        for label, conf, bbox in best_match:
+            if label in self.pushed_labels:
+                continue
+            noti_cfg = g.config.notifications
+            if noti_cfg.pushover.enabled:
+                self.pushover.send_notification(
+                    label, conf, bbox, image, image_name, noti_cfg.pushover
+                )
 
-    def create_animations(self, best_match, image, image_name):
-        """Create animations"""
-        # TODO: create animations
-        pass
 
-    def annotate_image(self, best_match: Dict, image: np.ndarray) -> np.ndarray:
-        """Annotate image"""
+            logger.info(f"Sending notification for label '{label}'")
 
-        # TODO draw bounding boxes, label, conf, model, proc
-        return image
+

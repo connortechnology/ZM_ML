@@ -60,7 +60,7 @@ if __name__ == "__main__":
     ZM = ZMClient(cfg_file)
     _end_init = time.perf_counter()
     detections = ZM.detect(eid=eid, mid=mid)
-    logger.info(f"perf:: ---- END ---- total: {time.perf_counter() - _start:.5f} second(s) "
-                f"[init: {_end_init - _start:.5f} second(s)] - [detect: "
-                f"{time.perf_counter() - _end_init:.5f} second(s)]")
+    logger.info(f"perf::FINAL:: Total: {time.perf_counter() - _start:.5f} - "
+                f"[init: {_end_init - _start:.5f}] - [detect: "
+                f"{time.perf_counter() - _end_init:.5f}]")
     print(detections)

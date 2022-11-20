@@ -28,9 +28,9 @@ class ZMEnvVars(BaseSettings):
             assert v.exists(), f"ZoneMinder config path [{v}] does not exist"
             assert v.is_dir(), f"ZoneMinder config path [{v}] is not a directory"
         return v
-    def __init__(self, **data: Any):
-        logger.debug(f"Looking for ZoneMinder config dir via Environment Variable ZM_CONF_DIR")
-        super().__init__(**data)
+    # def __init__(self, **data: Any):
+    #     logger.debug(f"Looking for ZoneMinder config dir via Environment Variable ZM_CONF_DIR")
+    #     super().__init__(**data)
 
     class Config:
         env_prefix = "ZM_"
@@ -45,7 +45,6 @@ class MLEnvVars(ZMEnvVars):
     @validator("conf_dir", pre=True, always=True)
     def _validate_conf_dir(cls, v, **kwargs):
         field = kwargs["field"]
-        zm_conf_dir: Path = kwargs["values"]["zm_conf_dir"]
         if v:
             assert isinstance(v, (str, Path)), f"ENVVAR {field.name} must be a Path or str object"
             v = str_2_path_validator(v, **kwargs)
@@ -75,8 +74,8 @@ class ClientEnvVars(MLEnvVars):
     db_driver: str = Field("mysql+pymysql", description="Database driver", env="DBDRIVER")
 
     @validator("db_host", pre=True)
-    def _validate_db_host(cls, v, field):
-        logger.debug(f"Validating ENVVAR {field}: {v}")
+    def _validate_db_host(cls, v, field, **kwargs):
+        # logger.debug(f"Validating ENVVAR {field}: {v}")
         if v:
             if v == 'localhost':
                 v = "127.0.0.1"
@@ -84,9 +83,9 @@ class ClientEnvVars(MLEnvVars):
 
     @validator("conf_file", pre=True, always=True)
     def _validate_conf_file(cls, v, **kwargs):
-        field = kwargs["field"]
-        zm_conf_dir: Path = kwargs["values"]["zm_conf_dir"]
-        logger.debug(f"Validating ENVVAR {field}: {v}")
+        field = kwargs.get("field")
+        values = kwargs.get("values")
+        # logger.debug(f"Validating ENVVAR {field}: {v}")
         if v:
             assert isinstance(v, (str, Path)), f"ENVVAR {field.name} must be a Path or str object"
             v = str_2_path_validator(v, **kwargs)

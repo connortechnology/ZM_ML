@@ -71,7 +71,7 @@ class ZMApi:
                 existing_zones: Dict = mid_cfg.zones
             monitor_resolution: Tuple[int, int] = (int(g.mon_width), int(g.mon_height))
             match_reason: bool = False
-            logger.debug(f"{lp} import_zones() called")
+            # logger.debug(f"{lp} import_zones() called")
 
             if match_reason := g.config.detection_settings.match_origin_zone:
                 logger.debug(
@@ -82,7 +82,7 @@ class ZMApi:
             r = self.make_request(url)
             # Now lets look at reason to see if we need to honor ZM motion zones
             if r:
-                logger.debug(f"{lp} RESPONSE from zone API call => {r}")
+                # logger.debug(f"{lp} RESPONSE from zone API call => {r}")
                 zones = r.get("zones")
                 if zones:
                     logger.debug(f"{lp} {len(zones)} ZM zones found, checking for 'Inactive' zones")
@@ -90,7 +90,7 @@ class ZMApi:
                         zone_name: str = zone.get("Zone", {}).get("Name", "")
                         zone_type: str = zone.get("Zone", {}).get("Type", "")
                         zone_points: str = zone.get("Zone", {}).get("Coords", "")
-                        logger.debug(f"{lp} BEGINNING OF ZONE LOOP - {zone_name=} -- {zone_type=} -- {zone_points=}")
+                        # logger.debug(f"{lp} BEGINNING OF ZONE LOOP - {zone_name=} -- {zone_type=} -- {zone_points=}")
                         if zone_type.casefold() == "inactive":
                             logger.debug(
                                 f"{lp} skipping '{zone_name}' as it is set to 'Inactive'"
@@ -132,7 +132,7 @@ class ZMApi:
                         if mid_cfg:
                             logger.debug(f"{lp} monitor configuration found for monitor {g.mid}")
                             if existing_zones is not None:
-                                logger.debug(f"{lp} existing zones found: {existing_zones}")
+                                # logger.debug(f"{lp} existing zones found: {existing_zones}")
                                 if not (existing_zone := existing_zones.get(zone_name)):
                                     new_zone = MonitorZones(
                                         points=zone_points,
@@ -144,19 +144,19 @@ class ZMApi:
                                         f"{lp} '{zone_name}' has been constructed into a model and imported"
                                     )
                                 else:
-                                    logger.debug(
-                                        f"{lp} '{zone_name}' already exists in the monitor configuration {existing_zone}"
-                                    )
+                                    # logger.debug(
+                                    #     f"{lp} '{zone_name}' already exists in the monitor configuration {existing_zone}"
+                                    # )
                                     # only update if points are not set
                                     if not existing_zone.points:
-                                        logger.debug(f"{lp} updating points for '{zone_name}'")
+                                        # logger.debug(f"{lp} updating points for '{zone_name}'")
                                         ex_z_dict = existing_zone.dict()
-                                        logger.debug(f"{lp} existing zone AS DICT: {ex_z_dict}")
+                                        # logger.debug(f"{lp} existing zone AS DICT: {ex_z_dict}")
                                         ex_z_dict["points"] = zone_points
                                         ex_z_dict["resolution"] = monitor_resolution
-                                        logger.debug(f"{lp} updated zone AS DICT: {ex_z_dict}")
+                                        # logger.debug(f"{lp} updated zone AS DICT: {ex_z_dict}")
                                         existing_zone = MonitorZones(**ex_z_dict)
-                                        logger.debug(f"{lp} updated zone AS MODEL: {existing_zone}")
+                                        # logger.debug(f"{lp} updated zone AS MODEL: {existing_zone}")
                                         g.config.monitors[g.mid].zones[zone_name] = existing_zone
                                         imported_zones.append({zone_name: existing_zone})
                                         logger.debug(
@@ -167,16 +167,16 @@ class ZMApi:
                                             f"{lp} '{zone_name}' HAS POINTS SET which is interpreted "
                                             f"as already existing, skipping"
                                         )
-                        logger.debug(f"{lp}DBG>>> END OF ZONE LOOP for '{zone_name}'")
+                        # logger.debug(f"{lp}DBG>>> END OF ZONE LOOP for '{zone_name}'")
         else:
             logger.debug(f"{lp} import_zones() is disabled, skipping")
-        logger.debug(f"{lp} ALL ZONES with imported zones => {imported_zones}")
-        exit(1)
+        # logger.debug(f"{lp} ALL ZONES with imported zones => {imported_zones}")
         return imported_zones
 
     def __init__(self, options: ZMAPISettings):
         global g
         from ..main import get_global_config
+        from pydantic import SecretStr
 
         g = get_global_config()
         lp: str = "api:init:"
@@ -196,9 +196,11 @@ class ZMApi:
 
         self.session: Session = Session()
         self.username: Optional[str] = options.user
-        self.password: Optional[str] = options.password
+        self.password: Optional[SecretStr] = options.password
 
         # Sanitize logs of urls, passwords, tokens, etc. Makes for easier copy+paste
+        self.sanitize = g.config.logging.sanitize
+        self.sanitize_str: str = '<sanitized>'
         if self.options.ssl_verify is False:
             self.session.verify = False
             logger.debug(
@@ -207,6 +209,9 @@ class ZMApi:
             disable_warnings(category=InsecureRequestWarning)
 
         self._login()
+
+    def show_portal(self):
+        pass
 
     def get_session(self):
         return self.session
@@ -320,16 +325,16 @@ class ZMApi:
             err: reason for failure
         """
         lp: str = "api::login::"
-        login_data: dict = {}
+        login_data: Dict = {}
         url = f"{self.api_url}/host/login.json"
 
-        if self.options.user and self.options.password:
+        if self.username and self.password:
             logger.debug(
-                f"{lp} no token found, user/pass has been supplied, trying credentials...",
+                f"{lp} Credentials have been supplied",
             )
             login_data = {
-                "user": self.options.user,
-                "pass": self.options.password.get_secret_value(),
+                "user": self.username,
+                "pass": self.password.get_secret_value(),
             }
         else:
             logger.debug(f"{lp} not using auth (no user/password was supplied)")
@@ -339,6 +344,7 @@ class ZMApi:
             response.raise_for_status()
 
             resp_json = response.json()
+            logger.warning(f"{lp} JSON response: {resp_json}")
             self.api_version = resp_json.get("apiversion")
             self.zm_version = resp_json.get("version")
             if resp_json:
@@ -349,37 +355,32 @@ class ZMApi:
                         f"has been supplied"
                     )
                     self.auth_enabled = True
-
-                    if version_tuple(self.api_version) >= version_tuple("2.0"):
-                        logger.debug(
-                            f"{lp} detected API ver 2.0+, using token system",
+                    self.access_token = resp_json.get("access_token", "")
+                    self.refresh_token = resp_json.get("refresh_token")
+                    if self.access_token:
+                        access_token_expires = int(
+                            resp_json.get("access_token_expires")
                         )
-                        self.access_token = resp_json.get("access_token", "")
-                        self.refresh_token = resp_json.get("refresh_token")
-                        if self.access_token:
-                            access_token_expires = int(
-                                resp_json.get("access_token_expires")
-                            )
-                            self.access_token_datetime = (
-                                datetime.datetime.now()
-                                + datetime.timedelta(seconds=access_token_expires)
-                            )
-                            logger.debug(
-                                f"{lp} access token expires in {access_token_expires} seconds "
-                                f"on: {self.access_token_datetime}",
-                            )
-                        if self.refresh_token:
-                            refresh_token_expires = int(
-                                resp_json.get("refresh_token_expires")
-                            )
-                            self.refresh_token_datetime = (
-                                datetime.datetime.now()
-                                + datetime.timedelta(seconds=refresh_token_expires)
-                            )
-                            logger.debug(
-                                f"{lp} refresh token expires in {refresh_token_expires} seconds "
-                                f"on: {self.refresh_token_datetime}",
-                            )
+                        self.access_token_datetime = (
+                            datetime.datetime.now()
+                            + datetime.timedelta(seconds=access_token_expires)
+                        )
+                        logger.debug(
+                            f"{lp} access token expires in {access_token_expires} seconds "
+                            f"on: {self.access_token_datetime}",
+                        )
+                    if self.refresh_token:
+                        refresh_token_expires = int(
+                            resp_json.get("refresh_token_expires")
+                        )
+                        self.refresh_token_datetime = (
+                            datetime.datetime.now()
+                            + datetime.timedelta(seconds=refresh_token_expires)
+                        )
+                        logger.debug(
+                            f"{lp} refresh token expires in {refresh_token_expires} seconds "
+                            f"on: {self.refresh_token_datetime}",
+                        )
                 else:
                     self.auth_enabled = False
                     logger.debug(f"{lp} it is assumed 'OPT_USE_AUTH' is disabled!")
@@ -396,9 +397,8 @@ class ZMApi:
                     f"secs and retrying"
                 )
                 from time import sleep
-
                 sleep(5)
-                self._re_login()
+                self._login()
             self.authenticated = False
             raise err
 
@@ -426,6 +426,15 @@ class ZMApi:
         frame = api_event_response.get("event", {}).get("Frame")
         event_tot_frames = len(frame)
         return event, monitor, frame, event_tot_frames
+
+    @property
+    def portal_base_url(self) -> str:
+        """Returns the base URL for the ZoneMinder portal.
+
+        Returns:
+            str: the base URL for the ZoneMinder portal.
+        """
+        return self._portal_base_url
 
     def get_portalbase(self):
         """Returns the portal base URL"""
@@ -463,7 +472,7 @@ class ZMApi:
         re_auth: bool = True,
         quiet: bool = False,
     ) -> Union[Dict, Response]:
-        lp: str = "api:make_req:"
+        lp: str = "api::request::"
         if payload is None:
             payload = {}
         if query is None:
@@ -476,9 +485,26 @@ class ZMApi:
 
         try:
             r: Response
+            show_url: str = (
+                url.replace(self.get_portalbase(), self.sanitize_str)
+                if self.sanitize
+                else url
+            )
+            show_tkn: str = (
+                f"{self.access_token[:20]}...{self.sanitize_str}"
+                if self.sanitize
+                else self.access_token
+            )
+            show_payload: str = ""
+            show_query: Union[str, Dict] = f"token: '{show_tkn}'"
+            if not self.auth_enabled:
+                show_query = query
+            if payload and len(payload):
+                show_payload = f" payload={payload}"
             logger.debug(
-                f"{lp} '{type_action}'->{url} payload={payload} query={query}",
-            ) if not quiet else None
+                f"{lp} '{type_action}'->{show_url}{show_payload} query={show_query}",
+            )  if not quiet else None
+
             if type_action == "get":
                 r = self.session.get(url, params=query, timeout=240)
             elif type_action == "post":

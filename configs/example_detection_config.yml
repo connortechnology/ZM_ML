@@ -18,8 +18,17 @@ substitutions:
 THIS IS AN EXAMPLE:
   of substitution variables: "Hello, ${EXAMPLE}"
 
-# Override the default config path [/etc/zm/ml]
-config_path: ${DATA_DIR}
+system:
+  # Store variable data in this Directory [/var/lib/zm_ml]
+  variable_data_path:
+  # Store temp data in this Directory [/tmp/zm_ml]
+  tmp_path:
+
+  # Override the default config path [/etc/zm/ml]
+  config_path:
+  # Maximum parallel threaded processes [4]
+  thread_workers: 4
+
 
 zoneminder:
   api: ${ZM_API}
@@ -54,18 +63,24 @@ mlapi:
       #password: admin
 
 animations:
+  # If you are on a low memory system, write frame buffer to disk instead of holding it in memory
+  low_memory: no
+  # If an animation file already exists, overwrite it
+  overwrite: no
+  # Maximum width of the animation (Scaled properly)
+  width: 640
+
+  # When the animation is for an event, use the ZM API to get images for the animation
+  max_attempts: 3
+  attempt_delay: 3
+
   gif:
     enabled: true
-    fps: 10
-    duration: 10
-    width: 640
+    # Make a 'sped-up' version of the animation (makes the gif show more of an event)
     fast: true
 
   mp4:
     enabled: true
-    width: 640
-    fps: 10
-    duration: 10
 
 
 notifications:
@@ -336,7 +351,7 @@ matching:
   filters:
     # This is globally applied to all monitors but can be overridden on a per-monitor basis
     object:
-      min_conf: 0.35
+      min_conf: 0.5
       pattern: "(car|truck|bus|person|dog|cat)"
       total_max_area: 100%
       total_min_area: 1px
@@ -352,18 +367,10 @@ monitors:
     models:
       # Models to run. Name must match the name of the model obtained from its configuration or the API request
       yolov4:
-        enabled: no
-        options:
-          # options to pass to the model
-          # see the model's documentation for options
-          # if the model is not enabled, these options will be ignored
-          conf: 0.5
-          nms:
-
-      yolov4-p6:
-      yolov7 tiny:
+#      yolov4-p6:
+#      yolov7 tiny:
 #      yolov7:
-      yolov7x:
+#      yolov7x:
 
 
     static_objects:
@@ -391,7 +398,6 @@ monitors:
           filters:
             object:
               # -- Per label filtering (label_groups supported)
-              # -- Trained faces are labeled with the name of the person
               labels:
                 vehicles:
                   min_conf: 0.33

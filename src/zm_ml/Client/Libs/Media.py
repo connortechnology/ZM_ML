@@ -174,7 +174,7 @@ class APIImagePipeLine:
             for image_grab_attempt in range(self.max_attempts):
                 image_grab_attempt += 1
                 logger.debug(
-                    f"{lp} attempt #{image_grab_attempt}/{self.max_attempts} to grab image from URL: {fid_url}"
+                    f"{lp} attempt #{image_grab_attempt}/{self.max_attempts} to grab image ID: {self.current_frame}"
                 )
                 response = g.api.make_request(fid_url)
                 if (
@@ -182,7 +182,7 @@ class APIImagePipeLine:
                     and isinstance(response, requests.Response)
                     and response.status_code == 200
                 ):
-                    logger.debug(f"ZM API returned an Image")
+                    logger.debug(f"ZM API returned an Image!")
                     return self._process_frame(image=response.content)
                 # response code not 200 or no response
                 else:

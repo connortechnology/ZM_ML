@@ -1,6 +1,7 @@
 import logging
 import re
 import tempfile
+from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Tuple, Pattern, Union, Any, Optional
 
@@ -33,6 +34,7 @@ class LoggingSettings(BaseModel):
     console: bool = Field(True)
     integrate_zm: bool = Field(False)
     log_to_file: bool = Field(False)
+    sanitize: bool = Field(False)
     dir: Path = Field(Path("/var/log/zm"))
     file_name: str = Field(default="zm_ml.log")
     user: str = Field(default="www-data")
@@ -123,14 +125,17 @@ class MLNotificationSettings(BaseModel):
         enabled: bool = Field(False)
         token: str = Field(None)
         key: str = Field(None)
-        portal: Union[IPvAnyAddress, AnyUrl] = Field(None)
         animation: SendAnimations = Field(default_factory=SendAnimations)
         url_opts: NotificationZMURLOptions = Field(
             default_factory=NotificationZMURLOptions
         )
 
+        base_url: Optional[AnyUrl] = Field(None)
+        messages_endpoint: str = Field("/messages.json")
+
+
         # validators
-        _validate_host_portal = validator("portal", allow_reuse=True, pre=True)(
+        _validate_host_portal = validator("base_url", allow_reuse=True, pre=True)(
             no_scheme_url_validator
         )
 
@@ -297,8 +302,27 @@ class OverRideMatchFilters(BaseModel):
     alpr: OverRideAlprFilters = Field(default_factory=OverRideAlprFilters)
 
 
+class MatchStrategy(str, Enum):
+    # first match wins
+    first_match = "first_match"
+    # end of frame, any matches win
+    first_frame = "first_frame"
+    # end of frame, all
+    frame_high_score = "frame_high_score"
+    # end of frame, check if filtered results across models are close to each other
+    frame_object_confirm = "frame_object_confirm"
+    # end of all frames, whichever frame has the most labels wins
+    most_labels = "most_labels"
+    # end of all frames, duplicates are removed, whichever frame has the most labels wins
+    unique_labels = "unique_labels"
+
+    high_score = "high_score"
+    # end of all frames, for each frame total each labels float value, frame with highest total wins
+    total_score = "total_sum"
+
+
 class MatchingSettings(BaseModel):
-    object_confirm: bool = Field(False)
+    strategy: MatchStrategy = Field(MatchStrategy.first)
     static_objects: StaticObjects = Field(default_factory=StaticObjects)
     filters: MatchFilters = Field(default_factory=MatchFilters)
 
@@ -347,7 +371,7 @@ class MonitorZones(BaseModel):
 
     @validator("resolution", pre=True, always=True)
     def _validate_resolution(cls, v):
-        logger.debug(f"Validating Monitor Zone resolution: {v}")
+        # logger.debug(f"Validating Monitor Zone resolution: {v}")
         if not v:
             logger.warning("No resolution provided for monitor zone, will not be able to scale "
                            "zone Polygon if resolution changes")
@@ -371,7 +395,7 @@ class MonitorZones(BaseModel):
                     logger.warning(
                         f"Invalid resolution string: {v}. Valid strings are: W*H WxH W,H OR {', '.join(cls._RESOLUTION_STRINGS)}"
                     )
-        logger.debug(f"Validated Monitor Zone resolution: {v}")
+        # logger.debug(f"Validated Monitor Zone resolution: {v}")
         return v
 
     @validator("points", pre=True, always=True)
@@ -416,6 +440,7 @@ class Testing(BaseModel):
 class SystemSettings(BaseModel):
     variable_data_path: Optional[Path] = Field(Path("/var/lib/zm_ml"))
     tmp_path: Optional[Path] = Field(Path(tempfile.gettempdir()) / "zm_ml")
+    thread_workers: Optional[int] = Field(4)
 
 
 class ConfigFileModel(BaseModel):

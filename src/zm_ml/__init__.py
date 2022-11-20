@@ -1,1 +1,1 @@
-__all__ = ['Client', 'Server']
+__all__ = ['Client', 'Server', 'Shared']
