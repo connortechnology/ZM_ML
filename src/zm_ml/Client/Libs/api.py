@@ -36,7 +36,7 @@ from ..Models.config import ZMAPISettings, MonitorsSettings
 
 GRACE: int = 60 * 5  # 5 mins
 lp: str = "api::"
-logger = logging.getLogger("ML-Client")
+logger = logging.getLogger("ZM_ML-Client")
 g = None
 
 

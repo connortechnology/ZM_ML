@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field, AnyUrl
 from ..main import get_global_config
 from ...Shared.configs import GlobalConfig
 
-logger = logging.getLogger("ML-Client")
+logger = logging.getLogger("ZM_ML-Client")
 g: Optional[GlobalConfig] = None
 
 

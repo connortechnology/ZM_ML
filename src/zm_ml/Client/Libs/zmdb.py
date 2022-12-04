@@ -11,7 +11,7 @@ from sqlalchemy.engine import Engine, Connection, CursorResult
 from sqlalchemy.exc import SQLAlchemyError
 
 
-logger = logging.getLogger("ML-Client")
+logger = logging.getLogger("ZM_ML-Client")
 LOGGING_EXTRA = {}
 lp = "zmdb::"
 g = None

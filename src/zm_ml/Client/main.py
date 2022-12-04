@@ -1,4 +1,3 @@
-import asyncio
 import concurrent.futures
 import copy
 import json
@@ -40,6 +39,7 @@ from .Models.config import (
     NotificationZMURLOptions,
 )
 from ..Shared.configs import ClientEnvVars, GlobalConfig
+from .Models.validators import str_to_path
 
 __version__: str = "0.0.1"
 __version_type__: str = "dev"
@@ -54,7 +54,7 @@ null_handler = logging.NullHandler()
 console_handler = logging.StreamHandler(stream=sys.stdout)
 console_handler.setFormatter(formatter)
 syslog_handler = logging.handlers.SysLogHandler(
-    address="/dev/log", facility=logging.handlers.SysLogHandler.LOG_LOCAL0
+    address="/dev/log", # facility=logging.handlers.SysLogHandler.LOG_LOCAL0
 )
 syslog_handler.setFormatter(formatter)
 logger.setLevel(logging.DEBUG)
@@ -112,17 +112,6 @@ def check_imports():
         logger.error(f"Missing numpy: {e}")
         raise
     logger.debug("check imports:: All imports found!")
-
-
-def _cfg2path(config_file: Union[str, Path]) -> Path:
-    if config_file:
-        if isinstance(config_file, (str, Path)):
-            config_file = Path(config_file)
-        else:
-            raise TypeError(
-                f"config_file must be a string or Path, not {type(config_file)}"
-            )
-        return Path(config_file)
 
 
 def get_push_auth(user: SecretStr, pw: SecretStr, has_https: bool = False):
@@ -338,7 +327,7 @@ class CFGHash:
         self.previous_hash = ""
         self.hash = ""
         if config_file:
-            self.config_file = _cfg2path(config_file)
+            self.config_file = str_to_path(config_file)
         self.compute()
 
     def compute(
@@ -363,7 +352,7 @@ class CFGHash:
         self.previous_hash = str(self.hash)
         self.hash = ""
         if input_file:
-            self.config_file = _cfg2path(input_file)
+            self.config_file = str_to_path(input_file)
 
         try:
             with self.config_file.open("rb") as f:
@@ -417,9 +406,10 @@ class ZMClient:
             )
             try:
                 _f = open(g.config.system.variable_data_path, "r")
-            except PermissionError as e:
+            except PermissionError:
                 logger.error(
-                    f"{lp} system:variable_data_path [{g.config.system.variable_data_path}] is not readable by {usr_str}"
+                    f"{lp} system:variable_data_path [{g.config.system.variable_data_path}] is not "
+                    f"readable by {usr_str}"
                 )
             else:
                 _f.close()
@@ -428,9 +418,10 @@ class ZMClient:
                 )
             try:
                 _f = open(g.config.system.variable_data_path, "w")
-            except PermissionError as e:
+            except PermissionError:
                 logger.error(
-                    f"{lp} system:variable_data_path [{g.config.system.variable_data_path}] is not writable by {usr_str}"
+                    f"{lp} system:variable_data_path [{g.config.system.variable_data_path}] is not "
+                    f"writable by {usr_str}"
                 )
             else:
                 _f.close()
@@ -438,14 +429,14 @@ class ZMClient:
                     f"{lp} system:variable_data_path [{g.config.system.variable_data_path}] is writable by {usr_str}"
                 )
 
-        if g.config.logging.log_to_file:
-            abs_log_file = g.config.logging.dir / g.config.logging.file_name
+        if g.config.logging.file.enabled:
+            abs_log_file = g.config.logging.file.path / g.config.logging.file.filename
             logger.debug(
                 f"{lp} checking permissions of log file [{abs_log_file}] for {usr_str}"
             )
             try:
                 _f = open(abs_log_file, "r")
-            except PermissionError as e:
+            except PermissionError:
                 logger.error(
                     f"{lp} logging:log_file [{abs_log_file}] is not readable by {usr_str}"
                 )
@@ -454,7 +445,7 @@ class ZMClient:
                 logger.debug(f"{lp} log file [{abs_log_file}] is readable by {usr_str}")
             try:
                 _f = open(abs_log_file, "w")
-            except PermissionError as e:
+            except PermissionError:
                 logger.error(
                     f"{lp} logging:log_file [{abs_log_file}] is not writable by {usr_str}"
                 )
@@ -462,7 +453,17 @@ class ZMClient:
                 _f.close()
                 logger.debug(f"{lp} log file [{abs_log_file}] is writable by {usr_str}")
 
-    def __init__(self, cfg_file: Optional[Union[str, Path]] = None, live_event: bool = False):
+    def live_event(self, is_live: bool):
+        if is_live is True:
+            if g:
+                g.past_event = False
+        else:
+            if g:
+                g.past_event = True
+
+    def __init__(
+        self, cfg_file: Optional[Union[str, Path]] = None, live_event: bool = False
+    ):
         """
         Initialize the ZoneMinder Client
         :param cfg_file: Path to the config file
@@ -491,14 +492,14 @@ class ZMClient:
         g = GlobalConfig()
         g.Environment = ENV_VARS
         if live_event:
-            g.past_event = False
+            self.live_event(True)
         if not cfg_file:
             logger.warning(
                 f"No config file specified, checking ENV -> {g.Environment.conf_file}"
             )
             cfg_file = g.Environment.conf_file
         if cfg_file:
-            cfg_file = _cfg2path(cfg_file)
+            cfg_file = str_to_path(cfg_file)
         assert cfg_file, "No config file specified"
         self.config_file = cfg_file
         g.config = self.config = self.load_config()
@@ -546,7 +547,9 @@ class ZMClient:
         if self.config.logging.console is False:
             logger.info(f"Removing console log output!")
             logger.removeHandler(console_handler)
-        file_from_config = self.config.logging.dir / self.config.logging.file_name
+        file_from_config = (
+            self.config.logging.file.path / self.config.logging.file.filename
+        )
         if not file_from_config.exists():
             file_from_config.touch(exist_ok=True)
 
@@ -601,19 +604,18 @@ class ZMClient:
         g.api = self.api = ZMApi(self.config.zoneminder)
         self.notifications = Notifications()
 
-
     @staticmethod
     def convert_to_cv2(image: Union[np.ndarray, bytes]):
         # convert the numpy image to OpenCV format
         lp = "convert_to_cv2::"
         if isinstance(image, bytes):
-            logger.debug(f"{lp} image is bytes, converting to np array")
+            logger.debug(f"{lp} image is bytes, converting to cv2 numpy array")
             # image = cv2.imdecode(np.frombuffer(image, dtype=np.uint8), cv2.IMREAD_COLOR)
             image = cv2.imdecode(
                 np.asarray(bytearray(image), dtype=np.uint8), cv2.IMREAD_COLOR
             )
 
-        return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        return image
 
     def combine_filters(
         self,
@@ -691,9 +693,9 @@ class ZMClient:
     def detect(self, eid: Optional[int], mid: Optional[int] = None):
         """Detect objects in an event
 
-Args:
-    eid (Optional[int]): Event ID. Required for API event image pulling method.
-    mid (Optional[int]): Monitor ID. Required for SHM or ZMU image pulling method.
+        Args:
+            eid (Optional[int]): Event ID. Required for API event image pulling method.
+            mid (Optional[int]): Monitor ID. Required for SHM or ZMU image pulling method.
         """
         lp = _lp = "detect::"
         image_name: Optional[Union[int, str]] = None
@@ -709,12 +711,16 @@ Args:
             self._get_db_data(eid)
             futures: List[concurrent.futures.Future] = []
             with concurrent.futures.ThreadPoolExecutor(
-                    thread_name_prefix="init-2", max_workers=g.config.system.thread_workers
+                thread_name_prefix="init-2", max_workers=g.config.system.thread_workers
             ) as executor:
                 futures.append(executor.submit(static_pickle))
             for future in concurrent.futures.as_completed(futures):
                 logger.debug(f"Future result for static_pickle: {future.result()}")
-                self.static_objects.labels, self.static_objects.confidence, self.static_objects.bbox = future.result()
+                (
+                    self.static_objects.labels,
+                    self.static_objects.confidence,
+                    self.static_objects.bbox,
+                ) = future.result()
             # get monitor and event info
             g.Monitor = self.api.get_monitor_data(g.mid)
             g.Event, event_monitor_data, g.Frame, _ = self.api.get_all_event_data(eid)
@@ -749,7 +755,9 @@ Args:
 
         models: Optional[Dict] = None
         if g.mid in self.config.monitors and self.config.monitors[g.mid].models:
-            logger.debug(f"{lp} Monitor {g.mid} has models configured, overriding global models")
+            logger.debug(
+                f"{lp} Monitor {g.mid} has models configured, overriding global models"
+            )
             models = self.config.monitors.get(g.mid).models
         if not models:
             if self.config.detection_settings.models:
@@ -823,8 +831,10 @@ Args:
                     logger.warning(f"{lp} No image returned! trying again...")
                     continue
                 if image is False:
-                    logger.warning(f"{lp} Image stream ended! Moving on to futures (figure out "
-                                   f"how to iterate futures as they complete while still in this threadpool loop)")
+                    logger.warning(
+                        f"{lp} Image stream ended! Moving on to futures (figure out "
+                        f"how to iterate futures as they complete while still in this threadpool loop)"
+                    )
 
                     break
 
@@ -898,7 +908,9 @@ Args:
                             self.filtered_labels[image_name] = []
 
                     else:
-                        logger.warning(f"ZM_ML Server route '{route.name}' is disabled!")
+                        logger.warning(
+                            f"ZM_ML Server route '{route.name}' is disabled!"
+                        )
             logger.debug(
                 f"\n----------- Out of IMAGE GRABBING thread pool loop, "
                 f"about to start waiting for futures to complete -----------\n"
@@ -1014,7 +1026,8 @@ Args:
 
                         final_detections[str(image_name)].append(filtered_result)
                         logger.debug(
-                            f"perf:: Filtering for {image_name}:{result['model_name']} took {perf_counter() - filter_start:.5f} seconds"
+                            f"perf:: Filtering for {image_name}:{result['model_name']} took "
+                            f"{perf_counter() - filter_start:.5f} seconds"
                         )
 
                     else:
@@ -1189,7 +1202,6 @@ Args:
             idx = 0
             found_match = False
 
-
             for zone_name, zone_data in zones.items():
                 idx += 1
                 __lp = f"{_lp}zone {idx}/{_zn_tot}::"
@@ -1204,9 +1216,10 @@ Args:
                     continue
                 zone_points = zone_data.points
                 zone_resolution = zone_data.resolution
-                logger.debug(f"{__lp} Zone '{zone_name}' points: {zone_points} :: resolution: {zone_resolution} -- "
-                             f"monitor resolution = H:: {g.mon_height} -- W:: {g.mon_width}"
-                             )
+                logger.debug(
+                    f"{__lp} Zone '{zone_name}' points: {zone_points} :: resolution: {zone_resolution} -- "
+                    f"monitor resolution = H:: {g.mon_height} -- W:: {g.mon_width}"
+                )
                 mon_res = (g.mon_width, g.mon_height)
                 if zone_resolution != mon_res:
                     logger.warning(
@@ -1218,13 +1231,14 @@ Args:
                     xfact: float = mon_res[1] / zone_resolution[1] or 1.0
                     yfact: float = mon_res[0] / zone_resolution[0] or 1.0
                     logger.debug(
-                            f"{__lp} rescaling polygons: using x_factor: {xfact} and y_factor: {yfact}"
-                        )
+                        f"{__lp} rescaling polygons: using x_factor: {xfact} and y_factor: {yfact}"
+                    )
                     zone_points = [
-                        (int(x * xfact), int(y * yfact))
-                        for x, y in zone_points
+                        (int(x * xfact), int(y * yfact)) for x, y in zone_points
                     ]
-                    logger.debug(f"{__lp} Zone '{zone_name}' points adjusted to: {zone_points}")
+                    logger.debug(
+                        f"{__lp} Zone '{zone_name}' points adjusted to: {zone_points}"
+                    )
 
                 zone_polygon = Polygon(zone_points)
                 if zone_polygon not in self.zone_polygons:
@@ -1534,7 +1548,9 @@ Args:
                                         label, confidence, bbox_polygon, zone_name
                                     ):
                                         # success
-                                        logger.debug(f"SUCCESSFULLY PASSED the static object check")
+                                        logger.debug(
+                                            f"SUCCESSFULLY PASSED the static object check"
+                                        )
 
                                     else:
                                         logger.debug(f"FAILED the static object check")
@@ -1786,7 +1802,9 @@ Args:
                             )
                             return True
                         elif diff_area is None:
-                            logger.debug(f"DEBUG>>>'MPD' {diff_area = } - whats the issue?")
+                            logger.debug(
+                                f"DEBUG>>>'MPD' {diff_area = } - whats the issue?"
+                            )
                         else:
                             logger.debug(
                                 f"WHATS GOING ON? {diff_area = } -- {max_diff_pixels = }"
@@ -1989,7 +2007,9 @@ Args:
                     # else:
                     #     logger.debug(f"PROPERLY parsed sounds for JPEG pushover?")
                     #     display_param_dict["sounds"] = po.request_data.sound
-                    po.image = noti_img
+
+                    # swap RB channels for pushover
+                    po.image = cv2.cvtColor(noti_img, cv2.COLOR_BGR2RGB)
                     po.optionals.cache_write = False if g.past_event else True
                     futures.append(executor.submit(po.send))
                     logger.debug(f"{lp} Pushover notification configured, sending")
@@ -2159,7 +2179,7 @@ Args:
         new_notes = f"{new_notes} {g.event_cause}"
         logger.debug(f"DBG <>>> {old_notes = } -- {new_notes = }")
 
-        if old_notes is not None and (g.config.zoneminder.misc.write_notes):
+        if old_notes is not None and g.config.zoneminder.misc.write_notes:
             if new_notes != old_notes:
                 try:
                     events_url = f"{g.api.api_url}/events/{g.eid}.json"

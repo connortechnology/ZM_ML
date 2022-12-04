@@ -7,9 +7,9 @@ from typing import Dict, List, Tuple, Pattern, Union, Any, Optional
 
 from pydantic import BaseModel, Field, AnyUrl, validator, IPvAnyAddress, SecretStr
 
-from .validators import percentage_and_pixels_validator, no_scheme_url_validator
+from .validators import percentage_and_pixels_validator, no_scheme_url_validator, str_to_path, validate_log_level
 
-logger = logging.getLogger("ML-Client")
+logger = logging.getLogger("ZM_ML-Client")
 
 
 class DefaultEnabled(BaseModel):
@@ -37,16 +37,46 @@ class ZMAPISettings(BaseModel):
 
 
 class LoggingSettings(BaseModel):
-    level: str = Field(logging.INFO)
-    console: bool = Field(True)
+    class ConsoleLogging(DefaultEnabled):
+        level: Optional[int] = Field('INFO')
+
+        _validate_level = validator("level", allow_reuse=True, pre=True)(
+            validate_log_level
+        )
+
+    class SyslogLogging(DefaultNotEnabled):
+        level: Optional[int] = Field('INFO')
+        address: Optional[str] = Field("")
+
+        _validate_level = validator("level", allow_reuse=True, pre=True)(
+            validate_log_level
+        )
+    class FileLogging(DefaultEnabled):
+        level: Optional[str] = Field('INFO')
+        path: Path = Field('/var/log/zm')
+        filename: str = Field("zm_ml.log")
+        user: str = Field(default="www-data")
+        group: str = Field(default="www-data")
+
+        _validate_path = validator("path", allow_reuse=True, pre=True)(
+            str_to_path
+        )
+        _validate_level = validator("level", allow_reuse=True, pre=True)(
+            validate_log_level
+        )
+
+    level: Optional[str] = Field('INFO')
+    console: ConsoleLogging = Field(default_factory=ConsoleLogging)
+    SYSLOG: SyslogLogging = Field(default_factory=SyslogLogging)
     integrate_zm: bool = Field(False)
-    log_to_file: bool = Field(False)
+    file: FileLogging = Field(default_factory=FileLogging)
     sanitize: bool = Field(False)
     sanitize_string: str = Field("<sanitized>")
-    dir: Path = Field(Path("/var/log/zm"))
-    file_name: str = Field(default="zm_ml.log")
-    user: str = Field(default="www-data")
-    group: str = Field(default="www-data")
+
+    _validate_level = validator("level", allow_reuse=True, pre=True)(
+            validate_log_level
+        )
+
 
 
 class ServerRoute(BaseModel):

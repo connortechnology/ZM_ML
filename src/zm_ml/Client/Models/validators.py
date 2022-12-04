@@ -2,11 +2,11 @@ import logging
 import re
 import inspect
 from pathlib import Path
-from typing import Optional, Dict, Tuple
+from typing import Optional, Dict, Tuple, Union
 
 from pydantic import AnyUrl
 
-logger = logging.getLogger("ML-Client")
+logger = logging.getLogger("ZM_ML-Client")
 
 
 def percentage_and_pixels_validator(v, values, field):
@@ -96,8 +96,39 @@ def no_scheme_url_validator(v, field, values, config):
     return v
 
 
-def str_2_path_validator(v, field, **kwargs):
-    _name_ = inspect.currentframe().f_code.co_name
+def validate_octal(v, **kwargs):
+    """Validate and transform octal string into an octal"""
+    assert isinstance(v, str)
+    if v:
+        if re.match(r"^(0o[0-7]+)$", v):
+            pass
+        else:
+            raise ValueError(f"Invalid octal string: {v}")
+    return v
+
+def validate_log_level(v, **kwargs):
+    """Validate and transform log level string into a log level"""
+    if v:
+        assert isinstance(v, str)
+        v = v.strip().upper()
+        if re.match(r"^(DEBUG|INFO|WARN|WARNING|ERROR|FATAL|CRITICAL)$", v):
+            v = logging._nameToLevel[v]
+        else:
+            raise ValueError(f"Invalid log level string: {v}")
+    return v
+
+
+def str_to_path(v: Union[str, Path, None], **kwargs):
+    """Convert a str to a Path object - pydantic validator
+
+    Args:
+        v (str|path|None): string to convert to a Path object
+    Keyword Args:
+        field (pydantic.fields.ModelField): pydantic field object
+        values (Dict): pydantic values dict
+        config (pydantic.Config): pydantic config object
+        """
+    # _name_ = inspect.currentframe().f_code.co_name
     # logger.debug(f"{_name_}:: Validating '{field.name}' -> {v}")
     if v:
         assert isinstance(v, (Path, str))

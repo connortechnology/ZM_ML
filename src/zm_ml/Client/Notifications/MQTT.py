@@ -16,7 +16,7 @@ g: GlobalConfig
 wasConnected = False
 Connected = False  # global variable for the state of the connection
 
-logger = logging.getLogger("ML-Client")
+logger = logging.getLogger("ZM_ML-Client")
 
 
 def on_log(client, userdata, level, buf):

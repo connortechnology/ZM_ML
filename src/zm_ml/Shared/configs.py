@@ -9,9 +9,9 @@ from pydantic import BaseSettings, Field, IPvAnyAddress, AnyUrl, SecretStr, vali
 from ..Client.Libs.api import ZMApi
 from ..Client.Models.config import ConfigFileModel
 
-from ..Client.Models.validators import str_2_path_validator
+from ..Client.Models.validators import str_to_path
 
-logger = logging.getLogger("ML-Client")
+logger = logging.getLogger("ZM_ML-Client")
 logger.debug(f'added logger in {__name__}')
 
 
@@ -24,7 +24,7 @@ class ZMEnvVars(BaseSettings):
     def _validate_conf_path(cls, v, **kwargs):
         if v:
             assert isinstance(v, (str, Path)), f"zm_conf_dir must be a Path or str object, not {type(v)}"
-            v = str_2_path_validator(v, **kwargs)
+            v = str_to_path(v, **kwargs)
             assert v.exists(), f"ZoneMinder config path [{v}] does not exist"
             assert v.is_dir(), f"ZoneMinder config path [{v}] is not a directory"
         return v
@@ -47,7 +47,7 @@ class MLEnvVars(ZMEnvVars):
         field = kwargs["field"]
         if v:
             assert isinstance(v, (str, Path)), f"ENVVAR {field.name} must be a Path or str object"
-            v = str_2_path_validator(v, **kwargs)
+            v = str_to_path(v, **kwargs)
             assert v.exists(), f"ZM-ML config path [{v}] does not exist"
             assert v.is_dir(), f"ZM-ML config path [{v}] is not a directory"
         return v
@@ -88,7 +88,7 @@ class ClientEnvVars(MLEnvVars):
         # logger.debug(f"Validating ENVVAR {field}: {v}")
         if v:
             assert isinstance(v, (str, Path)), f"ENVVAR {field.name} must be a Path or str object"
-            v = str_2_path_validator(v, **kwargs)
+            v = str_to_path(v, **kwargs)
             assert v.exists(), f"ZM-ML config file [{v}] does not exist"
             assert v.is_file(), f"ZM-ML config file [{v}] is not a file"
         return v
