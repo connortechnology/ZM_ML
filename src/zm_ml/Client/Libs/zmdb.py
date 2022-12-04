@@ -3,6 +3,7 @@ from configparser import ConfigParser
 from datetime import datetime
 from decimal import Decimal
 import logging
+from pathlib import Path
 from typing import Optional, Union, Tuple
 
 from sqlalchemy import MetaData, create_engine, select
@@ -11,13 +12,14 @@ from sqlalchemy.exc import SQLAlchemyError
 
 
 logger = logging.getLogger("ML-Client")
-lp = "ZMDB:"
+LOGGING_EXTRA = {}
+lp = "zmdb::"
 g = None
 
 
 def _rel_path(eid: int, mid: int, scheme: str, dt: Optional[datetime] = None) -> str:
     ret_val: str = ""
-    lp: str = "zmes:rel path:"
+    lp: str = "zmdb::relative path::"
     if scheme == "Deep":
         if dt:
             ret_val = f"{mid}/{dt.strftime('%y/%m/%d/%H/%M/%S')}"
@@ -50,7 +52,7 @@ class ZMDB:
     def _db_create(self):
         """A private function to interface with the ZoneMinder DataBase"""
         # From @pliablepixels SQLAlchemy work - all credit goes to them.
-        lp: str = "ZM-DB:"
+        lp: str = "zmdb::"
         from ...Shared.configs import ClientEnvVars
         db_config: ClientEnvVars = g.Environment
         # TODO: grab data from ZM DB about logging stuff?
@@ -122,7 +124,7 @@ class ZMDB:
         storage_id: Optional[int] = None
         start_datetime: Optional[datetime] = None
         storage_path: Optional[str] = None
-        event_path: Optional[str] = None
+        event_path: Optional[Union[Path, str]] = None
 
         e_select: select = select([self.meta.tables["Events"].c.MonitorId]).where(
             self.meta.tables["Events"].c.Id == eid
@@ -136,6 +138,9 @@ class ZMDB:
             mid = int(mid)
             logger.debug(f"{lp} ZoneMinder DB returned Monitor ID: {mid}")
             g.mid = mid
+            # add extra logging data
+            global LOGGING_EXTRA
+            LOGGING_EXTRA = {"mid": mid, "eid": eid}
         else:
             logger.warning(
                 f"{lp} the database query did not return a monitor ID for this event?"
@@ -264,7 +269,7 @@ class ZMDB:
 
         if start_datetime:
             if storage_path:
-                event_path = (
+                event_path = Path(
                     f"{storage_path}/{_rel_path(eid, mid, scheme, start_datetime)}"
                 )
             else:

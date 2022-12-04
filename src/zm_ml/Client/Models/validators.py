@@ -2,7 +2,7 @@ import logging
 import re
 import inspect
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Tuple
 
 from pydantic import AnyUrl
 
@@ -103,3 +103,89 @@ def str_2_path_validator(v, field, **kwargs):
         assert isinstance(v, (Path, str))
         v = Path(v)
     return v
+
+
+def validate_resolution(v, **kwargs):
+    _RESOLUTION_STRINGS: Dict[str, Tuple[int, int]] = {
+        # pixel resolution string to tuple, feed it .casefold().strip()'d string's
+        "4kuhd": (3840, 2160),
+        "uhd": (3840, 2160),
+        "4k": (4096, 2160),
+        "6MP": (3072, 2048),
+        "5MP": (2592, 1944),
+        "4MP": (2688, 1520),
+        "3MP": (2048, 1536),
+        "2MP": (1600, 1200),
+        "1MP": (1280, 1024),
+        "1440p": (2560, 1440),
+        "2k": (2048, 1080),
+        "1080p": (1920, 1080),
+        "960p": (1280, 960),
+        "720p": (1280, 720),
+        "fullpal": (720, 576),
+        "fullntsc": (720, 480),
+        "pal": (704, 576),
+        "ntsc": (704, 480),
+        "4cif": (704, 480),
+        "2cif": (704, 240),
+        "cif": (352, 240),
+        "qcif": (176, 120),
+        "480p": (854, 480),
+        "360p": (640, 360),
+        "240p": (426, 240),
+        "144p": (256, 144),
+    }
+    logger.debug(f"Validating Monitor Zone resolution: {v}")
+    if not v:
+        logger.warning("No resolution provided for monitor zone, will not be able to scale "
+                       "zone Polygon if resolution changes")
+    elif isinstance(v, str):
+        v = v.casefold().strip()
+        if v in _RESOLUTION_STRINGS:
+            v = _RESOLUTION_STRINGS[v]
+        elif v not in _RESOLUTION_STRINGS:
+            # check for a valid resolution string
+            import re
+            # WxH
+            if re.match(r"^\d+x\d+$", v):
+                v = tuple(int(x) for x in v.split("x"))
+            # W*H
+            elif re.match(r"^\d+\*\d+$", v):
+                v = tuple(int(x) for x in v.split("*"))
+            # W,H
+            elif re.match(r"^\d+,\d+$", v):
+                v = tuple(int(x) for x in v.split(","))
+            else:
+                logger.warning(
+                    f"Invalid resolution string: {v}. Valid strings are: W*H WxH W,H OR "
+                    f"{', '.join(_RESOLUTION_STRINGS)}"
+                )
+    logger.debug(f"Validated Monitor Zone resolution: {v}")
+    return v
+
+
+def validate_points(v, field, **kwargs):
+    if v:
+        orig = str(v)
+        if not isinstance(v, (str, list)):
+            raise TypeError(
+                f"'{field.name}' Can only be List or string! type={type(v)}"
+            )
+        elif isinstance(v, str):
+            v = [tuple(map(int, x.strip().split(","))) for x in v.split(" ")]
+        from shapely.geometry import Polygon
+
+        try:
+            Polygon(v)
+        except Exception as exc:
+            logger.warning(f"Zone points unable to form a valid Polygon: {exc}")
+            raise TypeError(
+                f"The polygon points [coordinates] supplied "
+                f"are malformed! -> {orig}"
+            )
+        else:
+            assert isinstance(v, list)
+
+    return v
+
+

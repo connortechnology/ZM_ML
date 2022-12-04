@@ -8,9 +8,9 @@ formatter = logging.Formatter(
     "%(asctime)s.%(msecs)04d %(name)s[%(process)s] %(levelname)s %(module)s:%(lineno)d->[%(message)s]",
     "%m/%d/%y %H:%M:%S",
 )
-stream_handler = logging.StreamHandler(stream=sys.stdout)
-stream_handler.setFormatter(formatter)
-logger.addHandler(stream_handler)
+console_handler = logging.StreamHandler(stream=sys.stdout)
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 if __name__ == "__main__":
     logger.info("Starting MLAPI server...")

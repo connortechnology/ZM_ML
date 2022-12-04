@@ -21,7 +21,7 @@ struct_time_stamp = r"l"
 TIMEVAL_SIZE: int = struct.calcsize(struct_time_stamp)
 
 logger = logging.getLogger("ML-Client")
-LP = "API Images:"
+LP = "media::"
 g = None
 
 
@@ -35,7 +35,7 @@ class APIImagePipeLine:
 
         g = get_global_config()
 
-        lp = f"images:init:"
+        lp = f"{LP}API::init::"
         if not options:
             raise ValueError(f"{lp} no stream options provided!")
         #  INIT START 
@@ -71,7 +71,7 @@ class APIImagePipeLine:
         )
         # We don't know how long an event will be so set an upper limit of at least
         # pre- + post-buffers calculated as seconds because we are pulling 1 FPS
-        self.total_max_frames = min(self.options.max_frames, self.total_min_frames)
+        self.total_max_frames = max(self.options.max_frames, self.total_min_frames)
 
     def get_image(self) -> Tuple[Optional[Union[bytes, bool]], Optional[str]]:
         if self.frames_processed >= self.total_max_frames:
@@ -83,7 +83,7 @@ class APIImagePipeLine:
         def _grab_event_data(msg: Optional[str] = None):
             """Calls global API make_request method to get event data"""
             if msg:
-                logger.debug(f"{LP}read>event_data: {msg}")
+                logger.debug(f"{lp}read>event_data: {msg}")
             if not self.event_ended:
                 try:
                     g.Event, g.Monitor, g.Frame, _ = g.api.get_all_event_data(g.eid)
@@ -164,7 +164,7 @@ class APIImagePipeLine:
                 return self._process_frame(skip=True)
             #  SET URL TO GRAB IMAGE FROM 
             logger.debug(f"Calculated Frame ID as {self.current_frame}")
-            fid_url = f"{g.api.get_portalbase()}/index.php?view=image&eid={g.eid}&fid={self.current_frame}"
+            fid_url = f"{g.api.portal_base_url}/index.php?view=image&eid={g.eid}&fid={self.current_frame}"
 
             if g.past_event:
                 logger.warning(
@@ -221,7 +221,7 @@ class APIImagePipeLine:
         _cont = self.frames_processed < self.total_max_frames
         if not _cont:
             logger.warning(f"Image stream exhausted. Tried: {self.frames_processed} - Max: {self.total_max_frames}")
-        return self.frames_processed < self.total_max_frames
+        return _cont
 
     def _process_frame(
         self,
@@ -230,7 +230,7 @@ class APIImagePipeLine:
         end: bool = False,
     ) -> Tuple[Optional[Union[bytes, bool]], Optional[str]]:
         """Process the frame, increment counters, and return the image if there is one"""
-        lp = f"{LP}processed_frame:"
+        lp = f"{LP}API::processed_frame:"
         self.last_fid_read = self.current_frame
         self._attempted_fids.add(self.current_frame)
         if skip:
@@ -432,7 +432,7 @@ class SHMImagePipeLine:
     def get_image(self):
         self.mem_handle.seek(0)  # goto beginning of file
         # import proper class that contains mmap data
-        from shm_data import Dot3725
+        from ..Models.shm_data import Dot3725
 
         x = Dot3725()
         sd_model = x.shared_data

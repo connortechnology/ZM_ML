@@ -16,11 +16,18 @@ class DefaultEnabled(BaseModel):
     enabled: bool = Field(True)
 
 
+class DefaultNotEnabled(DefaultEnabled):
+    enabled: bool = Field(False)
+
+
 class ZMAPISettings(BaseModel):
+    class ZMMisc(BaseModel):
+        write_notes: bool = Field(True)
+    misc: ZMMisc = Field(ZMMisc())
     portal: AnyUrl = Field(None)
     api: AnyUrl = Field(None)
-    user: str = Field(None)
-    password: SecretStr = Field(None)
+    user: Optional[SecretStr] = Field(None)
+    password: Optional[SecretStr] = Field(None)
     ssl_verify: bool = Field(True)
 
     # validators
@@ -35,6 +42,7 @@ class LoggingSettings(BaseModel):
     integrate_zm: bool = Field(False)
     log_to_file: bool = Field(False)
     sanitize: bool = Field(False)
+    sanitize_string: str = Field("<sanitized>")
     dir: Path = Field(Path("/var/log/zm"))
     file_name: str = Field(default="zm_ml.log")
     user: str = Field(default="www-data")
@@ -89,9 +97,13 @@ class NotificationZMURLOptions(BaseModel):
 class MLNotificationSettings(BaseModel):
     class ZMNinjaNotificationSettings(BaseModel):
         class ZMNinjaFCMSettings(BaseModel):
-            enabled: bool = Field(False)
-            v1: bool = Field(False)
-            local_tokens: Path = Field(None)
+            class FCMV1Settings(BaseModel):
+                enabled: bool = Field(True)
+                key: Optional[SecretStr] = None
+                url: Optional[AnyUrl] = None
+
+            v1: FCMV1Settings = Field(default_factory=FCMV1Settings)
+            token_file: Path = Field(None)
             replace_messages: bool = Field(False)
             date_fmt: str = Field("%I:%M %p, %d-%b")
             android_priority: str = Field("high")
@@ -103,10 +115,16 @@ class MLNotificationSettings(BaseModel):
         fcm: ZMNinjaFCMSettings = Field(default_factory=ZMNinjaFCMSettings)
 
     class GotifyNotificationSettings(BaseModel):
+        test_image: bool = Field(False)
         enabled: bool = Field(False)
         host: AnyUrl = Field(None)
         token: str = Field(None)
         portal: AnyUrl = Field(None)
+        link_url: bool = Field(False)
+        link_user: Optional[SecretStr] = Field(None)
+        link_pass: Optional[SecretStr] = Field(None)
+        _push_auth: Optional[SecretStr] = Field(None)
+
         url_opts: NotificationZMURLOptions = Field(
             default_factory=NotificationZMURLOptions
         )
@@ -121,30 +139,41 @@ class MLNotificationSettings(BaseModel):
             enabled: bool = Field(False)
             token: str = Field(None)
             key: str = Field(None)
+        class EndPoints(BaseModel):
+            messages: str = Field("/messages.json")
+            users: str = Field("/users/validate.json")
+            devices: str = Field("/devices.json")
+            sounds: str = Field("/sounds.json")
+            receipt: str = Field("/receipts/{receipt}.json")
+            cancel: str = Field("/cancel/{receipt}.json")
+            emergency: str = Field("/emergency.json")
 
         enabled: bool = Field(False)
-        token: str = Field(None)
-        key: str = Field(None)
+        token: str = Field(...)
+        key: str = Field(...)
         animation: SendAnimations = Field(default_factory=SendAnimations)
+        sounds: Dict[str, str] = Field(default_factory=dict)
+        cooldown: float = Field(gt=0.0, default=30.00)
+        device: Optional[str] = Field(None)
         url_opts: NotificationZMURLOptions = Field(
             default_factory=NotificationZMURLOptions
         )
-
-        base_url: Optional[AnyUrl] = Field(None)
-        messages_endpoint: str = Field("/messages.json")
-
+        base_url: Optional[AnyUrl] = Field("https://api.pushover.net/1")
+        endpoints: EndPoints = Field(default_factory=EndPoints)
+        link_url: bool = Field(False)
+        link_user: Optional[SecretStr] = Field(None)
+        link_pass: Optional[SecretStr] = Field(None)
+        priority: int = Field(ge=-2, le=2, default=0)
 
         # validators
         _validate_host_portal = validator("base_url", allow_reuse=True, pre=True)(
             no_scheme_url_validator
         )
 
-    class ShellScriptNotificationSettings(BaseModel):
-        enabled: bool = Field(False)
+    class ShellScriptNotificationSettings(DefaultNotEnabled):
         script: str = Field(None)
 
-    class HassNotificationSettings(BaseModel):
-        enabled: bool = Field(False)
+    class WebHookNotificationSettings(DefaultNotEnabled):
         host: AnyUrl = Field(None)
         token: str = Field(None)
         ssl_verify: bool = Field(True)
@@ -154,6 +183,37 @@ class MLNotificationSettings(BaseModel):
             no_scheme_url_validator
         )
 
+    class MQTTNotificationSettings(BaseModel):
+        class MQTTAnimationSettings(DefaultNotEnabled):
+            topic: str = Field('zm_ml/animation')
+
+        class MQTTImageSettings(DefaultNotEnabled):
+            topic: str = Field('zm_ml/image')
+
+        enabled: bool = Field(False)
+        force: bool = Field(False)
+        topic: str = Field("zm_ml/detection")
+        broker: Union[IPvAnyAddress, AnyUrl] = Field(None)
+        port: int = Field(1883)
+        user: str = Field(None)
+        pass_: Optional[SecretStr] = Field(None, alias="pass")
+        allow_self_signed: bool = Field(False)
+        tls_insecure: bool = Field(False)
+        tls_ca: Optional[Path] = Field(None)
+        tls_cert: Optional[Path] = Field(None)
+        tls_key: Optional[Path] = Field(None)
+        retain: bool = Field(False)
+        qos: int = Field(0)
+
+        image: MQTTImageSettings = Field(default_factory=MQTTImageSettings)
+        animation: MQTTAnimationSettings = Field(default_factory=MQTTAnimationSettings)
+
+        # validators
+        _validate_host_broker = validator("broker", allow_reuse=True, pre=True)(
+            no_scheme_url_validator
+        )
+
+    mqtt: MQTTNotificationSettings = Field(default_factory=MQTTNotificationSettings)
     zmninja: ZMNinjaNotificationSettings = Field(
         default_factory=ZMNinjaNotificationSettings
     )
@@ -166,11 +226,10 @@ class MLNotificationSettings(BaseModel):
     shell_script: ShellScriptNotificationSettings = Field(
         default_factory=ShellScriptNotificationSettings
     )
-    hass: HassNotificationSettings = Field(default_factory=HassNotificationSettings)
+    webhook: WebHookNotificationSettings = Field(default_factory=WebHookNotificationSettings)
 
 
-class APIPullMethod(BaseModel):
-    enabled: bool = Field(False)
+class APIPullMethod(DefaultNotEnabled):
     fps: int = Field(1)
     attempts: int = Field(3)
     delay: float = Field(1.0)
@@ -186,12 +245,11 @@ class DetectionSettings(BaseModel):
             api: APIPullMethod = Field(default_factory=APIPullMethod)
             zmu: bool = Field(False)
 
-        class Debug(DefaultEnabled):
-            enabled: bool = Field(False)
+        class Debug(DefaultNotEnabled):
             path: Path = Field(Path("/tmp"))
 
         class Annotations(BaseModel):
-            class Zones(DefaultEnabled):
+            class Zones(DefaultNotEnabled):
                 color: Union[str, Tuple[int, int, int]] = Field((255, 0, 0))
                 thickness: int = Field(2)
 
@@ -199,7 +257,7 @@ class DetectionSettings(BaseModel):
                 processor: bool = Field(False)
 
             zones: Zones = Field(default_factory=Zones)
-            models: Models = Field(default_factory=Models)
+            model: Models = Field(default_factory=Models)
             confidence: bool = Field(True)
 
         class Training(DefaultEnabled):
@@ -304,21 +362,10 @@ class OverRideMatchFilters(BaseModel):
 
 class MatchStrategy(str, Enum):
     # first match wins
-    first_match = "first_match"
-    # end of frame, any matches win
-    first_frame = "first_frame"
-    # end of frame, all
-    frame_high_score = "frame_high_score"
-    # end of frame, check if filtered results across models are close to each other
-    frame_object_confirm = "frame_object_confirm"
-    # end of all frames, whichever frame has the most labels wins
-    most_labels = "most_labels"
-    # end of all frames, duplicates are removed, whichever frame has the most labels wins
-    unique_labels = "unique_labels"
-
-    high_score = "high_score"
-    # end of all frames, for each frame total each labels float value, frame with highest total wins
-    total_score = "total_sum"
+    first = "first"
+    most = "most"
+    most_models = "most_models"
+    most_unique = "most_unique"
 
 
 class MatchingSettings(BaseModel):
@@ -339,89 +386,9 @@ class MonitorZones(BaseModel):
         default_factory=OverRideMatchFilters
     )
 
-    _RESOLUTION_STRINGS: Dict[str, Tuple[int, int]] = {
-        # pixel resolution string to tuple, feed it .casefold().strip()'d string's
-        "4kuhd": (3840, 2160),
-        "uhd": (3840, 2160),
-        "4k": (4096, 2160),
-        "6MP": (3072, 2048),
-        "5MP": (2592, 1944),
-        "4MP": (2688, 1520),
-        "3MP": (2048, 1536),
-        "2MP": (1600, 1200),
-        "1MP": (1280, 1024),
-        "1440p": (2560, 1440),
-        "2k": (2048, 1080),
-        "1080p": (1920, 1080),
-        "960p": (1280, 960),
-        "720p": (1280, 720),
-        "fullpal": (720, 576),
-        "fullntsc": (720, 480),
-        "pal": (704, 576),
-        "ntsc": (704, 480),
-        "4cif": (704, 480),
-        "2cif": (704, 240),
-        "cif": (352, 240),
-        "qcif": (176, 120),
-        "480p": (854, 480),
-        "360p": (640, 360),
-        "240p": (426, 240),
-        "144p": (256, 144),
-    }
-
-    @validator("resolution", pre=True, always=True)
-    def _validate_resolution(cls, v):
-        # logger.debug(f"Validating Monitor Zone resolution: {v}")
-        if not v:
-            logger.warning("No resolution provided for monitor zone, will not be able to scale "
-                           "zone Polygon if resolution changes")
-        elif isinstance(v, str):
-            v = v.casefold().strip()
-            if v in cls._RESOLUTION_STRINGS:
-                v = cls._RESOLUTION_STRINGS[v]
-            elif v not in cls._RESOLUTION_STRINGS:
-                # check for a valid resolution string
-                import re
-                # WxH
-                if re.match(r"^\d+x\d+$", v):
-                    v = tuple(int(x) for x in v.split("x"))
-                # W*H
-                elif re.match(r"^\d+\*\d+$", v):
-                    v = tuple(int(x) for x in v.split("*"))
-                # W,H
-                elif re.match(r"^\d+,\d+$", v):
-                    v = tuple(int(x) for x in v.split(","))
-                else:
-                    logger.warning(
-                        f"Invalid resolution string: {v}. Valid strings are: W*H WxH W,H OR {', '.join(cls._RESOLUTION_STRINGS)}"
-                    )
-        # logger.debug(f"Validated Monitor Zone resolution: {v}")
-        return v
-
-    @validator("points", pre=True, always=True)
-    def validate_points(cls, v, field):
-        if v:
-            orig = str(v)
-            if not isinstance(v, (str, list)):
-                raise TypeError(
-                    f"'{field.name}' Can only be List or string! type={type(v)}"
-                )
-            elif isinstance(v, str):
-                v = [tuple(map(int, x.strip().split(","))) for x in v.split(" ")]
-            from shapely.geometry import Polygon
-
-            try:
-                Polygon(v)
-            except Exception as exc:
-                logger.warning(f"Zone points unable to form a valid Polygon: {exc}")
-                raise TypeError(
-                    f"The polygon points [coordinates] supplied "
-                    f"are malformed! -> {orig}"
-                )
-            else:
-                assert isinstance(v, list)
-
-        return v
+    from .validators import validate_resolution, validate_points
+    __validate_resolution = validator("resolution", pre=True, allow_reuse=True)(validate_resolution)
+    __validate_points = validator("points", pre=True, allow_reuse=True)(validate_points)
 
 
 class MonitorsSettings(BaseModel):

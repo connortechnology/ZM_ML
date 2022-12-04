@@ -20,15 +20,17 @@ Important:
 """
 
 import datetime
-import inspect
+import pickle
 import re
 import logging
+import time
 from typing import Dict, List, Optional, Union, Tuple
 
 from requests import Response, Session
 from requests.exceptions import HTTPError
 from urllib3 import disable_warnings
 from urllib3.exceptions import InsecureRequestWarning
+import jwt
 
 from ..Models.config import ZMAPISettings, MonitorsSettings
 
@@ -78,14 +80,16 @@ class ZMApi:
                     f"{lp}match origin zone:: only triggering on ZM zones that are "
                     f"listed in the event 'Cause' [{g.event_cause}]",
                 )
-            url = f"{self.get_portalbase()}/api/zones/forMonitor/{g.mid}.json"
+            url = f"{self.portal_base_url}/api/zones/forMonitor/{g.mid}.json"
             r = self.make_request(url)
             # Now lets look at reason to see if we need to honor ZM motion zones
             if r:
                 # logger.debug(f"{lp} RESPONSE from zone API call => {r}")
                 zones = r.get("zones")
                 if zones:
-                    logger.debug(f"{lp} {len(zones)} ZM zones found, checking for 'Inactive' zones")
+                    logger.debug(
+                        f"{lp} {len(zones)} ZM zones found, checking for 'Inactive' zones"
+                    )
                     for zone in zones:
                         zone_name: str = zone.get("Zone", {}).get("Name", "")
                         zone_type: str = zone.get("Zone", {}).get("Type", "")
@@ -105,7 +109,9 @@ class ZMApi:
                                     f"cause -> '{g.event_cause}' and 'match_origin_zone' is enabled"
                                 )
                                 continue
-                            logger.debug(f"{lp}match origin zone:: '{zone_name}' is in event cause -> '{g.event_cause}'")
+                            logger.debug(
+                                f"{lp}match origin zone:: '{zone_name}' is in event cause -> '{g.event_cause}'"
+                            )
 
                         from ..Models.config import MonitorZones
 
@@ -119,10 +125,12 @@ class ZMApi:
                                 object_confirm=None,
                                 static_objects=None,
                                 filters=None,
-                                zones={zone_name: MonitorZones(
+                                zones={
+                                    zone_name: MonitorZones(
                                         points=zone_points,
                                         resolution=monitor_resolution,
-                                    )},
+                                    )
+                                },
                             )
                             g.config.monitors[g.mid] = mid_cfg
 
@@ -130,7 +138,9 @@ class ZMApi:
                             existing_zones = {}
 
                         if mid_cfg:
-                            logger.debug(f"{lp} monitor configuration found for monitor {g.mid}")
+                            logger.debug(
+                                f"{lp} monitor configuration found for monitor {g.mid}"
+                            )
                             if existing_zones is not None:
                                 # logger.debug(f"{lp} existing zones found: {existing_zones}")
                                 if not (existing_zone := existing_zones.get(zone_name)):
@@ -157,8 +167,12 @@ class ZMApi:
                                         # logger.debug(f"{lp} updated zone AS DICT: {ex_z_dict}")
                                         existing_zone = MonitorZones(**ex_z_dict)
                                         # logger.debug(f"{lp} updated zone AS MODEL: {existing_zone}")
-                                        g.config.monitors[g.mid].zones[zone_name] = existing_zone
-                                        imported_zones.append({zone_name: existing_zone})
+                                        g.config.monitors[g.mid].zones[
+                                            zone_name
+                                        ] = existing_zone
+                                        imported_zones.append(
+                                            {zone_name: existing_zone}
+                                        )
                                         logger.debug(
                                             f"{lp} '{zone_name}' already exists, updated points and resolution"
                                         )
@@ -174,33 +188,32 @@ class ZMApi:
         return imported_zones
 
     def __init__(self, options: ZMAPISettings):
+        lp: str = "api::init::"
         global g
         from ..main import get_global_config
         from pydantic import SecretStr
 
         g = get_global_config()
-        lp: str = "api:init:"
-        if options is None:
-            raise ValueError(f"{lp} options is None")
-        self.options = options
-        self.api_url: Optional[str] = options.api
-
-        self.auth_enabled: bool = False
+        self.token_file = g.config.system.variable_data_path / "api_access_token"
         self.access_token: Optional[str] = ""
         self.refresh_token: Optional[str] = ""
-        self.refresh_token_datetime: Optional[Union[datetime, str]] = None
-        self.access_token_datetime: Optional[Union[datetime, str]] = None
+        # self.refresh_token_datetime: Optional[Union[datetime, str]] = None
+        # self.access_token_datetime: Optional[Union[datetime, str]] = None
+        self.options: ZMAPISettings = options
+        self.api_url: Optional[str] = options.api
+        self.portal_url: Optional[str] = options.portal
+
         self.api_version: Optional[str] = ""
         self.zm_version: Optional[str] = ""
         self.zm_tz: Optional[str] = None
 
         self.session: Session = Session()
-        self.username: Optional[str] = options.user
+        self.username: Optional[SecretStr] = options.user
         self.password: Optional[SecretStr] = options.password
 
         # Sanitize logs of urls, passwords, tokens, etc. Makes for easier copy+paste
         self.sanitize = g.config.logging.sanitize
-        self.sanitize_str: str = '<sanitized>'
+        self.sanitize_str: str = "<sanitized>"
         if self.options.ssl_verify is False:
             self.session.verify = False
             logger.debug(
@@ -208,7 +221,11 @@ class ZMApi:
             )
             disable_warnings(category=InsecureRequestWarning)
 
-        self._login()
+        if self.token_file:
+            _ = self.cached_tokens
+            self._refresh_tokens_if_needed()
+        else:
+            self._login()
 
     def show_portal(self):
         pass
@@ -232,108 +249,161 @@ class ZMApi:
         return self.zm_tz
 
     # called in _make_request to avoid 401s if possible
-    def _refresh_tokens_if_needed(self):
-
+    def _refresh_tokens_if_needed(self, grace_period: Optional[float] = None):
         lp = f"api::_refresh_tokens_if_needed::"
-        # stack = inspect.stack()
-        # idx = min(len(stack), 1)
-        # caller = inspect.getframeinfo(stack[idx][0])
-        # stack.reverse()
-        # stack = [f"{s[3]}()" for s in stack]
-        # stack = " -> ".join(stack)
-        # logger.debug(f"{lp} caller: {caller} line_no: {caller.lineno} stack: {stack}")
-
-        # global GRACE
-        if not self.access_token_datetime and not self.refresh_token_datetime:
-            logger.warning(
-                f"{lp} no token expiration times to check, not evaluating if access token needs a refresh"
-            )
-            return
-        sec_remain = (
-            self.access_token_datetime - datetime.datetime.now()
-        ).total_seconds()
-        if sec_remain >= GRACE:  # grace for refresh lifetime
-            logger.debug(
-                f"{lp} access token still has {sec_remain/60:.2f} minutes remaining"
-            )
-
-            return
-        else:
-            logger.debug(f"{lp} access token has expired, checking if refreshable")
+        _login = False
+        _relogin = False
+        if not self.access_token:
+            logger.warning(f"{lp} no access token to evaluate, calling login()")
+            _login = True
+        claims = jwt.decode(self.access_token, verify=False)
+        iss = claims.get("iss")
+        if iss and iss != "ZoneMinder":
+            logger.error(f"{lp} invalid 'iss' [{iss}] for access token, calling login()")
+            _login = True
+        elif not iss:
+            logger.error(f"{lp} no 'Issuer' ['iss'] for access token, calling login()")
+            _login = True
+        iat = claims["iat"]
+        exp = claims["exp"]
+        now = time.time()
+        remaining = exp - now
+        m, s = divmod(remaining, 60)
+        h, m = divmod(m, 60)
+        if not grace_period:
+            grace_period = GRACE
+        logger.debug(f"{lp} GRACE: {grace_period} --  ISSUED AT: {datetime.datetime.fromtimestamp(iat)}"
+                     f" EXPIRES AT: {datetime.datetime.fromtimestamp(exp)} -- CURRENTLY: "
+                     f"{datetime.datetime.fromtimestamp(now)}   -------- remaining seconds = {remaining}")
+        if not _login and not _relogin:
+            if exp > now > (exp-grace_period):
+                logger.debug(f"{lp} access token is within {grace_period}s of expiring [{remaining=}], refreshing")
+                _relogin = True
+            elif now > exp:
+                logger.debug(f"{lp} access token is expired [{remaining=}], refreshing")
+                _relogin = True
+            elif now < iat:
+                logger.debug(f"{lp} access token issued in the future?! requesting new tokens")
+                _login = True
+            else:
+                logger.debug(f"{lp} access token is not expired, checking validity")
+                # use token to test if it's still valid
+                url = f"{self.api_url}/host/getversion.json"
+                try:
+                    r = self.session.get(url=url, params={"token": self.access_token})
+                    r.raise_for_status()
+                except HTTPError as err:
+                    logger.warning(
+                        f"{lp} access token validity test threw an exception! {err}"
+                    )
+                    logger.debug(f"{lp} EXCEPTION>>> {err}")
+                    _login = True
+                else:
+                    logger.debug(
+                        f"{lp} access token is valid for {h:.0f} hours {m:.0f} minutes and {s:.06f} seconds"
+                    )
+                    return
+        if _login:
+            logger.debug(f"{lp} calling login()")
+            self._login()
+        elif _relogin:
+            logger.debug(f"{lp} calling re-login()")
             self._re_login()
 
-    def _re_login(self):
-        """Used for 401. I could use _login too but decided to do a simpler fn"""
+    def _re_login(self, grace_period: Optional[float] = None, reauth: bool = True):
         lp = f"api::_re_login::"
+        _type = 'refresh'
+        tkn = self.refresh_token
+        _login = False
+        if not tkn:
+            logger.warning(f"{lp} no {_type} token, calling login()")
+            _login = True
+        if not grace_period:
+            grace_period = GRACE
+            if not _login:
+                claims = jwt.decode(tkn, verify=False)
+                iss = claims.get("iss")
+                if iss and iss != "ZoneMinder":
+                    logger.error(f"{lp} invalid 'iss' [{iss}] for {_type} token, calling login()")
+                    _login = True
+                elif not iss:
+                    logger.error(f"{lp} no 'iss' for {_type} token, calling login()")
+                    _login = True
+                iat = claims["iat"]
+                exp = claims["exp"]
+                now = time.time()
+                remaining = exp - now
+                m, s = divmod(remaining, 60)
+                h, m = divmod(m, 60)
+                if exp > now > (exp - grace_period):
+                    logger.debug(f"{lp} {_type} token is within {grace_period} second(s) "
+                                 f"of expiring, requesting new tokens")
+                    _login = True
+                elif now > exp:
+                    logger.debug(f"{lp} {_type} token is expired, requesting new tokens")
+                    _login = True
+                elif now < iat:
+                    logger.debug(f"{lp} {_type} token is in the future, requesting new tokens")
+                    _login = True
+                else:
+                    logger.debug(
+                        f"{lp} {_type} token is valid for {h:.0f} hours {m:.0f} minutes and {s:.06f} seconds"
+                    )
+                    url = f"{self.api_url}/host/login.json"
+                    login_data = {"token": tkn}
+                    try:
+                        response = self.session.post(url, data=login_data)
+                        response.raise_for_status()
 
-        time_remaining = (
-            self.refresh_token_datetime - datetime.datetime.now()
-        ).total_seconds()
-        if time_remaining >= GRACE:
-            logger.debug(
-                f"{lp} using refresh token to get a new auth, as refresh still has {time_remaining / 60} "
-                f"minutes remaining",
-            )
-
-            url = f"{self.api_url}/host/login.json"
-            login_data = {"token": self.refresh_token}
-            try:
-                response = self.session.post(url, data=login_data)
-                response.raise_for_status()
-
-                resp_json = response.json()
-                self.api_version = resp_json.get("apiversion")
-                self.zm_version = resp_json.get("version")
-                if resp_json:
-                    if resp_json.get("access_token"):
-                        # there is a JSON response and there is data in the access_token field
-                        logger.debug(
-                            f"{lp} there is a JSON response from REFRESH attempt and an access_token "
-                            f"has been supplied"
-                        )
-                        if version_tuple(self.api_version) >= version_tuple("2.0"):
-                            logger.debug(
-                                f"{lp} detected API ver 2.0+, using token system",
-                            )
-                            self.access_token = resp_json.get("access_token", "")
-                            if self.access_token:
-                                access_token_expires = int(
-                                    resp_json.get("access_token_expires")
-                                )
-                                self.access_token_datetime = (
-                                    datetime.datetime.now()
-                                    + datetime.timedelta(seconds=access_token_expires)
-                                )
+                    except HTTPError as err:
+                        logger.error(f"{lp} error while refreshing: {err}")
+                        raise err
+                    else:
+                        resp_json = response.json()
+                        logger.debug(f"{lp} got API refresh response: {resp_json}")
+                        """
+                        {
+                            'access_token': '<TOKEN>', # JWT
+                            'access_token_expires': 21600, # Seconds
+                            'credentials': 'auth=abcCBA123321', # legacy auth?
+                            'append_password': 0, # ?
+                            'version': '1.37.27', # ZM Version
+                            'apiversion': '2.0' # API Version
+                        }
+                        """
+                        if resp_json:
+                            self.api_version = resp_json.get("apiversion")
+                            self.zm_version = resp_json.get("version")
+                            if "access_token" in resp_json and resp_json["access_token"]:
+                                self.access_token = resp_json["access_token"]
+                                tkn_exp = resp_json["access_token_expires"]
                                 logger.debug(
-                                    f"{lp} access token expires in {access_token_expires} seconds "
-                                    f"on: {self.access_token_datetime}",
+                                    f"{lp} access token expires in {tkn_exp} seconds "
+                                    f"on: {datetime.datetime.now() + datetime.timedelta(seconds=tkn_exp)}"
                                 )
+                                self.cached_tokens = None
+                        else:
+                            if reauth:
+                                logger.error(f"{lp} no response from API refresh, trying again")
+                                self._re_login(reauth=False)
+                            else:
+                                logger.error(f"{lp} no response from API refresh, trying again")
 
-            except HTTPError as err:
-                logger.error(f"{lp} got API login error: {err}")
-                raise err
-        else:
-            logger.debug(
-                f"{lp} refresh token only has {time_remaining}s of lifetime, need to re-login (user/pass)",
-            )
-        self._login()
+
+            if _login:
+                logger.debug(f"{lp} calling login()")
+                self._login()
 
     def _login(self):
-        """This is called by the constructor. You are not expected to call this directly.
-
-        Raises:
-            err: reason for failure
-        """
         lp: str = "api::login::"
         login_data: Dict = {}
         url = f"{self.api_url}/host/login.json"
-
         if self.username and self.password:
             logger.debug(
                 f"{lp} Credentials have been supplied",
             )
             login_data = {
-                "user": self.username,
+                "user": self.username.get_secret_value(),
                 "pass": self.password.get_secret_value(),
             }
         else:
@@ -343,64 +413,122 @@ class ZMApi:
             response = self.session.post(url, data=login_data)
             response.raise_for_status()
 
-            resp_json = response.json()
-            logger.warning(f"{lp} JSON response: {resp_json}")
+        except HTTPError as err:
+            ''' 401: unauthorized - user authentication can allow access to the resource.
+             403: forbidden - re-authenticating makes no difference. The access is tied to the application logic,
+             such as insufficient rights to a resource.
+             404: not found - RESOURCE TEMP OR PERM GONE'''
+            code_ = err.response.status_code
+            err_msg = err.response.json()
+            logger.error(f"{lp} got API login error -> Code: {code_}  || JSON: {err_msg}")
+            if code_ == 401:
+                if err_msg:
+                    '''
+                    BAD_USERNAME: {
+                        "success":false,
+                        "data":{
+                            "name":"Could not retrieve user te details",
+                            "message":"Could not retrieve user te details",
+                            "url":"\/zm\/api\/host\/login.json",
+                            "exception":{
+                                "class":"UnauthorizedException",
+                                "code":401,"message":"Could not retrieve user te details"
+                            }
+                        }
+                    }
+                    BAD_PASSWORD: {
+                        "success":false,
+                        "data":{
+                            "name":"Login denied for user &quot;testapi&quot;",
+                            "message":"Login denied for user &quot;testapi&quot;",
+                            "url":"\/zm\/api\/host\/login.json",
+                            "exception":{
+                                "class":"UnauthorizedException",
+                                "code":401,
+                                "message":"Login denied for user \"testapi\""
+                            }
+                        }
+                    }
+                    '''
+                    if "name" in err_msg["data"]:
+                        if "Could not retrieve user" in err_msg["data"]["name"]:
+                            logger.error(f"{lp} invalid username")
+                        elif "Login denied for user" in err_msg["data"]["name"]:
+                            logger.error(f"{lp} invalid password")
+            elif code_ == 521:
+                logger.error(f"{lp} CloudFlare reports that the origin server is down [{code_}]")
+
+            raise err
+
+        self.access_token = None
+        self.refresh_token = None
+        resp_json = response.json()
+        if resp_json:
             self.api_version = resp_json.get("apiversion")
             self.zm_version = resp_json.get("version")
-            if resp_json:
-                if resp_json.get("access_token"):
-                    # there is a JSON response and there is data in the access_token field
-                    logger.debug(
-                        f"{lp} there is a JSON response from login attempt and an access_token "
-                        f"has been supplied"
-                    )
-                    self.auth_enabled = True
-                    self.access_token = resp_json.get("access_token", "")
-                    self.refresh_token = resp_json.get("refresh_token")
-                    if self.access_token:
-                        access_token_expires = int(
-                            resp_json.get("access_token_expires")
-                        )
-                        self.access_token_datetime = (
-                            datetime.datetime.now()
-                            + datetime.timedelta(seconds=access_token_expires)
-                        )
-                        logger.debug(
-                            f"{lp} access token expires in {access_token_expires} seconds "
-                            f"on: {self.access_token_datetime}",
-                        )
-                    if self.refresh_token:
-                        refresh_token_expires = int(
-                            resp_json.get("refresh_token_expires")
-                        )
-                        self.refresh_token_datetime = (
-                            datetime.datetime.now()
-                            + datetime.timedelta(seconds=refresh_token_expires)
-                        )
-                        logger.debug(
-                            f"{lp} refresh token expires in {refresh_token_expires} seconds "
-                            f"on: {self.refresh_token_datetime}",
-                        )
-                else:
-                    self.auth_enabled = False
-                    logger.debug(f"{lp} it is assumed 'OPT_USE_AUTH' is disabled!")
+            if "access_token" in resp_json and resp_json["access_token"]:
+                self.access_token = resp_json["access_token"]
 
-        except HTTPError as err:
-            logger.error(f"{lp} got API login error: {err}")
-            code_ = err.response.status_code
-            if code_ == 401 or code_ == 403 or code_ == 404:
-                logger.error(f"{lp} got 401, trying to re-login")
-                self._login()
-            elif code_ == 521:
-                logger.error(
-                    f"{lp} CloudFlare reports that the origin server is down, sleeping for 5 "
-                    f"secs and retrying"
+                access_token_expires = resp_json["access_token_expires"]
+                logger.debug(
+                    f"{lp} access token expires in {access_token_expires} seconds "
+                    f"on: {datetime.datetime.now() + datetime.timedelta(seconds=access_token_expires)}"
                 )
-                from time import sleep
-                sleep(5)
-                self._login()
-            self.authenticated = False
-            raise err
+
+                if "refresh_token" in resp_json and resp_json["refresh_token"]:
+                    self.refresh_token = resp_json["refresh_token"]
+                    refresh_token_expires = resp_json["refresh_token_expires"]
+                    logger.debug(
+                        f"{lp} refresh token expires in {refresh_token_expires} seconds "
+                        f"on: {datetime.datetime.now() + datetime.timedelta(seconds=refresh_token_expires)}",
+                    )
+                if self.access_token and self.refresh_token:
+                    self.cached_tokens = None
+            else:
+                logger.debug(f"{lp} it is assumed 'OPT_USE_AUTH' is disabled as no access token was returned")
+
+    @property
+    def cached_tokens(self):
+        data = None
+        if self.token_file and self.token_file.exists():
+            try:
+                with self.token_file.open("rb") as f:
+                    data = pickle.load(f)
+            except Exception as err:
+                logger.error(f"failed to load cached tokens from disk: {err}")
+            else:
+                self.access_token = data.get("access_token")
+                self.refresh_token = data.get("refresh_token")
+            finally:
+                return data
+
+    @cached_tokens.setter
+    def cached_tokens(self, tokens: Optional[Dict[str, str]] = None):
+        if not tokens:
+            logger.debug(f"cached_tokens setter called with {tokens=}, using self.X_token")
+            tokens = {
+                        "access_token": self.access_token,
+                        "refresh_token": self.refresh_token,
+                    }
+        try:
+            self.token_file.touch(exist_ok=True)
+            with self.token_file.open("wb") as f:
+                pickle.dump(
+                    tokens,
+                    f,
+                )
+        except Exception as err:
+            logger.error(f"{lp} error writing tokens to disk: {err}")
+        else:
+            logger.debug(f"{lp} tokens written to disk")
+
+    @cached_tokens.deleter
+    def cached_tokens(self):
+        if self.token_file and self.token_file.exists():
+            try:
+                self.token_file.unlink()
+            except Exception as err:
+                logger.error(f"{lp} error deleting tokens from disk: {err}")
 
     def get_all_event_data(
         self,
@@ -420,7 +548,7 @@ class ZMApi:
         frame: Optional[List] = None
         event_tot_frames: Union[int, float, None] = None
         events_url = f"{self.api_url}/events/{event_id}.json"
-        api_event_response = self.make_request(url=events_url, quiet=True)
+        api_event_response = self.make_request(url=events_url)
         event = api_event_response.get("event", {}).get("Event")
         monitor = api_event_response.get("event", {}).get("Monitor")
         frame = api_event_response.get("event", {}).get("Frame")
@@ -434,11 +562,7 @@ class ZMApi:
         Returns:
             str: the base URL for the ZoneMinder portal.
         """
-        return self._portal_base_url
-
-    def get_portalbase(self):
-        """Returns the portal base URL"""
-        return self.api_url[:-4]
+        return self.portal_url
 
     def get_monitor_data(
         self,
@@ -450,7 +574,7 @@ class ZMApi:
         monitor: Optional[Dict] = None
         monitor_url = f"{self.api_url}/monitors/{mon_id}.json"
         try:
-            api_monitor_response = self.make_request(url=monitor_url, quiet=True)
+            api_monitor_response = self.make_request(url=monitor_url)
         except Exception as e:
             logger.error(f"{lp} Error during Event data retrieval: {str(e)}")
             logger.debug(f"{lp} EXCEPTION>>> {e}")
@@ -478,33 +602,31 @@ class ZMApi:
         if query is None:
             query = {}
 
-        self._refresh_tokens_if_needed()
         type_action = type_action.casefold()
-        if self.auth_enabled:
+        if self.access_token:
             query["token"] = self.access_token
+        show_url: str = (
+            url.replace(self.portal_base_url, self.sanitize_str)
+            if self.sanitize
+            else url
+        )
+        show_tkn: str = (
+            f"{self.access_token[:20]}...{self.sanitize_str}"
+            if self.sanitize
+            else self.access_token
+        )
+        show_payload: str = ""
+        show_query: Union[str, Dict] = f"token: '{show_tkn}'"
+        if not self.access_token:
+            show_query = query
+        if payload and len(payload):
+            show_payload = f" payload={payload}"
+        logger.debug(
+            f"{lp} '{type_action}'->{show_url}{show_payload} query={show_query}",
+        ) if not quiet else None
 
         try:
             r: Response
-            show_url: str = (
-                url.replace(self.get_portalbase(), self.sanitize_str)
-                if self.sanitize
-                else url
-            )
-            show_tkn: str = (
-                f"{self.access_token[:20]}...{self.sanitize_str}"
-                if self.sanitize
-                else self.access_token
-            )
-            show_payload: str = ""
-            show_query: Union[str, Dict] = f"token: '{show_tkn}'"
-            if not self.auth_enabled:
-                show_query = query
-            if payload and len(payload):
-                show_payload = f" payload={payload}"
-            logger.debug(
-                f"{lp} '{type_action}'->{show_url}{show_payload} query={show_query}",
-            )  if not quiet else None
-
             if type_action == "get":
                 r = self.session.get(url, params=query, timeout=240)
             elif type_action == "post":
@@ -517,10 +639,51 @@ class ZMApi:
                 logger.error(f"{lp} unsupported request type: {type_action}")
                 raise ValueError(f"Unsupported request type: {type_action}")
             r.raise_for_status()
+        except HTTPError as http_err:
+            if code := http_err.response.status_code == 401:
+                logger.debug(
+                    f"{lp} Got 401 (Unauthorized) -> {http_err.response.json()}"
+                )
+                raise ValueError("RE_LOGIN")
+            elif code == 404:
+                logger.warning(f"{lp} Got 404 (Not Found) -> {http_err}")
+                # ZM returns 404 when an image cannot be decoded or the requested event does not exist
+                err_json: Optional[dict] = http_err.response.json()
+                if err_json:
+                    logger.error(f"{lp} 404 to JSON ERROR response >>> {err_json}")
+                    if err_json.get("success") is False:
+                        # get the reason instead of guessing
+                        err_name = err_json.get("data").get("message")
+                        err_message = err_json.get("data").get("message")
+                        err_url = err_json.get("data").get("url")
+                        if err_name == "Invalid event":
+                            raise ValueError("INVALID_EVENT")
+                        else:
+                            raise ValueError("IMAGE_MISSING")
+            else:
+                logger.debug(f"{lp} NOT 200|401|404 SOOOOOOOOOOOOOOOO HTTP [{code}] error: {http_err}")
+        # If RE_LOGIN is raised, it will be caught by the caller
+        except ValueError as val_err:
+            err_msg = str(val_err)
+            if err_msg == "RE_LOGIN":
+                if re_auth:
+                    logger.debug(f"{lp} retrying login once")
+                    self._refresh_tokens_if_needed()
+                    logger.debug(f"{lp} retrying failed request again...")
+                    return self.make_request(
+                        url, query, payload, type_action, re_auth=False
+                    )
+            else:
+                raise val_err
+        else:
             # Empty response, e.g. to DELETE requests, can't be parsed to json
             # even if the content-type says it is application/json
-            content_type = r.headers.get("content-type", "")
-            content_length = r.headers.get("content-length", "")
+            content_type = r.headers.get("content-type")
+            content_length = r.headers.get("content-length")
+            logger.debug(
+                f"{lp} SUCCESS request method: '{type_action}' content-type: {content_type}, "
+                f"content-length: {content_length} -------- headers: {r.headers}"
+            )
 
             if content_type.startswith("application/json") and r.text:
                 return r.json()
@@ -528,12 +691,11 @@ class ZMApi:
                 # return raw image data
                 return r
             else:
-                logger.debug(
-                    f"{lp} {content_type = } -- {content_length = } >>> {r.text = }"
-                )
+                logger.debug(f"{lp}  >>> {r.text = }")
                 # A non 0 byte response will usually mean it's an image eid request that needs re-login
                 if content_length:
                     if content_length != "0":
+
                         if r.text.lower().startswith("no frame found"):
                             #  r.text = 'No Frame found for event(69129) and frame id(280)']
                             logger.warning(
@@ -551,39 +713,3 @@ class ZMApi:
                             f"{lp} raising BAD_IMAGE ValueError -> Content-Length = {content_length}"
                         )
                         raise ValueError("BAD_IMAGE")
-
-        except HTTPError as http_err:
-            if code := http_err.response.status_code == 401 and re_auth:
-                logger.debug(
-                    f"{lp} Got 401 (Unauthorized) -> {http_err.response.json()}"
-                )
-                raise ValueError("RE_LOGIN")
-            elif code == 404:
-                # ZM returns 404 when an image cannot be decoded or the requested event does not exist
-                err_json: Optional[dict] = http_err.response.json()
-                if err_json:
-                    logger.error(f"{lp} 404 to JSON ERROR response >>> {err_json}")
-                    if err_json.get("success") is False:
-                        # get the reason instead of guessing
-                        err_name = err_json.get("data").get("message")
-                        err_message = err_json.get("data").get("message")
-                        err_url = err_json.get("data").get("url")
-                        if err_name == "Invalid event":
-                            raise ValueError("INVALID_EVENT")
-                        else:
-                            raise ValueError("IMAGE_MISSING")
-            else:
-                logger.debug(f"{lp} HTTP error: {http_err}")
-        # If RE_LOGIN is raised, it will be caught by the caller
-        except ValueError as val_err:
-            err_msg = str(val_err)
-            if err_msg == "RE_LOGIN":
-                if re_auth:
-                    logger.debug(f"{lp} retrying login once")
-                    self._refresh_tokens_if_needed()
-                    logger.debug(f"{lp} retrying failed request again...")
-                    return self.make_request(
-                        url, query, payload, type_action, re_auth=False
-                    )
-            else:
-                raise val_err

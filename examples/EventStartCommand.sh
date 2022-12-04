@@ -6,15 +6,16 @@ cleanup() {
 
 MID=$2
 EID=$1
-config="${ML_CLIENT_CONF_FILE:-/var/lib/zm_ml/scripts/eventstart.py}"
+config="${ML_CLIENT_CONF_FILE:-/etc/zm/ml/client.yml}"
+detect_script="${ML_CLIENT_EVENT_START:-/home/zmadmin/zm_ml/examples/eventstart.py}"
 
 event_start_command=(
   python3
-  "${config}"
+  "${detect_script}"
+  --config "${config}"
   --eid "${EID}"
    --mid "${MID}"
    --live
-   --start
 )
 
 echo -e "\n\nRunning ${0} script: ${event_start_command[*]}\n\n"

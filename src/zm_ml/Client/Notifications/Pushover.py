@@ -1,10 +1,13 @@
 import datetime
 import logging
+import pickle
+import time
 from enum import Enum, IntEnum
 from pathlib import Path
 from pickle import loads as pickle_loads, dump as pickle_dump
-from typing import List, NoReturn, Union, Optional, Tuple
+from typing import List, NoReturn, Union, Optional, Tuple, Dict
 
+import numpy as np
 import requests
 import urllib3.exceptions
 from pydantic import BaseModel, Field, AnyUrl
@@ -54,20 +57,20 @@ class PushoverURLs(BaseModel):
 class RequestData(BaseModel):
     token: str = None
     user: str = None
-    message: str = None
+    message: str = Field(default=None, max_length=1024)
     device: str = None
     # 1=on 0=off - only html OR monospace - not both
     html: int = 0
     monospace: int = 0
-    priority: Optional[int] = 6
+    priority: Optional[Priorities] = Field(Priorities.NORMAL)
     sound: dict = Field(default_factory=dict)
     timestamp: float = 0.0
-    title: str = None
-    url: str = None
-    url_title: str = None
+    title: str = Field(default=None, max_length=250)
+    url: str = Field(default=None, max_length=512)
+    url_title: str = Field(default=None, max_length=100)
     # For Emergency (2) priority
-    retry: int = 60
-    expire: int = 3600
+    retry: int = Field(default=30)
+    expire: int = Field(default=3600)
     # URL that Pushover will send a request to
     callback: str = None
     # ID to poll for status of emergency message
@@ -139,22 +142,47 @@ class RequestData(BaseModel):
 
 
 class Pushover:
-    _request_data: Optional[RequestData] = None
+    _request_data: RequestData = RequestData()
     _urls: PushoverURLs = PushoverURLs()
     _optionals: Optionals = Optionals()
     _limits: Limits = Limits()
+    _push_auth: str = ""
+
 
     def __init__(self):
         """Create a Pushover object to interact with the pushover service"""
         global g
         g = get_global_config()
-        from src.zm_ml.Client.Models.config import MLNotificationSettings
+        from ..Models.config import MLNotificationSettings
         self.noti_cfg: MLNotificationSettings = g.config.notifications
         self.config = self.noti_cfg.pushover
         lp: str = "pushover::init::"
         logger.debug(f"{lp} creating Pushover object")
 
-    def pickle(self, action: str = 'r', data=None):
+    @property
+    def image(self):
+        return self.optionals.attachment
+
+    @image.setter
+    def image(self, img: np.ndarray):
+        lp = "pushover::image::set::"
+        import cv2
+        is_succ, img = cv2.imencode(".jpg", img)
+        img = img.tobytes()
+        if not is_succ:
+            logger.warning(
+                f"{lp} cv2 failed to encode frame to an image"
+            )
+            raise Exception(
+                "cv2 failed to encode frame to an image"
+            )
+        self.optionals.attachment = (
+                    "objdetect.jpg",
+                    img,
+                    "image/jpeg",
+                )
+
+    def pickle(self, action: str = 'r', data: Optional[float] = None):
         """Pickle read/write the timestamp of each monitor's last successful pushover notification"""
         import os
         lp: str = "pushover::pickle::"
@@ -162,47 +190,55 @@ class Pushover:
         var_path = g.config.system.variable_data_path
         file = var_path / f"pushover_m{g.mid}.pkl"
         if action == "r":
+            lp = f"{lp}read::"
             if file.exists():
-                if os.access(file, os.R_OK):
+                try:
+                    time_since_sent = pickle_loads(file.read_bytes())
+                except FileNotFoundError:
+                    logger.debug(
+                        f"{lp} FileNotFound - no time of last successful push found for monitor {g.mid}",
+                    )
+                    return
+                except EOFError:
+                    logger.debug(
+                        f"{lp} empty file found for monitor {g.mid}, going to remove '{file}'",
+                    )
                     try:
-                        time_since_sent = pickle_loads(file.read_bytes())
-                    except FileNotFoundError:
-                        logger.debug(
-                            f"{lp} FileNotFound - no time of last successful push found for monitor {g.mid}",
-                        )
-                        return
-                    except EOFError:
-                        logger.debug(
-                            f"{lp} empty file found for monitor {g.mid}, going to remove '{file}'",
-                        )
-                        try:
-                            file.unlink(missing_ok=True)
-                        except Exception as e:
-                            logger.error(f"{lp} could not delete: {e}")
+                        file.unlink(missing_ok=True)
                     except Exception as e:
-                        logger.error(f"{lp} error while loading pickled data - Exception: {e}")
-                    else:
-                        logger.debug(f"{lp} loaded data from '{file}'")
-                        return time_since_sent
+                        logger.error(f"{lp} could not delete: {e}")
+                except PermissionError as err:
+                    logger.error(
+                        f"{lp} PermissionError - could not read file: {file} -- {err}"
+                    )
+                except Exception as e:
+                    logger.error(f"{lp} error while loading pickled data - Exception: {e}")
                 else:
-                    logger.error(f"{lp} Incorrect permission to read file: '{file}'")
-
+                    logger.debug(f"{lp} loaded data from '{file}'")
+                    return time_since_sent
             else:
-                logger.debug(f"{lp} no file found for monitor {g.mid}")
+                logger.debug(f"{lp} no file found for monitor {g.mid}: '{file}'")
 
         elif action == "w":
-            try:
-                pickle_dump(data, file.open("wb"))
-                logger.debug(
-                    f"{lp} LAST successful request @ {data} to '{file}'"
-                )
-            except Exception as e:
-                logger.error(
-                    f"{lp} error writing to '{file}', time since last successful push sent not recorded: {e}"
-                )
+            lp = f"{lp}write::"
+            if data:
+                if isinstance(data, float):
+                    try:
+                        file.write_bytes(pickle.dumps(data))
+                        logger.debug(
+                            f"{lp} LAST successful push sent at {datetime.datetime.fromtimestamp(data)} ({data}) to '{file}'"
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"{lp} error writing to '{file}', time since last successful push sent not recorded: {e}"
+                        )
+                else:
+                    logger.error(f"{lp} data is not a float: {type(data)}")
+            else:
+                logger.warning(f"{lp} no data to write to '{file}'")
         else:
             logger.warning(
-                f"{lp} the action supplied is unknown only 'r' or 'w' are supported"
+                f"{lp} the action supplied: '{action}' is unknown only 'r|R' or 'w|W' are supported"
             )
 
     @property
@@ -247,19 +283,19 @@ class Pushover:
         return self._limits
 
     @limits.setter
-    def limits(self, options: dict):
+    def limits(self, options: Dict):
         for opt, val_ in options.items():
             if opt in self._limits.__dict__:
                 setattr(self._limits, opt, val_)
 
     def parse_sounds(self, labels: List[str]) -> NoReturn:
         lp: str = "pushover sounds:"
-        groups: dict = g.config.get("push_sounds_groups", {})
-        weights: dict = g.config.get("push_sounds_weights", PUSHOVER_SOUND_WEIGHTS)
-        configured_sounds: dict = g.config.get("push_sounds", {})
+        groups: Dict = g.config.label_groups
+        weights: Dict = {}  # self.config. g.config.get("push_sounds_weights", PUSHOVER_SOUND_WEIGHTS)
+        configured_sounds: Dict = self.config.sounds
         label_in_group: bool = False
         group_name: str
-        logger.dbg(f"DBG => PUSHOVER SOUND PARSING")
+        logger.debug(f"DBG => PUSHOVER SOUND PARSING")
         if 'default' in configured_sounds:
             self.request_data.sound = configured_sounds.pop("default")
         # priority is in descending order
@@ -271,17 +307,17 @@ class Pushover:
                     if group_value:
                         group_value = group_value.strip().split(",")
                     if label in group_value:
-                        logger.dbg(f"DBG => pushover, {label} is in group named {group_name}")
+                        logger.debug(f"DBG => pushover, {label} is in group named {group_name}")
                         label_in_group = True
             # if the label is in sounds
             if label in configured_sounds:
-                logger.dbg(f"DBG => {label} is in sounds")
+                logger.debug(f"DBG => {label} is in sounds")
                 # if label_in_group and group_name in configured_sounds:
-                #     logger.dbg(f"DBG => USING {group_name} SOUND")
+                #     logger.debug(f"DBG => USING {group_name} SOUND")
                 #     self.request_data.sound = configured_sounds[group_name]
                 # Check if there is a current sound already set
-                if self._request_data.sound is not None:
-                    logger.dbg(f"DBG => current sound is {self._request_data.sound}, CHECKING WEIGHTS --> NOT IMPLEMENTED")
+                if self.request_data.sound is not None:
+                    logger.debug(f"DBG => current sound is {self._request_data.sound}, CHECKING WEIGHTS --> NOT IMPLEMENTED")
                     # Check to see about weights
                 else:
                     logger.debug(
@@ -303,18 +339,26 @@ class Pushover:
 
     def send(self):
         """Send Pushover notification"""
-        lp: str = "pushover:send:"
+        lp: str = "pushover::send::"
+        logger.debug(f"{lp} {self.request_data = }")
         if self.request_data.priority == Priorities.EMERGENCY:
-            pass
+            logger.debug(f"{lp} emergency priority, setting retry and expire")
+
         sfx, method = self.urls.messages
         url = f"{self.urls.base[0]}{sfx}"
+        logger.debug(f"{lp} {url = } -- {method = }")
+        # Check cooldown
+
+
         try:
-            logger.dbg(F"GO FUCK YOURSELF GOOF PUSHOVER DATA ACTUALLY BEING SENT IS /n/n{self._request_data.__dict__,}")
+            data = self.request_data.dict()
             r = self.request(
                 method,
                 url,
-                data=self._request_data.__dict__,
-                files={"attachment": self.optionals.attachment},
+                data=data,
+                files={
+                    "attachment": self.optionals.attachment
+                }
             )
             r.raise_for_status()
         except urllib3.exceptions.ConnectionError as conn_exc:
@@ -334,27 +378,18 @@ class Pushover:
                 logger.error(f"{lp} your pushover credentials are invalid! (401)")
             elif status_code == 500:
                 logger.error(f"{lp} the pushover API is having issues! (500)")
+            #      requests.exceptions.HTTPError: 413 Client Error: Request Entity Too Large for url: https://api.pushover.net/1/messages.json
+            elif status_code == 413:
+                logger.error(f"{lp} the message is too long! [Possible improper image encoding?] (413)")
             else:
                 headers = http_exc.response.headers
                 json_ = http_exc.response.json()
                 text_ = http_exc.response.text
                 logger.debug(f"DEBUG <>>> FAILED!!! {status_code = } || {headers = } || {json_ = } || {text_ = }")
-                self.limits.limit = headers.get("X-Limit-App-Limit")
-                self.limits.remaining = headers.get("X-Limit-App-Remaining")
-                self.limits.reset = headers.get("X-Limit-App-Reset")
-                r_status = json_.get("status")
-                r_request = json_.get("request")
-                r_user = json_.get("user")
-                r_errors = json_.get("errors")
-
-                logger.debug(
-                    f"{lp} message Limit: {self.limits.limit} - remaining: {self.limits.remaining} "
-                    f"- reset counter Epoch: {self.limits.reset} "
-                    f"({datetime.datetime.fromtimestamp(self.limits.reset)})"
-                )
+                
         except Exception as exc:
             logger.error(f"{lp} there was a problem sending the message BROAD EXCEPTION -> {exc}")
-            return
+            raise exc
         else:
             status_code: int = r.status_code
             headers = r.headers
@@ -372,12 +407,12 @@ class Pushover:
                 f"- reset counter Epoch: {self.limits.reset} "
                 f"({datetime.datetime.fromtimestamp(float(self.limits.reset))})"
             )
-            if str2bool(self.optionals.cache_write):
+            if self.optionals.cache_write:
                 if r_status == 1:
-                    self.pickle("write", datetime.datetime.now())
+                    self.pickle("w", time.time())
                 else:
                     logger.error(
-                        f"{lp} pushover replied with FAILED"
+                        f"{lp} pushover replied with FAILED: {json_}"
                     )
 
 
