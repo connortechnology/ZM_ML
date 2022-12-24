@@ -7,7 +7,7 @@ from typing import Dict, List, Tuple, Pattern, Union, Any, Optional
 
 from pydantic import BaseModel, Field, AnyUrl, validator, IPvAnyAddress, SecretStr
 
-from .validators import percentage_and_pixels_validator, no_scheme_url_validator, str_to_path, validate_log_level
+from .validators import validate_percentage_or_pixels, validate_no_scheme_url, str_to_path, validate_log_level
 
 logger = logging.getLogger("ZM_ML-Client")
 
@@ -32,51 +32,44 @@ class ZMAPISettings(BaseModel):
 
     # validators
     _validate_host_portal = validator("api", "portal", allow_reuse=True, pre=True)(
-        no_scheme_url_validator
+        validate_no_scheme_url
     )
 
 
-class LoggingSettings(BaseModel):
-    class ConsoleLogging(DefaultEnabled):
-        level: Optional[int] = Field('INFO')
+class LoggingLevelBase(BaseModel):
+    level: Optional[int] = None
 
-        _validate_level = validator("level", allow_reuse=True, pre=True)(
-            validate_log_level
-        )
+    _validate_log_level = validator('level', allow_reuse=True, pre=True, always=True)(validate_log_level)
 
-    class SyslogLogging(DefaultNotEnabled):
-        level: Optional[int] = Field('INFO')
+
+class LoggingSettings(LoggingLevelBase):
+    class ConsoleLogging(DefaultEnabled, LoggingLevelBase):
+        pass
+
+    class SyslogLogging(DefaultNotEnabled, LoggingLevelBase):
         address: Optional[str] = Field("")
 
-        _validate_level = validator("level", allow_reuse=True, pre=True)(
-            validate_log_level
-        )
-    class FileLogging(DefaultEnabled):
-        level: Optional[str] = Field('INFO')
+    class FileLogging(DefaultEnabled, LoggingLevelBase):
         path: Path = Field('/var/log/zm')
-        filename: str = Field("zm_ml.log")
+        filename_prefix: str = Field("zmML")
         user: str = Field(default="www-data")
         group: str = Field(default="www-data")
 
         _validate_path = validator("path", allow_reuse=True, pre=True)(
             str_to_path
         )
-        _validate_level = validator("level", allow_reuse=True, pre=True)(
-            validate_log_level
-        )
+    class SanitizeLogging(DefaultNotEnabled):
+        replacement_str: str = Field(default="<sanitized>")
 
-    level: Optional[str] = Field('INFO')
+    class IntegrateZMLogging(DefaultNotEnabled):
+        debug_level: int = Field(default=4)
+
+    level = logging.INFO
     console: ConsoleLogging = Field(default_factory=ConsoleLogging)
-    SYSLOG: SyslogLogging = Field(default_factory=SyslogLogging)
-    integrate_zm: bool = Field(False)
+    syslog: SyslogLogging = Field(default_factory=SyslogLogging)
+    integrate_zm: IntegrateZMLogging = Field(default_factory=IntegrateZMLogging)
     file: FileLogging = Field(default_factory=FileLogging)
-    sanitize: bool = Field(False)
-    sanitize_string: str = Field("<sanitized>")
-
-    _validate_level = validator("level", allow_reuse=True, pre=True)(
-            validate_log_level
-        )
-
+    sanitize: SanitizeLogging = Field(default_factory=SanitizeLogging)
 
 
 class ServerRoute(BaseModel):
@@ -91,7 +84,7 @@ class ServerRoute(BaseModel):
 
     # validators
     _validate_host_portal = validator("host", allow_reuse=True, pre=True)(
-        no_scheme_url_validator
+        validate_no_scheme_url
     )
 
 
@@ -161,7 +154,7 @@ class MLNotificationSettings(BaseModel):
 
         # validators
         _validate_host_portal = validator("host", "portal", allow_reuse=True, pre=True)(
-            no_scheme_url_validator
+            validate_no_scheme_url
         )
 
     class PushoverNotificationSettings(BaseModel):
@@ -197,7 +190,7 @@ class MLNotificationSettings(BaseModel):
 
         # validators
         _validate_host_portal = validator("base_url", allow_reuse=True, pre=True)(
-            no_scheme_url_validator
+            validate_no_scheme_url
         )
 
     class ShellScriptNotificationSettings(DefaultNotEnabled):
@@ -210,7 +203,7 @@ class MLNotificationSettings(BaseModel):
 
         # validators
         _validate_host_portal = validator("host", allow_reuse=True, pre=True)(
-            no_scheme_url_validator
+            validate_no_scheme_url
         )
 
     class MQTTNotificationSettings(BaseModel):
@@ -240,7 +233,7 @@ class MLNotificationSettings(BaseModel):
 
         # validators
         _validate_host_broker = validator("broker", allow_reuse=True, pre=True)(
-            no_scheme_url_validator
+            validate_no_scheme_url
         )
 
     mqtt: MQTTNotificationSettings = Field(default_factory=MQTTNotificationSettings)
@@ -317,7 +310,7 @@ class BaseObjectFilters(BaseModel):
     # validators
     _normalize_areas = validator(
         "total_max_area", "total_min_area", "max_area", "min_area", allow_reuse=True
-    )(percentage_and_pixels_validator)
+    )(validate_percentage_or_pixels)
 
 
 class OverRideObjectFilters(BaseObjectFilters):
@@ -363,7 +356,7 @@ class StaticObjects(DefaultEnabled):
     ignore_labels: List[str] = Field(default_factory=list)
 
     _validate_difference = validator("difference", allow_reuse=True)(
-        percentage_and_pixels_validator
+        validate_percentage_or_pixels
     )
 
 
@@ -375,7 +368,7 @@ class OverRideStaticObjects(BaseModel):
 
     _validate_difference = validator(
         "difference", allow_reuse=True, pre=True, always=True
-    )(percentage_and_pixels_validator)
+    )(validate_percentage_or_pixels)
 
 
 class MatchFilters(BaseModel):

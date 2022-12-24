@@ -73,20 +73,20 @@ class APIImagePipeLine:
         # pre- + post-buffers calculated as seconds because we are pulling 1 FPS
         self.total_max_frames = max(self.options.max_frames, self.total_min_frames)
 
-    def get_image(self) -> Tuple[Optional[Union[bytes, bool]], Optional[str]]:
+    async def get_image(self) -> Tuple[Optional[Union[bytes, bool]], Optional[str]]:
         if self.frames_processed >= self.total_max_frames:
             logger.error(
                 f"max_frames ({self.total_max_frames}) has been reached, stopping!"
             )
             return False, None
 
-        def _grab_event_data(msg: Optional[str] = None):
+        async def _grab_event_data(msg: Optional[str] = None):
             """Calls global API make_request method to get event data"""
             if msg:
                 logger.debug(f"{lp}read>event_data: {msg}")
             if not self.event_ended:
                 try:
-                    g.Event, g.Monitor, g.Frame, _ = g.api.get_all_event_data(g.eid)
+                    g.Event, g.Monitor, g.Frame, _ = await g.api.get_all_event_data(g.eid)
                 except Exception as e:
                     logger.error(f"{lp} error grabbing event data from API -> {e}")
                     raise e
@@ -116,8 +116,8 @@ class APIImagePipeLine:
                     #         self.total_max_frames = new_max
             else:
                 logger.debug(f"{lp} event has ended, no need to grab event data")
-
-        response: Optional[requests.Response] = None
+        import aiohttp
+        response: Optional[aiohttp.ClientResponse] = None
         lp = f"{LP}read:"
         if self.frames_processed > 0:
             logger.debug(
@@ -139,7 +139,7 @@ class APIImagePipeLine:
                     self.frames_processed % self.options.snapshot_frame_skip == 0
                 )  # Only run every <x> frames
             ):
-                _grab_event_data(msg=f"grabbing data for snapshot comparisons...")
+                await _grab_event_data(msg=f"grabbing data for snapshot comparisons...")
                 if curr_snapshot := int(g.Event.get("MaxScoreFrameId", 0)):
                     if self.last_snapshot_id and curr_snapshot > self.last_snapshot_id:
                         logger.debug(
@@ -176,24 +176,19 @@ class APIImagePipeLine:
                 logger.debug(
                     f"{lp} attempt #{image_grab_attempt}/{self.max_attempts} to grab image ID: {self.current_frame}"
                 )
-                response = g.api.make_request(fid_url)
-                if (
-                    response
-                    and isinstance(response, requests.Response)
-                    and response.status_code == 200
-                ):
-                    logger.debug(f"ZM API returned an Image!")
-                    return self._process_frame(image=response.content)
-                # response code not 200 or no response
+                image = await g.api.make_async_request(fid_url)
+                if isinstance(image, bytes):
+                    logger.debug(f"ZM API returned an Image! {image[:50]}")
+                    return self._process_frame(image=image)
                 else:
                     resp_msg = ""
                     if response:
-                        resp_msg = f" response code={response.status_code} - response={response}"
+                        resp_msg = f" response code={response.status} - response={response}"
                     else:
                         resp_msg = f" no response received!"
                     logger.warning(f"{lp} image was not retrieved!{resp_msg}")
 
-                    _grab_event_data(msg="checking if event has ended...")
+                    await _grab_event_data(msg="checking if event has ended...")
 
                     if self.event_ended:  # Assuming event has ended
                         logger.debug(f"{lp} event has ended, checking OOB status...")
@@ -254,7 +249,7 @@ class APIImagePipeLine:
             )
         if image:
             # (bytes, image_file_name)
-            return image, f"mid_{g.mid}-eid_{g.eid}-fid_{self.current_frame}.jpg"
+            return image, f"mid_{g.mid}-eid_{g.eid}-fid_{self.current_frame - self.fps}.jpg"
         return None, None
 
     @property

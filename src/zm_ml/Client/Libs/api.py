@@ -1,24 +1,3 @@
-"""
-ZM API
-
-Important:
-
-  Make sure you have the following settings in ZM:
-
-  - ``AUTH_RELAY`` is set to hashed
-  - A valid ``AUTH_HASH_SECRET`` is provided (not empty)
-  - ``AUTH_HASH_IPS`` is disabled
-  - ``OPT_USE_APIS`` is enabled
-  - If you are using any version lower than ZM 1.34, ``OPT_USE_GOOG_RECAPTCHA`` is disabled
-  - If you are NOT using authentication at all in ZM, that is ``OPT_USE_AUTH`` is disabled, then make sure you
-  also disable authentication in zmNinja, otherwise it will keep waiting for auth keys.
-  - I don't quite know why, but on some devices, connection issues are caused because ZoneMinder's CSRF code
-   causes issues. See `this <https://forums.zoneminder.com/viewtopic.php?f=33&p=115422#p115422>`__ thread, for
-   example. In this case, try turning off CSRF checks by going to  ``ZM->Options->System`` and disable
-   "Enable CSRF magic".
-
-"""
-
 import datetime
 import pickle
 import re
@@ -27,10 +6,12 @@ import time
 from typing import Dict, List, Optional, Union, Tuple
 
 from requests import Response, Session
-from requests.exceptions import HTTPError
+from requests.exceptions import HTTPError, JSONDecodeError
 from urllib3 import disable_warnings
 from urllib3.exceptions import InsecureRequestWarning
 import jwt
+import aiohttp
+from pydantic import SecretStr
 
 from ..Models.config import ZMAPISettings, MonitorsSettings
 
@@ -38,21 +19,7 @@ GRACE: int = 60 * 5  # 5 mins
 lp: str = "api::"
 logger = logging.getLogger("ZM_ML-Client")
 g = None
-
-
-def version_tuple(version_str: str) -> tuple:
-    # https://stackoverflow.com/a/11887825/1361529
-    return tuple(map(int, (version_str.split("."))))
-
-
-def find_whole_word(w: str):
-    """Still figuring this out BOI, hold over from @pliablepixels code
-    The call parentheses are omitted due to the way this function is used, meaning, the user must use find_whole_word()
-
-    :param str w: The word to search using the ``re`` module
-    :return: IDK man
-    """
-    return re.compile(r"\b({0})\b".format(w), flags=re.IGNORECASE).search
+LP: str = "api::"
 
 
 class ZMApi:
@@ -187,8 +154,8 @@ class ZMApi:
         # logger.debug(f"{lp} ALL ZONES with imported zones => {imported_zones}")
         return imported_zones
 
-    def __init__(self, options: ZMAPISettings):
-        lp: str = "api::init::"
+    def __init__(self, config: ZMAPISettings):
+        lp: str = f"{LP}init::"
         global g
         from ..main import get_global_config
         from pydantic import SecretStr
@@ -197,24 +164,23 @@ class ZMApi:
         self.token_file = g.config.system.variable_data_path / "api_access_token"
         self.access_token: Optional[str] = ""
         self.refresh_token: Optional[str] = ""
-        # self.refresh_token_datetime: Optional[Union[datetime, str]] = None
-        # self.access_token_datetime: Optional[Union[datetime, str]] = None
-        self.options: ZMAPISettings = options
-        self.api_url: Optional[str] = options.api
-        self.portal_url: Optional[str] = options.portal
+        self.config: ZMAPISettings = config
+        self.api_url: Optional[str] = config.api
+        self.portal_url: Optional[str] = config.portal
 
         self.api_version: Optional[str] = ""
         self.zm_version: Optional[str] = ""
         self.zm_tz: Optional[str] = None
 
         self.session: Session = Session()
-        self.username: Optional[SecretStr] = options.user
-        self.password: Optional[SecretStr] = options.password
+        self.async_session: Optional[aiohttp.ClientSession] = None
+        self.username: Optional[SecretStr] = config.user
+        self.password: Optional[SecretStr] = config.password
 
         # Sanitize logs of urls, passwords, tokens, etc. Makes for easier copy+paste
-        self.sanitize = g.config.logging.sanitize
-        self.sanitize_str: str = "<sanitized>"
-        if self.options.ssl_verify is False:
+        self.sanitize = g.config.logging.sanitize.enabled
+        self.sanitize_str: str = g.config.logging.sanitize.replacement_str
+        if self.config.ssl_verify is False:
             self.session.verify = False
             logger.debug(
                 f"{lp} SSL certificate verification disabled (encryption enabled, vulnerable to MITM attacks)",
@@ -259,7 +225,9 @@ class ZMApi:
         claims = jwt.decode(self.access_token, verify=False)
         iss = claims.get("iss")
         if iss and iss != "ZoneMinder":
-            logger.error(f"{lp} invalid 'iss' [{iss}] for access token, calling login()")
+            logger.error(
+                f"{lp} invalid 'iss' [{iss}] for access token, calling login()"
+            )
             _login = True
         elif not iss:
             logger.error(f"{lp} no 'Issuer' ['iss'] for access token, calling login()")
@@ -272,18 +240,24 @@ class ZMApi:
         h, m = divmod(m, 60)
         if not grace_period:
             grace_period = GRACE
-        logger.debug(f"{lp} GRACE: {grace_period} --  ISSUED AT: {datetime.datetime.fromtimestamp(iat)}"
-                     f" EXPIRES AT: {datetime.datetime.fromtimestamp(exp)} -- CURRENTLY: "
-                     f"{datetime.datetime.fromtimestamp(now)}   -------- remaining seconds = {remaining}")
+        logger.debug(
+            f"{lp} GRACE: {grace_period} --  ISSUED AT: {datetime.datetime.fromtimestamp(iat)}"
+            f" EXPIRES AT: {datetime.datetime.fromtimestamp(exp)} -- CURRENTLY: "
+            f"{datetime.datetime.fromtimestamp(now)}   -------- remaining seconds = {remaining}"
+        )
         if not _login and not _relogin:
-            if exp > now > (exp-grace_period):
-                logger.debug(f"{lp} access token is within {grace_period}s of expiring [{remaining=}], refreshing")
+            if exp > now > (exp - grace_period):
+                logger.debug(
+                    f"{lp} access token is within {grace_period}s of expiring [{remaining=}], refreshing"
+                )
                 _relogin = True
             elif now > exp:
                 logger.debug(f"{lp} access token is expired [{remaining=}], refreshing")
                 _relogin = True
             elif now < iat:
-                logger.debug(f"{lp} access token issued in the future?! requesting new tokens")
+                logger.debug(
+                    f"{lp} access token issued in the future?! requesting new tokens"
+                )
                 _login = True
             else:
                 logger.debug(f"{lp} access token is not expired, checking validity")
@@ -312,7 +286,7 @@ class ZMApi:
 
     def _re_login(self, grace_period: Optional[float] = None, reauth: bool = True):
         lp = f"api::_re_login::"
-        _type = 'refresh'
+        _type = "refresh"
         tkn = self.refresh_token
         _login = False
         if not tkn:
@@ -324,7 +298,9 @@ class ZMApi:
                 claims = jwt.decode(tkn, verify=False)
                 iss = claims.get("iss")
                 if iss and iss != "ZoneMinder":
-                    logger.error(f"{lp} invalid 'iss' [{iss}] for {_type} token, calling login()")
+                    logger.error(
+                        f"{lp} invalid 'iss' [{iss}] for {_type} token, calling login()"
+                    )
                     _login = True
                 elif not iss:
                     logger.error(f"{lp} no 'iss' for {_type} token, calling login()")
@@ -336,14 +312,20 @@ class ZMApi:
                 m, s = divmod(remaining, 60)
                 h, m = divmod(m, 60)
                 if exp > now > (exp - grace_period):
-                    logger.debug(f"{lp} {_type} token is within {grace_period} second(s) "
-                                 f"of expiring, requesting new tokens")
+                    logger.debug(
+                        f"{lp} {_type} token is within {grace_period} second(s) "
+                        f"of expiring, requesting new tokens"
+                    )
                     _login = True
                 elif now > exp:
-                    logger.debug(f"{lp} {_type} token is expired, requesting new tokens")
+                    logger.debug(
+                        f"{lp} {_type} token is expired, requesting new tokens"
+                    )
                     _login = True
                 elif now < iat:
-                    logger.debug(f"{lp} {_type} token is in the future, requesting new tokens")
+                    logger.debug(
+                        f"{lp} {_type} token is in the future, requesting new tokens"
+                    )
                     _login = True
                 else:
                     logger.debug(
@@ -374,7 +356,10 @@ class ZMApi:
                         if resp_json:
                             self.api_version = resp_json.get("apiversion")
                             self.zm_version = resp_json.get("version")
-                            if "access_token" in resp_json and resp_json["access_token"]:
+                            if (
+                                "access_token" in resp_json
+                                and resp_json["access_token"]
+                            ):
                                 self.access_token = resp_json["access_token"]
                                 tkn_exp = resp_json["access_token_expires"]
                                 logger.debug(
@@ -384,46 +369,59 @@ class ZMApi:
                                 self.cached_tokens = None
                         else:
                             if reauth:
-                                logger.error(f"{lp} no response from API refresh, trying again")
+                                logger.error(
+                                    f"{lp} no response from API refresh, trying again"
+                                )
                                 self._re_login(reauth=False)
                             else:
-                                logger.error(f"{lp} no response from API refresh, trying again")
-
+                                logger.error(
+                                    f"{lp} no response from API refresh, trying again"
+                                )
 
             if _login:
                 logger.debug(f"{lp} calling login()")
                 self._login()
 
-    def _login(self):
+    def _login(
+        self, username: Optional[SecretStr] = None, password: Optional[SecretStr] = None
+    ):
         lp: str = "api::login::"
         login_data: Dict = {}
         url = f"{self.api_url}/host/login.json"
-        if self.username and self.password:
+        if not username:
+            username = self.username
+        if not password:
+            password = self.password
+        if username and password:
             logger.debug(
                 f"{lp} Credentials have been supplied",
             )
             login_data = {
-                "user": self.username.get_secret_value(),
-                "pass": self.password.get_secret_value(),
+                "user": username.get_secret_value(),
+                "pass": password.get_secret_value(),
             }
         else:
-            logger.debug(f"{lp} not using auth (no user/password was supplied)")
+            logger.debug(
+                f"{lp} not using auth (no username and/or password was supplied)"
+            )
             url = f"{self.api_url}/host/getVersion.json"
         try:
             response = self.session.post(url, data=login_data)
             response.raise_for_status()
 
         except HTTPError as err:
-            ''' 401: unauthorized - user authentication can allow access to the resource.
-             403: forbidden - re-authenticating makes no difference. The access is tied to the application logic,
-             such as insufficient rights to a resource.
-             404: not found - RESOURCE TEMP OR PERM GONE'''
+            """401: unauthorized - user authentication can allow access to the resource.
+            403: forbidden - re-authenticating makes no difference. The access is tied to the application logic,
+            such as insufficient rights to a resource.
+            404: not found - RESOURCE TEMP OR PERM GONE"""
             code_ = err.response.status_code
             err_msg = err.response.json()
-            logger.error(f"{lp} got API login error -> Code: {code_}  || JSON: {err_msg}")
+            logger.error(
+                f"{lp} got API login error -> Code: {code_}  || JSON: {err_msg}"
+            )
             if code_ == 401:
                 if err_msg:
-                    '''
+                    """
                     BAD_USERNAME: {
                         "success":false,
                         "data":{
@@ -449,14 +447,16 @@ class ZMApi:
                             }
                         }
                     }
-                    '''
+                    """
                     if "name" in err_msg["data"]:
                         if "Could not retrieve user" in err_msg["data"]["name"]:
                             logger.error(f"{lp} invalid username")
                         elif "Login denied for user" in err_msg["data"]["name"]:
                             logger.error(f"{lp} invalid password")
             elif code_ == 521:
-                logger.error(f"{lp} CloudFlare reports that the origin server is down [{code_}]")
+                logger.error(
+                    f"{lp} CloudFlare reports that the origin server is down [{code_}]"
+                )
 
             raise err
 
@@ -485,7 +485,9 @@ class ZMApi:
                 if self.access_token and self.refresh_token:
                     self.cached_tokens = None
             else:
-                logger.debug(f"{lp} it is assumed 'OPT_USE_AUTH' is disabled as no access token was returned")
+                logger.debug(
+                    f"{lp} it is assumed 'OPT_USE_AUTH' is disabled as no access token was returned"
+                )
 
     @property
     def cached_tokens(self):
@@ -505,11 +507,13 @@ class ZMApi:
     @cached_tokens.setter
     def cached_tokens(self, tokens: Optional[Dict[str, str]] = None):
         if not tokens:
-            logger.debug(f"cached_tokens setter called with {tokens=}, using self.X_token")
+            logger.debug(
+                f"cached_tokens setter called with {tokens=}, using self.X_token"
+            )
             tokens = {
-                        "access_token": self.access_token,
-                        "refresh_token": self.refresh_token,
-                    }
+                "access_token": self.access_token,
+                "refresh_token": self.refresh_token,
+            }
         try:
             self.token_file.touch(exist_ok=True)
             with self.token_file.open("wb") as f:
@@ -530,7 +534,7 @@ class ZMApi:
             except Exception as err:
                 logger.error(f"{lp} error deleting tokens from disk: {err}")
 
-    def get_all_event_data(
+    async def get_all_event_data(
         self,
         event_id: int,
     ):
@@ -548,7 +552,7 @@ class ZMApi:
         frame: Optional[List] = None
         event_tot_frames: Union[int, float, None] = None
         events_url = f"{self.api_url}/events/{event_id}.json"
-        api_event_response = self.make_request(url=events_url)
+        api_event_response = await self.make_async_request(url=events_url)
         event = api_event_response.get("event", {}).get("Event")
         monitor = api_event_response.get("event", {}).get("Monitor")
         frame = api_event_response.get("event", {}).get("Frame")
@@ -564,7 +568,7 @@ class ZMApi:
         """
         return self.portal_url
 
-    def get_monitor_data(
+    async def get_monitor_data(
         self,
         mon_id: int,
     ):
@@ -574,7 +578,7 @@ class ZMApi:
         monitor: Optional[Dict] = None
         monitor_url = f"{self.api_url}/monitors/{mon_id}.json"
         try:
-            api_monitor_response = self.make_request(url=monitor_url)
+            api_monitor_response = await self.make_async_request(url=monitor_url)
         except Exception as e:
             logger.error(f"{lp} Error during Event data retrieval: {str(e)}")
             logger.debug(f"{lp} EXCEPTION>>> {e}")
@@ -587,7 +591,7 @@ class ZMApi:
     def get_image(self, fid: Union[int, str]):
         pass
 
-    def make_request(
+    async def make_async_request(
         self,
         url: Optional[str] = None,
         query: Optional[Dict] = None,
@@ -595,8 +599,79 @@ class ZMApi:
         type_action: str = "get",
         re_auth: bool = True,
         quiet: bool = False,
-    ) -> Union[Dict, Response]:
-        lp: str = "api::request::"
+    ):
+        lp: str = f"api::async {type_action}::"
+        if not self.async_session:
+            self.async_session = aiohttp.ClientSession()
+        ssl = self.config.ssl_verify
+        if ssl is not False:
+            ssl = None
+
+        async def parse_response(resp: aiohttp.ClientResponse):
+            """Parses the response from the API call."""
+            resp_status = resp.status
+
+            try:
+                resp.raise_for_status()
+            except aiohttp.ClientResponseError as err:
+                logger.error(f"{lp} API call failed: {err}")
+                if resp_status == 401:
+                    logger.error(
+                        f"{lp} 401 Unauthorized, attempting to re-authenticate"
+                    )
+                    self._login()
+                    logger.debug(
+                        f"{lp} re-authentication complete, retrying async request"
+                    )
+                    return await self.make_async_request(
+                        url=url,
+                        query=query,
+                        payload=payload,
+                        type_action=type_action,
+                        re_auth=False,
+                    )
+                elif resp_status == 404:
+                    logger.warning(f"{lp} Got 404 (Not Found) -> {err}")
+                    # ZM returns 404 when an image cannot be decoded or the requested event does not exist
+                else:
+                    logger.debug(
+                        f"{lp} NOT 200|401|404 SOOOOOOOOOOOOOOOO HTTP [{resp_status}] error: {err}"
+                    )
+
+            else:
+                content_type = resp.headers.get("content-type")
+                content_length = resp.headers.get("content-length")
+                logger.debug(
+                    f"{lp} RESPONSE RECEIVED>>> {content_type=}, "
+                    f"{content_length=} \n{resp.headers=}\n"
+                )
+                if content_type.startswith("application/json"):
+                    return await resp.json()
+                elif content_type.startswith("image/"):
+                    # return raw image data
+                    return await resp.read()
+                else:
+                    resp_text = await resp.text()
+                    logger.debug(f"{lp}  >>> {resp_text=}")
+                    # A non 0 byte response will usually mean it's an image eid request that needs re-login
+                    if content_length:
+                        if content_length != "0":
+                            if resp_text.lower().startswith("no frame found"):
+                                #  r.text = 'No Frame found for event(69129) and frame id(280)']
+                                logger.warning(
+                                    f"{lp} Frame was not found by API! >>> {resp.text}"
+                                )
+                            else:
+                                logger.debug(
+                                    f"{lp} raising RE_LOGIN ValueError -> Non 0 byte response: {resp.text}"
+                                )
+                                raise ValueError("RE_LOGIN")
+                        elif content_length == "0":
+                            # ZM returns 0 byte body if index not found (cant find frame ID/out of bounds)
+                            logger.debug(
+                                f"{lp} WAS THIS AN IMAGE REQUEST? cant find frame ID?"
+                            )
+
         if payload is None:
             payload = {}
         if query is None:
@@ -619,10 +694,65 @@ class ZMApi:
         show_query: Union[str, Dict] = f"token: '{show_tkn}'"
         if not self.access_token:
             show_query = query
-        if payload and len(payload):
+        if payload:
             show_payload = f" payload={payload}"
         logger.debug(
-            f"{lp} '{type_action}'->{show_url}{show_payload} query={show_query}",
+            f"{lp} {show_url}{show_payload} query={show_query}",
+        ) if not quiet else None
+        r: Optional[aiohttp.ClientResponse] = None
+        if type_action == "get":
+            async with self.async_session.get(url, params=query, ssl=ssl) as r:
+                return await parse_response(r)
+        elif type_action == "post":
+            async with self.async_session.post(url, data=payload, params=query, ssl=ssl) as r:
+                return await parse_response(r)
+        elif type_action == "put":
+            async with self.async_session.put(url, data=payload, params=query, ssl=ssl) as r:
+                return await parse_response(r)
+        elif type_action == "delete":
+            async with self.async_session.delete(
+                url, data=payload, params=query, ssl=ssl
+            ) as r:
+                return await parse_response(r)
+        else:
+            raise TypeError(f"Unsupported request type: {type_action}")
+
+    def make_request(
+        self,
+        url: Optional[str] = None,
+        query: Optional[Dict] = None,
+        payload: Optional[Dict] = None,
+        type_action: str = "get",
+        re_auth: bool = True,
+        quiet: bool = False,
+    ) -> Union[Dict, Response]:
+        lp: str = f"api::{type_action}::"
+        if payload is None:
+            payload = {}
+        if query is None:
+            query = {}
+
+        type_action = type_action.casefold()
+        if self.access_token:
+            query["token"] = self.access_token
+        show_url: str = (
+            url.replace(self.portal_base_url, self.sanitize_str)
+            if self.sanitize
+            else url
+        )
+        show_tkn: str = (
+            f"{self.access_token[:20]}...{self.sanitize_str}"
+            if self.sanitize
+            else self.access_token
+        )
+        show_payload: str = ""
+        show_query: Union[str, Dict] = f"token: '{show_tkn}'"
+        if not self.access_token:
+            show_query = query
+        if payload:
+            show_payload = f" payload={payload}"
+        logger.debug(
+            f"{lp} {show_url}{show_payload} query={show_query}",
         ) if not quiet else None
 
         try:
@@ -640,16 +770,24 @@ class ZMApi:
                 raise ValueError(f"Unsupported request type: {type_action}")
             r.raise_for_status()
         except HTTPError as http_err:
-            if code := http_err.response.status_code == 401:
+            code = http_err.response.status_code
+            if code == 401:
                 logger.debug(
                     f"{lp} Got 401 (Unauthorized) -> {http_err.response.json()}"
                 )
                 raise ValueError("RE_LOGIN")
             elif code == 404:
                 logger.warning(f"{lp} Got 404 (Not Found) -> {http_err}")
+                logger.debug(f"{http_err.response}")
                 # ZM returns 404 when an image cannot be decoded or the requested event does not exist
-                err_json: Optional[dict] = http_err.response.json()
-                if err_json:
+                try:
+                    # If this is an event rewuest there will be json data
+                    # If it is an image request there will be no jsom data
+                    err_json: Optional[dict] = http_err.response.json()
+                except JSONDecodeError as e:
+                    logger.debug(f"{lp} Error parsing response for JSON: {e}")
+                    logger.warning(f"{lp} Image not found: {url}")
+                else:
                     logger.error(f"{lp} 404 to JSON ERROR response >>> {err_json}")
                     if err_json.get("success") is False:
                         # get the reason instead of guessing
@@ -657,11 +795,11 @@ class ZMApi:
                         err_message = err_json.get("data").get("message")
                         err_url = err_json.get("data").get("url")
                         if err_name == "Invalid event":
-                            raise ValueError("INVALID_EVENT")
-                        else:
-                            raise ValueError("IMAGE_MISSING")
+                            logger.warning(f"{lp} Event not found: {url}")
             else:
-                logger.debug(f"{lp} NOT 200|401|404 SOOOOOOOOOOOOOOOO HTTP [{code}] error: {http_err}")
+                logger.debug(
+                    f"{lp} NOT 200|401|404 SOOOOOOOOOOOOOOOO HTTP [{code}] error: {http_err}"
+                )
         # If RE_LOGIN is raised, it will be caught by the caller
         except ValueError as val_err:
             err_msg = str(val_err)
@@ -713,3 +851,10 @@ class ZMApi:
                             f"{lp} raising BAD_IMAGE ValueError -> Content-Length = {content_length}"
                         )
                         raise ValueError("BAD_IMAGE")
+
+    async def clean_up(self):
+        """Exit the API session."""
+        lp = f"{LP}close::"
+        self.session.close()
+        await self.async_session.close()
+        logger.debug(f"{lp} sessions closed")

@@ -13,13 +13,13 @@ from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger("ZM_ML-Client")
 LOGGING_EXTRA = {}
-lp = "zmdb::"
+LP = "zmdb::"
 g = None
 
 
 def _rel_path(eid: int, mid: int, scheme: str, dt: Optional[datetime] = None) -> str:
     ret_val: str = ""
-    lp: str = "zmdb::relative path::"
+    lp: str = f"{LP}relative path::"
     if scheme == "Deep":
         if dt:
             ret_val = f"{mid}/{dt.strftime('%y/%m/%d/%H/%M/%S')}"
@@ -52,7 +52,7 @@ class ZMDB:
     def _db_create(self):
         """A private function to interface with the ZoneMinder DataBase"""
         # From @pliablepixels SQLAlchemy work - all credit goes to them.
-        lp: str = "zmdb::"
+        lp: str = f"{LP}init::"
         from ...Shared.configs import ClientEnvVars
         db_config: ClientEnvVars = g.Environment
         # TODO: grab data from ZM DB about logging stuff?
@@ -74,6 +74,8 @@ class ZMDB:
             except Exception as exc:
                 logger.error(f"{lp} error opening ZoneMinder .conf files! -> {files}")
             else:
+                logger.debug(f"{lp} ZoneMinder .conf files -> {files}")
+                logger.debug(f"{lp} ZoneMinder .conf files DATA as ConfigParser -> {config_file}")
                 conf_data = config_file["zm_root"]
                 if not db_config.db_user:
                     db_config.db_user = conf_data["ZM_DB_USER"]
@@ -125,7 +127,6 @@ class ZMDB:
         start_datetime: Optional[datetime] = None
         storage_path: Optional[str] = None
         event_path: Optional[Union[Path, str]] = None
-
         e_select: select = select([self.meta.tables["Events"].c.MonitorId]).where(
             self.meta.tables["Events"].c.Id == eid
         )
@@ -136,14 +137,14 @@ class ZMDB:
         mid_result.close()
         if mid:
             mid = int(mid)
-            logger.debug(f"{lp} ZoneMinder DB returned Monitor ID: {mid}")
+            logger.debug(f"{LP} ZoneMinder DB returned Monitor ID: {mid}")
             g.mid = mid
             # add extra logging data
             global LOGGING_EXTRA
             LOGGING_EXTRA = {"mid": mid, "eid": eid}
         else:
             logger.warning(
-                f"{lp} the database query did not return a monitor ID for this event?"
+                f"{LP} the database query did not return a monitor ID for this event?"
             )
             raise ValueError("No Monitor ID returned from DB query")
 
@@ -161,10 +162,10 @@ class ZMDB:
             mon_name = mon_row[0]
         mid_name_result.close()
         if mon_name:
-            logger.debug(f"{lp} ZoneMinder DB returned monitor name ('{mon_name}')")
+            logger.debug(f"{LP} ZoneMinder DB returned monitor name ('{mon_name}')")
         else:
             logger.warning(
-                f"{lp} the database query did not return a monitor name ('Name') for monitor ID {mid}"
+                f"{LP} the database query did not return a monitor name ('Name') for monitor ID {mid}"
             )
 
         # Get Monitor Pre/Post Event Count
@@ -176,11 +177,11 @@ class ZMDB:
         if mon_pre:
             mon_pre = int(mon_pre)
             logger.debug(
-                f"{lp} ZoneMinder DB returned monitor PreEventCount ('{mon_pre}')"
+                f"{LP} ZoneMinder DB returned monitor PreEventCount ('{mon_pre}')"
             )
         else:
             logger.warning(
-                f"{lp} the database query did not return monitor pre-event count ('PreEventCount') for monitor ID {mid}"
+                f"{LP} the database query did not return monitor pre-event count ('PreEventCount') for monitor ID {mid}"
             )
         # PostEventCount
         post_event_select: select = select(
@@ -194,11 +195,11 @@ class ZMDB:
         if mon_post:
             mon_post = int(mon_post)
             logger.debug(
-                f"{lp} ZoneMinder DB returned monitor PostEventCount ('{mon_post}')"
+                f"{LP} ZoneMinder DB returned monitor PostEventCount ('{mon_post}')"
             )
         else:
             logger.warning(
-                f"{lp} the database query did not return monitor post-event count ('PostEventCount') for monitor ID {mid}"
+                f"{LP} the database query did not return monitor post-event count ('PostEventCount') for monitor ID {mid}"
             )
         # Get Monitor capturing FPS
         ms_select: select = select(
@@ -210,10 +211,10 @@ class ZMDB:
         select_result.close()
         if mon_fps:
             mon_fps = Decimal(mon_fps)
-            logger.debug(f"{lp} ZoneMinder DB returned monitor FPS ('{mon_fps}')")
+            logger.debug(f"{LP} ZoneMinder DB returned monitor FPS ('{mon_fps}')")
         else:
             logger.warning(
-                f"{lp} the database query did not return monitor FPS ('CaptureFPS') for monitor ID {mid}"
+                f"{LP} the database query did not return monitor FPS ('CaptureFPS') for monitor ID {mid}"
             )
 
         reason_select: select = select([self.meta.tables["Events"].c.Cause]).where(
@@ -265,7 +266,7 @@ class ZMDB:
                 storage_path = row[0]
             storage_path_result.close()
         else:
-            logger.debug(f"{lp} no storage ID for event {eid}")
+            logger.debug(f"{LP} no storage ID for event {eid}")
 
         if start_datetime:
             if storage_path:
@@ -275,28 +276,28 @@ class ZMDB:
             else:
                 if storage_id:
                     logger.error(
-                        f"{lp} no storage path for StorageId {storage_id}, the StorageId could "
+                        f"{LP} no storage path for StorageId {storage_id}, the StorageId could "
                         f"of been removed/deleted/disabled"
                     )
                 else:
-                    logger.error(f"{lp} no StorageId for event {eid}!")
+                    logger.error(f"{LP} no StorageId for event {eid}!")
         else:
-            logger.debug(f"{lp} no StartDateTime for event {eid}")
+            logger.debug(f"{LP} no StartDateTime for event {eid}")
 
         if event_path:
             logger.debug(
-                f"{lp} storage path for event ID: {eid} has been calculated as '{event_path}'"
+                f"{LP} storage path for event ID: {eid} has been calculated as '{event_path}'"
             )
         else:
             logger.warning(
-                f"{lp} the database could not calculate the storage path for this event!"
+                f"{LP} the database could not calculate the storage path for this event!"
             )
 
         if reason:
-            logger.debug(f"{lp} ZoneMinder DB returned event cause as '{reason}'")
+            logger.debug(f"{LP} ZoneMinder DB returned event cause as '{reason}'")
         else:
             logger.warning(
-                f"{lp} the database query did not return a 'reason' ('Cause') for this event!"
+                f"{LP} the database query did not return a 'reason' ('Cause') for this event!"
             )
 
             # Get Monitor 'ImageBufferCount'
@@ -332,25 +333,25 @@ class ZMDB:
             logger.debug(f"Got ImageBufferCount for monitor {g.mid} -=> {g.mon_image_buffer_count = }")
         else:
             logger.debug(
-                f"{lp} the database query did not return ImageBufferCount for monitor {g.mid}"
+                f"{LP} the database query did not return ImageBufferCount for monitor {g.mid}"
             )
         if g.mon_width:
             logger.debug(f"Got Width for monitor {g.mid} -=> {g.mon_width}")
         else:
             logger.debug(
-                f"{lp} the database query did not return Width for monitor {g.mid}"
+                f"{LP} the database query did not return Width for monitor {g.mid}"
             )
         if g.mon_height:
             logger.debug(f"Got Height for monitor {g.mid} -=> {g.mon_height}")
         else:
             logger.debug(
-                f"{lp} the database query did not return Height for monitor {g.mid}"
+                f"{LP} the database query did not return Height for monitor {g.mid}"
             )
         if g.mon_colorspace:
             logger.debug(f"Got Colours for monitor {g.mid} -=> {g.mon_colorspace}")
         else:
             logger.debug(
-                f"{lp} the database query did not return Colours for monitor {g.mid}"
+                f"{LP} the database query did not return Colours for monitor {g.mid}"
             )
 
         g.mon_name = mon_name
@@ -360,3 +361,10 @@ class ZMDB:
         g.event_cause = reason
         g.event_path = event_path
         return mid, mon_name, mon_post, mon_pre, mon_fps, reason, event_path
+
+    def clean_up(self):
+        if self.connection.closed is False:
+            self.connection.close()
+            logger.debug(f"{LP}exit:: Closed connection to ZoneMinder database")
+        else:
+            logger.debug(f"{LP}exit:: ZoneMinder database connection already closed")

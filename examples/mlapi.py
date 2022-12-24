@@ -2,15 +2,14 @@
 import logging
 import sys
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-formatter = logging.Formatter(
-    "%(asctime)s.%(msecs)04d %(name)s[%(process)s] %(levelname)s %(module)s:%(lineno)d->[%(message)s]",
-    "%m/%d/%y %H:%M:%S",
-)
+logger = logging.getLogger("ZM_ML-Client")
 console_handler = logging.StreamHandler(stream=sys.stdout)
-console_handler.setFormatter(formatter)
+console_handler.setFormatter(CLIENT_LOG_FORMAT)
+buffered_log_handler = BufferedLogHandler()
+buffered_log_handler.setFormatter(CLIENT_LOG_FORMAT)
+logger.setLevel(logging.DEBUG)
 logger.addHandler(console_handler)
+logger.addHandler(buffered_log_handler)
 
 if __name__ == "__main__":
     logger.info("Starting MLAPI server...")

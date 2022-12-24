@@ -1,3 +1,4 @@
+import asyncio
 import concurrent.futures
 import copy
 import json
@@ -6,8 +7,7 @@ import logging.handlers
 import os
 import pickle
 import re
-import sys
-from hashlib import new
+import signal
 from pathlib import Path
 from shutil import which
 from time import perf_counter, time
@@ -15,15 +15,14 @@ from typing import Union, Dict, Optional, List, Any, Tuple
 
 import cv2
 import numpy as np
-import requests
-import requests_toolbelt
 import yaml
-from pydantic import SecretStr, BaseModel, Field
+from pydantic import BaseModel, Field
 from shapely.geometry import Polygon
 
 from .Libs.Media import APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine
 from .Libs.api import ZMApi
 from .Libs.zmdb import ZMDB
+from .Models.utils import CFGHash, get_push_auth, check_imports
 from .Models.config import (
     ConfigFileModel,
     ServerRoute,
@@ -39,212 +38,301 @@ from .Models.config import (
     NotificationZMURLOptions,
 )
 from ..Shared.configs import ClientEnvVars, GlobalConfig
-from .Models.validators import str_to_path
 
 __version__: str = "0.0.1"
 __version_type__: str = "dev"
-logger = logging.getLogger("ZM_ML-Client")
-
 ZM_INSTALLED: Optional[str] = which("zmpkg.pl")
-formatter = logging.Formatter(
+
+logger = logging.getLogger("ZM_ML-Client")
+CLIENT_LOG_FORMAT = logging.Formatter(
     "%(asctime)s.%(msecs)04d %(name)s[%(process)s] %(levelname)s %(module)s:%(lineno)d -> %(message)s",
     "%m/%d/%y %H:%M:%S",
 )
-null_handler = logging.NullHandler()
-console_handler = logging.StreamHandler(stream=sys.stdout)
-console_handler.setFormatter(formatter)
-syslog_handler = logging.handlers.SysLogHandler(
-    address="/dev/log", # facility=logging.handlers.SysLogHandler.LOG_LOCAL0
-)
-syslog_handler.setFormatter(formatter)
 logger.setLevel(logging.DEBUG)
-logger.addHandler(console_handler)
-logger.addHandler(syslog_handler)
+logger.addHandler(logging.NullHandler())
 
 ENV_VARS: Optional[ClientEnvVars] = None
 g: Optional[GlobalConfig] = None
+LP: str = "Client::"
+
+async def init_logs(config: ConfigFileModel) -> None:
+    """Initialize the logging system."""
+    import getpass
+    import grp
+    from src.zm_ml.Shared.Log.handlers import BufferedLogHandler
+
+    sys_user: str = getpass.getuser()
+    sys_gid: int = os.getgid()
+    sys_group: str = grp.getgrgid(sys_gid).gr_name
+    sys_uid: int = os.getuid()
+    cfg = config.logging
+    root_level = cfg.level
+    logger.debug(
+        f"Setting root logger level to {root_level} [Type: {type(root_level)}] [logging module "
+        f"_levelToName() = {logging._levelToName[root_level]}]"
+    )
+    logger.setLevel(root_level)
+
+    if cfg.console.enabled is False:
+        for h in logger.handlers:
+            if isinstance(h, logging.StreamHandler):
+                logger.info(f"Removing console log output!")
+                logger.removeHandler(h)
+
+    if cfg.file.enabled:
+        # fixme: add monitor number to log file name
+        _filename = f"{cfg.file.filename_prefix}_m{g.mid}.log"
+        abs_logfile = cfg.file.path / _filename
+        try:
+            if not abs_logfile.exists():
+                logger.info(f"Creating log file [{abs_logfile}]")
+                abs_logfile.touch(exist_ok=True)
+            else:
+                with abs_logfile.open("w") as f:
+                    pass
+        except PermissionError:
+            logger.warning(
+                f"Logging to file disabled due to permissions"
+                f" - No write access to '{abs_logfile.as_posix()}' for user: "
+                f"{sys_uid} [{sys_user}] group: {sys_gid} [{sys_group}]"
+            )
+        else:
+            # ZM /var/log/zm is handled by logrotate
+            # todo: add timed rotating log file handler if configured
+            file_handler = logging.FileHandler(abs_logfile.as_posix(), mode="a")
+            # file_handler = logging.handlers.TimedRotatingFileHandler(
+            #     file_from_config, when="midnight", interval=1, backupCount=7
+            # )
+            file_handler.setFormatter(CLIENT_LOG_FORMAT)
+            if g.config.logging.file.level:
+                logger.debug(
+                    f"File logger level CONFIGURED AS {g.config.logging.file.level}"
+                )
+                # logger.debug(f"Setting file log level to '{logging._levelToName[g.config.logging.file.level]}'")
+                file_handler.setLevel(g.config.logging.file.level)
+            logger.addHandler(file_handler)
+            # get the buffered handler and call flush with file_handler as a kwarg
+            # this will flush the buffer to the file handler
+            for h in logger.handlers:
+                if isinstance(h, BufferedLogHandler):
+                    logger.debug(f"Flushing buffered log handler to file {h=} ---- {file_handler=}")
+                    h.flush(file_handler=file_handler)
+                    break
+            logger.debug(
+                f"Logging to file '{abs_logfile}' with user: "
+                f"{sys_uid} [{sys_user}] group: {sys_gid} [{sys_group}]"
+            )
+    if cfg.syslog.enabled:
+        # enable syslog logging
+        syslog_handler = logging.handlers.SysLogHandler(
+            address=cfg.syslog.address,
+        )
+        syslog_handler.setFormatter(CLIENT_LOG_FORMAT)
+        if cfg.syslog.level:
+            logger.debug(
+                f"Syslog logger level CONFIGURED AS {logging._levelToName[cfg.syslog.level]}"
+            )
+            syslog_handler.setLevel(cfg.syslog.level)
+        logger.addHandler(syslog_handler)
+        logger.debug(f"Logging to syslog at {cfg.syslog.address}")
+
+    logger.info(f"Logging initialized...")
+
+
+def parse_client_config_file(cfg_file: Path) -> Optional[ConfigFileModel]:
+    """Parse the YAML configuration file."""
+    cfg: Dict = {}
+    _start = perf_counter()
+    raw_config = cfg_file.read_text()
+
+    try:
+        cfg = yaml.safe_load(raw_config)
+    except yaml.YAMLError:
+        logger.error(f"Error parsing the YAML configuration file!")
+        raise
+    except PermissionError:
+        logger.error(f"Error reading the YAML configuration file!")
+        raise
+
+    substitutions = cfg.get("substitutions", {})
+    testing = cfg.get("testing", {})
+    testing = Testing(**testing)
+    if testing.enabled:
+        logger.info(f"|----- TESTING IS ENABLED! -----|")
+        if testing.substitutions:
+            logger.info(f"Overriding config:substitutions WITH testing:substitutions")
+            substitutions = testing.substitutions
+
+    logger.debug(f"Replacing ${{VARS}} in config:substitutions")
+    substitutions = _replace_vars(str(substitutions), substitutions)
+    if inc_file := substitutions.get("IncludeFile"):
+        inc_file = Path(inc_file)
+        logger.debug(f"PARSING IncludeFile: {inc_file.as_posix()}")
+        if inc_file.is_file():
+            inc_vars = yaml.safe_load(inc_file.read_text())
+            if "client" in inc_vars:
+                inc_vars = inc_vars.get("client", {})
+                logger.debug(
+                    f"Loaded {len(inc_vars)} substitution from IncludeFile {inc_file} => {inc_vars}"
+                )
+                # check for duplicates
+                for k in inc_vars:
+                    if k in substitutions:
+                        logger.warning(
+                            f"Duplicate substitution variable '{k}' in IncludeFile {inc_file} - "
+                            f"IncludeFile overrides config file"
+                        )
+
+                substitutions.update(inc_vars)
+            else:
+                logger.warning(
+                    f"IncludeFile [{inc_file}] does not have a 'client' section - skipping"
+                )
+        else:
+            logger.warning(f"IncludeFile {inc_file} is not a file!")
+    logger.debug(f"Replacing ${{VARS}} in config")
+    cfg = _replace_vars(raw_config, substitutions)
+    logger.debug(
+        f"perf:: Config file loaded and validated in {perf_counter() - _start:.5f} seconds"
+    )
+
+    return ConfigFileModel(**cfg)
+
+
+def _replace_vars(search_str: str, var_pool: Dict) -> Dict:
+    """Replace variables in a string.
+
+
+    Args:
+        search_str (str): String to search for variables '${VAR_NAME}'.
+        var_pool (Dict): Dictionary of variables used to replace.
+
+    """
+    import re
+    import yaml
+
+    if var_list := re.findall(r"\$\{(\w+)\}", search_str):
+        # $ remove duplicates
+        var_list = list(set(var_list))
+        logger.debug(f"Found the following substitution variables: {var_list}")
+        # substitute variables
+        _known_vars = []
+        _unknown_vars = []
+        for var in var_list:
+            if var in var_pool:
+                # logger.debug(
+                #     f"substitution variable '{var}' IS IN THE POOL! VALUE: "
+                #     f"{var_pool[var]} [{type(var_pool[var])}]"
+                # )
+                _known_vars.append(var)
+                value = var_pool[var]
+                if value is None:
+                    value = ""
+                elif value is True:
+                    value = "yes"
+                elif value is False:
+                    value = "no"
+                search_str = search_str.replace(f"${{{var}}}", value)
+            else:
+                _unknown_vars.append(var)
+        if _unknown_vars:
+            logger.warning(
+                f"The following variables have no configured substitution value: {_unknown_vars}"
+            )
+        if _known_vars:
+            logger.debug(
+                f"The following variables have been substituted: {_known_vars}"
+            )
+    else:
+        logger.debug(f"No substitution variables found.")
+
+    return yaml.safe_load(search_str)
 
 
 def get_global_config() -> GlobalConfig:
     return g
 
 
-def check_imports():
-    try:
-        import cv2
-
-        maj, min_, patch = "", "", ""
-        x = cv2.__version__.split(".")
-        x_len = len(x)
-        if x_len <= 2:
-            maj, min_ = x
-            patch = "0"
-        elif x_len == 3:
-            maj, min_, patch = x
-            patch = patch.replace("-dev", "") or "0"
-        else:
-            logger.error(f'come and fix me again, cv2.__version__.split(".")={x}')
-
-        cv_ver = int(maj + min_ + patch)
-        if cv_ver < 420:
-            logger.error(
-                f"You are using OpenCV version {cv2.__version__} which does not support CUDA for DNNs. A minimum"
-                f" of 4.2 is required. See https://medium.com/@baudneo/install-zoneminder-1-36-x-6dfab7d7afe7"
-                f" on how to compile and install openCV 4.5.4 with CUDA"
-            )
-        del cv2
-        try:
-            import cv2.dnn
-        except ImportError:
-            logger.error(
-                f"OpenCV does not have DNN support! If you installed from "
-                f"pip you need to install 'opencv-contrib-python'. If you built from source, "
-                f"you did not compile with CUDA/cuDNN"
-            )
-            raise
-    except ImportError as e:
-        logger.error(f"Missing OpenCV 4.2+ (4.5.4+ recommended): {e}")
-        raise
-
-    try:
-        import numpy
-    except ImportError as e:
-        logger.error(f"Missing numpy: {e}")
-        raise
-    logger.debug("check imports:: All imports found!")
+def set_global_config(config: GlobalConfig) -> None:
+    global g
+    g = config
 
 
-def get_push_auth(user: SecretStr, pw: SecretStr, has_https: bool = False):
-    from urllib.parse import urlencode, quote_plus
-
-    lp = "get_api_auth::"
-    push_auth = ""
-    if g.api.access_token:
-        logger.debug(f"{lp} API auth seems to be enabled")
-        if user:
-            logger.debug(f"{lp} user supplied...")
-            if pw:
-                logger.debug(f"{lp} password supplied...")
-                if has_https:
-                    logger.debug(f"{lp} HTTPS detected, using user/pass in url")
-
-                    payload = {
-                        "user": user.get_secret_value(),
-                        "pass": pw.get_secret_value(),
-                    }
-                    push_auth = urlencode(payload, quote_via=quote_plus)
-                elif not has_https:
-                    logger.warning(
-                        f"{lp} HTTP detected, using token (tokens expire, therefore "
-                        f"notification link_url will only be valid for life of token)"
-                    )
-                    login_data = {
-                        "user": user.get_secret_value(),
-                        "pass": pw.get_secret_value(),
-                    }
-                    url = f"{g.api.api_url}/host/login.json"
-                    try:
-                        login_response = requests.post(url, data=login_data)
-                        login_response.raise_for_status()
-                        login_response_json = login_response.json()
-                    except Exception as exc:
-                        logger.error(
-                            f"{lp} Error trying to obtain user: '{user.get_secret_value()}' token for push "
-                            f"notifications, token will not be provided"
-                        )
-                        logger.debug(f"{lp} EXCEPTION>>> {exc}")
-                    else:
-                        push_auth = f"token={login_response_json.get('access_token')}"
-                        logger.debug(f"{lp} token retrieved!")
-
-            else:
-                logger.warning(f"{lp} pw not set while user is set")
-                # need password with username!
-                push_auth = f""
-
-        else:
-            logger.debug(f"{lp} link_url NO USER set, using creds from ZM API")
-            push_auth = f""
-
-        if not push_auth:
-            # Uses the zm_user and zm_password that ZMES uses if push_user and push_pass not set
-            logger.warning(
-                f"{lp} there does not seem to be a user and/or pass set using credentials from ZM API"
-            )
-            payload = {
-                "user": g.api.username.get_secret_value(),
-                "pass": g.api.password.get_secret_value(),
-            }
-            push_auth = urlencode(payload, quote_via=quote_plus)
-
-    else:
-        logger.debug(f"{lp} API auth is not enabled, do not need authorization")
-    return push_auth
-
-
-def static_pickle(
-    labels: Optional[List[str]] = None,
-    confs: Optional[List] = None,
-    bboxs: Optional[List] = None,
-    write: bool = False,
-) -> Optional[Tuple[List[str], List, List]]:
-    """Use the pickle module to save a python data structure to a file
-
-    :param write: save the data to a file
-    :param bboxs: list of bounding boxes
-    :param confs: list of confidence scores
-    :param labels: list of labels
-    """
-    lp: str = "pickle_static_objects:"
-    variable_data_path = g.config.system.variable_data_path
-    mon_file = Path(f"{variable_data_path}/mid-{g.mid}_past-detection.pkl")
-    logger.debug(f"{lp} mon_file[{type(mon_file)}]={mon_file}")
-
-    if not write:
-        logger.debug(
-            f"{lp} trying to load previous detection results from file: '{mon_file}'"
-        )
-        if mon_file.exists():
-            try:
-                with mon_file.open("rb") as f:
-                    labels = pickle.load(f)
-                    confs = pickle.load(f)
-                    bboxs = pickle.load(f)
-            except FileNotFoundError:
-                logger.debug(f"{lp}  no history data file found for monitor '{g.mid}'")
-            except EOFError:
-                logger.debug(f"{lp}  empty file found for monitor '{g.mid}'")
-                logger.debug(f"{lp}  going to remove '{mon_file}'")
-                try:
-                    mon_file.unlink()
-                except Exception as e:
-                    logger.error(f"{lp}  could not delete: {e}")
-            except Exception as e:
-                logger.error(f"{lp} error: {e}")
-            logger.debug(f"{lp} returning results: {labels}, {confs}, {bboxs}")
-        else:
-            logger.warning(f"{lp} no history data file found for monitor '{g.mid}'")
-    else:
-        try:
-            mon_file.touch(exist_ok=True)
-            with mon_file.open("wb") as f:
-                pickle.dump(labels, f)
-                pickle.dump(confs, f)
-                pickle.dump(bboxs, f)
-                logger.debug(
-                    f"{lp} saved_event: {g.eid} RESULTS to file: '{mon_file}' ::: {labels}, {confs}, {bboxs}",
-                )
-        except Exception as e:
-            logger.error(
-                f"{lp}  error writing to '{mon_file}' past detections not recorded, err msg -> {e}"
-            )
-    return labels, confs, bboxs
+def create_global_config() -> GlobalConfig:
+    """Create the global config object."""
+    global g
+    g = GlobalConfig()
+    return get_global_config()
 
 
 class StaticObjects(BaseModel):
     labels: Optional[List[str]] = Field(default_factory=list)
     confidence: Optional[List[float]] = Field(default_factory=list)
     bbox: Optional[List[List[int]]] = Field(default_factory=list)
+    filename: Optional[Path] = None
+
+    def pickle(
+        self,
+        labels: Optional[List[str]] = None,
+        confs: Optional[List] = None,
+        bboxs: Optional[List] = None,
+        write: bool = False,
+    ) -> Optional[Tuple[List[str], List, List]]:
+        """Use the pickle module to read or write the static objects to a file.
+
+        :param write: save the data to a file
+        :param bboxs: list of bounding boxes (Required for write)
+        :param confs: list of confidence scores (Required for write)
+        :param labels: list of labels (Required for write)
+        """
+        lp: str = "static_objects::pickle::"
+        variable_data_path = g.config.system.variable_data_path
+        filename = self.filename
+        if not write:
+            logger.debug(
+                f"{lp} trying to load previous detection results from file: '{filename}'"
+            )
+            if filename.exists():
+                try:
+                    with filename.open("rb") as f:
+                        self.labels = pickle.load(f)
+                        self.confidence = pickle.load(f)
+                        self.bbox = pickle.load(f)
+                except FileNotFoundError:
+                    logger.debug(
+                        f"{lp}  no history data file found for monitor '{g.mid}'"
+                    )
+                except EOFError:
+                    logger.debug(f"{lp}  empty file found for monitor '{g.mid}'")
+                    logger.debug(f"{lp}  going to remove '{filename}'")
+                    try:
+                        filename.unlink()
+                    except Exception as e:
+                        logger.error(f"{lp}  could not delete: {e}")
+                except Exception as e:
+                    logger.error(f"{lp} error: {e}")
+                logger.debug(f"{lp} returning results: {labels}, {confs}, {bboxs}")
+            else:
+                logger.warning(f"{lp} no history data file found for monitor '{g.mid}'")
+        else:
+            try:
+                filename.touch(exist_ok=True)
+                with filename.open("wb") as f:
+                    pickle.dump(labels, f)
+                    pickle.dump(confs, f)
+                    pickle.dump(bboxs, f)
+                    logger.debug(
+                        f"{lp} saved_event: {g.eid} RESULTS to file: '{filename}' ::: {labels}, {confs}, {bboxs}",
+                    )
+            except Exception as e:
+                logger.error(
+                    f"{lp}  error writing to '{filename}' past detections not recorded, err msg -> {e}"
+                )
+            else:
+                self.labels = labels
+                self.confidence = confs
+                self.bbox = bboxs
+        return self.labels, self.confidence, self.bbox
 
 
 class Notifications:
@@ -278,109 +366,31 @@ class Notifications:
             has_https = True
             if not re.compile(r"^https://").match(_portal):
                 has_https = False
-            future = []
             if config.gotify.link_url:
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    future.append(
-                        executor.submit(
-                            get_push_auth,
-                            config.gotify.link_user,
-                            config.gotify.link_pass,
-                            has_https,
-                        )
-                    )
-                for f in concurrent.futures.as_completed(future):
-                    self.gotify._push_auth = f.result()
+                self.gotify._push_auth = get_push_auth(
+                    g.api, config.gotify.link_user, config.gotify.link_pass, has_https
+                )
+
         if config.pushover.enabled:
             # get link user auth
             has_https = True
             if not re.compile(r"^https://").match(g.api.portal_base_url):
                 has_https = False
-            future = []
             self.pushover = Pushover()
             if config.pushover.link_url:
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    future.append(
-                        executor.submit(
-                            get_push_auth,
-                            config.pushover.link_user,
-                            config.pushover.link_pass,
-                            has_https,
-                        )
-                    )
-                for f in concurrent.futures.as_completed(future):
-                    self.pushover._push_auth = f.result()
+                self.pushover._push_auth = get_push_auth(
+                    g.api,
+                    config.pushover.link_user,
+                    config.pushover.link_pass,
+                    has_https,
+                )
+
         if config.shell_script.enabled:
             self.shell_script = None
         if config.webhook.enabled:
             self.webhook = None
         if config.mqtt.enabled:
             self.mqtt = MQTT()
-
-
-class CFGHash:
-    previous_hash: str
-    config_file: Path
-    hash: str
-
-    def __init__(self, config_file: Union[str, Path, None] = None):
-        self.previous_hash = ""
-        self.hash = ""
-        if config_file:
-            self.config_file = str_to_path(config_file)
-        self.compute()
-
-    def compute(
-        self,
-        input_file: Optional[Union[str, Path]] = None,
-        read_chunk_size: int = 65536,
-        algorithm: str = "sha256",
-    ):
-        """Hash a file using hashlib.
-        Default algorithm is SHA-256
-
-        :param input_file: File to hash
-        :param int read_chunk_size: Maximum number of bytes to be read from the file
-         at once. Default is 65536 bytes or 64KB
-        :param str algorithm: The hash algorithm name to use. For example, 'md5',
-         'sha256', 'sha512' and so on. Default is 'sha256'. Refer to
-         hashlib.algorithms_available for available algorithms
-        """
-
-        lp: str = f"config file::hash {algorithm}::"
-        checksum = new(algorithm)  # Raises appropriate exceptions.
-        self.previous_hash = str(self.hash)
-        self.hash = ""
-        if input_file:
-            self.config_file = str_to_path(input_file)
-
-        try:
-            with self.config_file.open("rb") as f:
-                for chunk in iter(lambda: f.read(read_chunk_size), b""):
-                    checksum.update(chunk)
-        except Exception as exc:
-            logger.warning(
-                f"{lp} ERROR while computing {algorithm} hash of "
-                f"'{self.config_file.as_posix()}' -> {exc}"
-            )
-            raise
-        else:
-            self.hash = checksum.hexdigest()
-            logger.debug(
-                f"{lp} the hex-digest for file '{self.config_file.as_posix()}' -> {self.hash}"
-            )
-        return self.hash
-
-    def compare(self, compare_hash: str) -> bool:
-        if self.hash == compare_hash:
-            return True
-        return False
-
-    def __repr__(self):
-        return f"{self.hash}"
-
-    def __str__(self):
-        return f"{self.hash}"
 
 
 class ZMClient:
@@ -397,63 +407,8 @@ class ZMClient:
     image_pipeline: Union[APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine]
     _comb: Dict
 
-    def check_permissions(self):
-        lp: str = "check_permissions::"
-        usr_str = f"user:group {self.sys_user}:{self.sys_group} [{self.sys_uid}:{self.sys_gid}]"
-        if g.config.system.variable_data_path:
-            logger.debug(
-                f"{lp} checking permissions of [{g.config.system.variable_data_path}] for {usr_str}"
-            )
-            try:
-                _f = open(g.config.system.variable_data_path, "r")
-            except PermissionError:
-                logger.error(
-                    f"{lp} system:variable_data_path [{g.config.system.variable_data_path}] is not "
-                    f"readable by {usr_str}"
-                )
-            else:
-                _f.close()
-                logger.debug(
-                    f"{lp} system:variable_data_path [{g.config.system.variable_data_path}] is readable by {usr_str}"
-                )
-            try:
-                _f = open(g.config.system.variable_data_path, "w")
-            except PermissionError:
-                logger.error(
-                    f"{lp} system:variable_data_path [{g.config.system.variable_data_path}] is not "
-                    f"writable by {usr_str}"
-                )
-            else:
-                _f.close()
-                logger.debug(
-                    f"{lp} system:variable_data_path [{g.config.system.variable_data_path}] is writable by {usr_str}"
-                )
-
-        if g.config.logging.file.enabled:
-            abs_log_file = g.config.logging.file.path / g.config.logging.file.filename
-            logger.debug(
-                f"{lp} checking permissions of log file [{abs_log_file}] for {usr_str}"
-            )
-            try:
-                _f = open(abs_log_file, "r")
-            except PermissionError:
-                logger.error(
-                    f"{lp} logging:log_file [{abs_log_file}] is not readable by {usr_str}"
-                )
-            else:
-                _f.close()
-                logger.debug(f"{lp} log file [{abs_log_file}] is readable by {usr_str}")
-            try:
-                _f = open(abs_log_file, "w")
-            except PermissionError:
-                logger.error(
-                    f"{lp} logging:log_file [{abs_log_file}] is not writable by {usr_str}"
-                )
-            else:
-                _f.close()
-                logger.debug(f"{lp} log file [{abs_log_file}] is writable by {usr_str}")
-
-    def live_event(self, is_live: bool):
+    @staticmethod
+    def is_live_event(is_live: bool):
         if is_live is True:
             if g:
                 g.past_event = False
@@ -461,60 +416,58 @@ class ZMClient:
             if g:
                 g.past_event = True
 
-    def __init__(
-        self, cfg_file: Optional[Union[str, Path]] = None, live_event: bool = False
-    ):
+    async def signal_handler(self, sig, *args, **kwargs):
+        logger.info(f"Received signal '{sig}', cleaning connections up and exiting")
+        await self.clean_up()
+        asyncio.get_event_loop().stop()
+
+
+    async def clean_up(self):
+        logger.debug(f"closing api sessions and db connection")
+        # self.image_pipeline.exit()
+        await self.api.clean_up()
+        self.db.clean_up()
+
+    def __init__(self, global_config: Optional[GlobalConfig] = None):
         """
         Initialize the ZoneMinder Client
-        :param cfg_file: Path to the config file
-        :param live_event: If True, the client will start in live event mode
         """
+        lp = f"{LP}init::"
 
-        logger.debug("Initializing ZMClient")
+        # setup async signal catcher
+        loop = asyncio.get_event_loop()
+        for signame in ("SIGINT", "SIGTERM"):
+            logger.debug(f"{lp} registering signal handler for {signame}")
+            loop.add_signal_handler(
+                getattr(signal, signame),
+                lambda: loop.create_task(self.signal_handler(signame)),
+            )
 
-        self._comb_filters: Dict = {}
+        logger.debug(f"{lp} Preparing client...")
+        if global_config:
+            logger.debug(f"{lp} Using supplied global config")
+            set_global_config(global_config)
+        check_imports()
         self.zones: Dict = {}
         self.zone_polygons: List[Polygon] = []
         self.zone_filters: Dict = {}
         self.filtered_labels: Dict = {}
-        import getpass
-        import grp
-
-        self.sys_user: str = getpass.getuser()
-        self.sys_gid: int = os.getgid()
-        self.sys_group: str = grp.getgrgid(self.sys_gid).gr_name
-        self.sys_uid: int = os.getuid()
-
         self.static_objects = StaticObjects()
-
-        global g, ENV_VARS
-        ENV_VARS = ClientEnvVars()
-        g = GlobalConfig()
-        g.Environment = ENV_VARS
-        if live_event:
-            self.live_event(True)
-        if not cfg_file:
-            logger.warning(
-                f"No config file specified, checking ENV -> {g.Environment.conf_file}"
-            )
-            cfg_file = g.Environment.conf_file
-        if cfg_file:
-            cfg_file = str_to_path(cfg_file)
-        assert cfg_file, "No config file specified"
-        self.config_file = cfg_file
-        g.config = self.config = self.load_config()
-        check_imports()
         self.notifications: Optional[Notifications] = None
-
+        self.config = get_global_config().config
         futures: List[concurrent.futures.Future] = []
         _hash: concurrent.futures.Future
+        _hash_input = CFGHash(config_file=g.config_file)
+        # loop = asyncio.get_event_loop()
+        # loop.create_task(self._sort_routes())
+        # loop.create_task(self._init_api())
+        # loop.create_task(self._init_db())
+
         with concurrent.futures.ThreadPoolExecutor(
             thread_name_prefix="init", max_workers=g.config.system.thread_workers
         ) as executor:
-            _hash = executor.submit(CFGHash, self.config_file)
-            executor.submit(self.check_permissions)
-            executor.submit(self._sort_routes)
-            futures.append(executor.submit(self._init_logs))
+            _hash = executor.submit(lambda: _hash_input.compute())
+            futures.append(executor.submit(self._sort_routes))
             futures.append(executor.submit(self._init_db))
             futures.append(executor.submit(self._init_api))
             for future in concurrent.futures.as_completed(futures):
@@ -528,62 +481,13 @@ class ZMClient:
             self.routes.sort(key=lambda x: x.weight)
             logger.debug(f"Routes: AFTER sorting >> {self.routes}")
 
-    def _init_logs(self):
-        """Initialize the logging system."""
-        level = self.config.logging.level
-        level = level.casefold().strip()
-        if level == "debug":
-            level = logging.DEBUG
-        elif level == "warning":
-            level = logging.WARNING
-        elif level == "error":
-            level = logging.ERROR
-        elif level == "critical":
-            level = logging.CRITICAL
-        else:
-            level = logging.INFO
-        logger.setLevel(level)
-
-        if self.config.logging.console is False:
-            logger.info(f"Removing console log output!")
-            logger.removeHandler(console_handler)
-        file_from_config = (
-            self.config.logging.file.path / self.config.logging.file.filename
-        )
-        if not file_from_config.exists():
-            file_from_config.touch(exist_ok=True)
-
-        if os.access(file_from_config, os.W_OK):
-            file_from_config.touch(exist_ok=True)
-            # ZM /var/log/zm is handled by logrotate
-            file_handler = logging.FileHandler(file_from_config.as_posix(), mode="a")
-            # file_handler = logging.handlers.TimedRotatingFileHandler(
-            #     file_from_config, when="midnight", interval=1, backupCount=7
-            # )
-            file_handler.setFormatter(formatter)
-            logger.addHandler(file_handler)
-
-            logger.debug(
-                f"Logging to file '{file_from_config}' with user: "
-                f"{self.sys_uid} [{self.sys_user}] group: {self.sys_gid} [{self.sys_group}]"
-            )
-        else:
-            logger.warning(
-                f"Logging to file {file_from_config} disabled due to permissions"
-                f" - No write access to {file_from_config.as_posix()} for user: "
-                f"{self.sys_uid} [{self.sys_user}] group: {self.sys_gid} [{self.sys_group}]"
-            )
-        logger.info(f"Logging initialized...")
-
     def _init_db(self):
         logger.debug("Initializing DB")
         self.db = ZMDB()
-        logger.debug("DB initialized...")
+        logger.debug(f"DB initialized... {self.db=}")
 
-    def _get_db_data(self, eid: int):
+    async def _get_db_data(self, eid: int):
         """Get data from the database"""
-        global g
-        g.eid = eid
         (
             g.mid,
             g.mon_name,
@@ -592,20 +496,15 @@ class ZMClient:
             g.mon_fps,
             g.event_cause,
             g.event_path,
-        ) = self.db.grab_all(g.eid)
-        # LOGGING_EXTRA should be populated, now use it
-        # logging.Formatter.
-        with concurrent.futures.ThreadPoolExecutor(
-            thread_name_prefix="init-2", max_workers=g.config.system.thread_workers
-        ) as executor:
-            executor.submit(self.api.import_zones)
+        ) = self.db.grab_all(eid)
+
 
     def _init_api(self):
-        g.api = self.api = ZMApi(self.config.zoneminder)
+        g.api = self.api = ZMApi(g.config.zoneminder)
         self.notifications = Notifications()
 
     @staticmethod
-    def convert_to_cv2(image: Union[np.ndarray, bytes]):
+    async def convert_to_cv2(image: Union[np.ndarray, bytes]):
         # convert the numpy image to OpenCV format
         lp = "convert_to_cv2::"
         if isinstance(image, bytes):
@@ -690,55 +589,55 @@ class ZMClient:
         self._comb_filters = output_filters
         return self._comb_filters
 
-    def detect(self, eid: Optional[int], mid: Optional[int] = None):
+    async def detect(self, eid: Optional[int] = None, mid: Optional[int] = None):
         """Detect objects in an event
 
         Args:
             eid (Optional[int]): Event ID. Required for API event image pulling method.
             mid (Optional[int]): Monitor ID. Required for SHM or ZMU image pulling method.
         """
+        global g
         lp = _lp = "detect::"
+        final_detections: dict = {}
+        detections: dict = {}
+        matched_l, matched_c, matched_b, matched_e = [], [], [], []
+        matched_model_names = ""
+        matched_frame_id = ""
+        matched_detection_types = ""
+        matched_processor = ""
+        matched_frame_img = np.ndarray([])
         image_name: Optional[Union[int, str]] = None
         _start = perf_counter()
         global g
         strategy: MatchStrategy = g.config.matching.strategy
-        if mid:
-            g.mid = mid
         if eid:
+            g.eid = eid
             logger.info(
                 f"{lp} Running detection for event {eid}, obtaining monitor info using DB and API..."
             )
-            self._get_db_data(eid)
-            futures: List[concurrent.futures.Future] = []
+            await self._get_db_data(eid)
+            loop = asyncio.get_event_loop()
+
             with concurrent.futures.ThreadPoolExecutor(
-                thread_name_prefix="init-2", max_workers=g.config.system.thread_workers
+                thread_name_prefix="import-zones",
+                max_workers=g.config.system.thread_workers,
             ) as executor:
-                futures.append(executor.submit(static_pickle))
-            for future in concurrent.futures.as_completed(futures):
-                logger.debug(f"Future result for static_pickle: {future.result()}")
-                (
-                    self.static_objects.labels,
-                    self.static_objects.confidence,
-                    self.static_objects.bbox,
-                ) = future.result()
-            # get monitor and event info
-            g.Monitor = self.api.get_monitor_data(g.mid)
-            g.Event, event_monitor_data, g.Frame, _ = self.api.get_all_event_data(eid)
+                await loop.run_in_executor(executor, self.api.import_zones)
+            g.Monitor = await self.api.get_monitor_data(g.mid)
+            g.Event, _, g.Frame, _ = await self.api.get_all_event_data(eid)
+            await init_logs(g.config)
         elif not eid and mid:
             logger.info(
                 f"{lp} Running detection for monitor {mid}, image pull method should be SHM or "
                 f"ZMU: {g.config.detection_settings.images.pull_method}"
             )
+            g.mid = mid
+            await init_logs(g.config)
 
-        if not mid and g.mid:
-            logger.debug(
-                f"{lp} No monitor ID provided, using monitor ID from DB: {g.mid}"
-            )
-        elif not mid and not g.mid:
-            raise ValueError(
-                f"{lp} No monitor ID provided, and no monitor ID from DB: Exiting..."
-            )
-
+        self.static_objects.filename = (
+            g.config.system.variable_data_path / f"static-objects_m{g.mid}.pkl"
+        )
+        self.static_objects.pickle()
         # init Image Pipeline
         logger.debug(f"{lp} Initializing Image Pipeline...")
         img_pull_method = self.config.detection_settings.images.pull_method
@@ -754,11 +653,14 @@ class ZMClient:
             # self.image_pipeline = ZMUImagePipeLine()
 
         models: Optional[Dict] = None
-        if g.mid in self.config.monitors and self.config.monitors[g.mid].models:
-            logger.debug(
-                f"{lp} Monitor {g.mid} has models configured, overriding global models"
-            )
-            models = self.config.monitors.get(g.mid).models
+        if g.mid in self.config.monitors:
+            if self.config.monitors[g.mid].zones:
+                self.zones = self.config.monitors[g.mid].zones
+            if self.config.monitors[g.mid].models:
+                logger.debug(
+                    f"{lp} Monitor {g.mid} has models configured, overriding global models"
+                )
+                models = self.config.monitors[g.mid].models
         if not models:
             if self.config.detection_settings.models:
                 logger.debug(
@@ -774,18 +676,11 @@ class ZMClient:
                 models = {"yolov4": {}}
         model_names = list(models.keys())
         models_str = ",".join(model_names)
-        final_detections: dict = {}
-        detections: dict = {}
         _start_detections = perf_counter()
-        futures_data = []
-        futures = []
         base_filters = g.config.matching.filters
         monitor_filters = g.config.monitors.get(g.mid).filters
         # logger.debug(f"{lp} Combining GLOBAL filters with Monitor {g.mid} filters")
         combined_filters = self.combine_filters(base_filters, monitor_filters)
-        if g.mid in self.config.monitors:
-            if self.config.monitors.get(g.mid).zones:
-                self.zones = self.config.monitors.get(g.mid).zones
         if not self.zones:
             logger.debug(f"{lp} No zones found, adding full image with base filters")
             self.zones["!ZM-ML!_full_image"] = MonitorZones.construct(
@@ -800,260 +695,239 @@ class ZMClient:
                 static_objects=OverRideStaticObjects(),
                 filters=OverRideMatchFilters(),
             )
-        # build each zones filters as they won't change in the loops
-        _i = 0
-        for zone in self.zones:
-            _i += 1
-            # Break referencing, we want a copy
+        # build each zones filters as they won't change, check points and resolution for scaling
+        zones = self.zones.copy()
+        mon_res = (g.mon_width, g.mon_height)
+        for zone_name, zone_data in zones.items():
             cp_fltrs = copy.deepcopy(combined_filters)
-            # logger.debug(
-            #     f"'DBG'>>> \nBuilding filters using COMBINED global+monitor and overriding "
-            #     f"with zone filters for: {'zone'} BEFORE COMBINED_FILTERS = {cp_fltrs} <<<DBG"
-            # )
-            self.zone_filters[zone] = self.combine_filters(
-                cp_fltrs, self.zones[zone].filters
+            self.zone_filters[zone_name] = self.combine_filters(
+                cp_fltrs, self.zones[zone_name].filters
             )
-            # logger.debug(f"'DBG'>>> AFTER COMBINED_FILTERS = {cp_fltrs} <<<DBG")
-            cp_fltrs = None
-
+            if zone_data.enabled is False:
+                continue
+            if not zone_data.points:
+                continue
+            zone_points = zone_data.points
+            zone_resolution = zone_data.resolution
+            if zone_resolution != mon_res:
+                logger.warning(
+                    f"{_lp} Zone '{zone_name}' has a resolution of '{zone_resolution}'"
+                    f" which is different from the monitor resolution of {mon_res}! "
+                    f"Attempting to adjust zone points to match monitor resolution..."
+                )
+                xfact: float = mon_res[1] / zone_resolution[1] or 1.0
+                yfact: float = mon_res[0] / zone_resolution[0] or 1.0
+                logger.debug(
+                    f"{_lp} rescaling polygons: using x_factor: {xfact} and y_factor: {yfact}"
+                )
+                zone_points = [(int(x * xfact), int(y * yfact)) for x, y in zone_points]
+                logger.debug(
+                    f"{_lp} Zone '{zone_name}' points adjusted to: {zone_points}"
+                )
+                self.zones[zone_name].points = zone_points
+        del zones
         # logger.debug(f"'DBG'>>> Zone filters: \n\n{self.zone_filters} <<<DBG\n")
         image: Union[bytes, np.ndarray, None]
         matched_l, matched_c, matched_b = [], [], []
+        import aiohttp
 
-        with concurrent.futures.ThreadPoolExecutor(
-            thread_name_prefix="detection-request",
-            max_workers=g.config.system.thread_workers,
-        ) as executor:
-            while self.image_pipeline.is_image_stream_active():
-                image, image_name = self.image_pipeline.get_image()
+        while self.image_pipeline.is_image_stream_active():
+            image, image_name = await self.image_pipeline.get_image()
 
-                if image is None:
-                    logger.warning(f"{lp} No image returned! trying again...")
-                    continue
-                if image is False:
-                    logger.warning(
-                        f"{lp} Image stream ended! Moving on to futures (figure out "
-                        f"how to iterate futures as they complete while still in this threadpool loop)"
+            if image is None:
+                logger.warning(f"{lp} No image returned! trying again...")
+                continue
+            if image is False:
+                logger.warning(
+                    f"{lp} Image stream ended! Moving on to futures (figure out "
+                    f"how to iterate futures as they complete while still in this threadpool loop)"
+                )
+
+                break
+
+            if any([g.config.animation.gif.enabled, g.config.animation.mp4.enabled]):
+                if g.config.animation.low_memory:
+                    # save to file
+                    _tmp = g.config.system.tmp_path / "animations"
+                    _tmp.mkdir(parents=True, exist_ok=True)
+                    cv2.imwrite(
+                        str(_tmp / f"{image_name}.jpg"),
+                        await self.convert_to_cv2(image),
                     )
+                    # Add Path pbject pointing to the image on disk
+                    g.frame_buffer[image_name] = _tmp / f"{image_name}.jpg"
+                else:
+                    # Keep images in RAM
+                    g.frame_buffer[image_name] = image
+                logger.debug(
+                    f"{lp}animations:: Added image to frame buffer: {image_name} -- {type(image)=}"
+                )
+            results: Optional[List[Dict[str, Any]]] = None
+            for route in self.routes:
+                if route.enabled:
+                    url = f"{route.host}:{route.port}/detect/group"
+                    with aiohttp.MultipartWriter("form-data") as mpwriter:
+                        part = mpwriter.append_json(models_str)
+                        part.set_content_disposition("form-data", name="model_hints")
 
-                    break
-
-                assert isinstance(
-                    image, bytes
-                ), "Image is not bytes after getting from pipeline"
-                image: bytes
-                if img_pull_method.api.enabled is True:
-                    image_name = str(image_name).split("fid_")[1].split(".")[0]
-
-                if any(
-                    [g.config.animation.gif.enabled, g.config.animation.mp4.enabled]
-                ):
-
-                    if g.config.animation.low_memory:
-                        # save to file
-                        _tmp = g.config.system.tmp_path / "animations"
-                        _tmp.mkdir(parents=True, exist_ok=True)
-                        cv2.imwrite(
-                            str(_tmp / f"{image_name}.jpg"), self.convert_to_cv2(image)
+                        part = mpwriter.append(
+                            image,
+                            {"Content-Type": "image/jpeg"},
                         )
-                        # Add Path pbject pointing to the image on disk
-                        g.frame_buffer[image_name] = _tmp / f"{image_name}.jpg"
-                    else:
-                        # Keep images in RAM
-                        g.frame_buffer[image_name] = image
-                    logger.debug(
-                        f"{lp}animations:: Added image to frame buffer: {image_name} -- {type(image)=}"
-                    )
-
-                for route in self.routes:
-                    if route.enabled:
-                        url = f"{route.host}:{route.port}/detect/group"
-                        fields = {
-                            "model_hints": (
-                                None,
-                                json.dumps(models_str),
-                                "application/json",
-                            ),
-                            "image": (image_name, image, "image/jpeg"),
-                        }
-                        multipart_data = (
-                            requests_toolbelt.multipart.encoder.MultipartEncoder(
-                                fields=fields
-                            )
+                        part.set_content_disposition(
+                            "form-data", name="image", filename=image_name
                         )
-                        headers = {
-                            "Accept": "application/json",
-                            "Content-Type": multipart_data.content_type,
-                        }
                         logger.debug(f"Sending image to '{route.name}' @ {url}")
                         _perf = perf_counter()
-
-                        futures.append(
-                            executor.submit(
-                                self.send_to_mlapi,
-                                url=url,
-                                data=multipart_data,
-                                headers=headers,
-                                timeout=route.timeout,
-                                image_name=image_name,
-                                route=route,
-                                started=_perf,
-                                image=image,
-                            )
-                        )
-
-                        if image_name not in final_detections:
-                            final_detections[image_name] = []
-                        if image_name not in self.filtered_labels:
-                            self.filtered_labels[image_name] = []
-
-                    else:
-                        logger.warning(
-                            f"ZM_ML Server route '{route.name}' is disabled!"
-                        )
-            logger.debug(
-                f"\n----------- Out of IMAGE GRABBING thread pool loop, "
-                f"about to start waiting for futures to complete -----------\n"
-            )
-            future_loop = 0
-            for future in concurrent.futures.as_completed(futures):
-                future_loop += 1
-                future: concurrent.futures.Future
-                try:
-                    exception_ = future.exception(timeout=60)
-                    if exception_:
-                        raise exception_
-                    _result = future.result()
-                    route = _result["route"]
-                    _perf = _result["started"]
-                    image = _result["image"]
-                    image_name = _result["image_name"]
+                        r: aiohttp.ClientResponse
+                        session: aiohttp.ClientSession = g.api.async_session
+                        async with session.post(
+                            url,
+                            data=mpwriter,
+                        ) as r:
+                            status = r.status
+                            if status == 200:
+                                if r.content_type == "application/json":
+                                    results = await r.json()
+                                else:
+                                    logger.error(
+                                        f"{lp} Route '{route.name}' returned a non-json response! \n{r}"
+                                    )
+                            else:
+                                logger.error(
+                                    f"{lp}route '{route.name}' returned ERROR status {status} \n{r}"
+                                )
                     if img_pull_method.api.enabled is True:
-                        image_name = int(image_name)
-                    assert isinstance(
-                        image, np.ndarray
-                    ), "Image is not np.ndarray after converting from bytes"
-                    image: np.ndarray
-                    r: requests.Response = _result["response"]
-                except requests.exceptions.ConnectionError as e:
-                    logger.debug(f"{e.args=}")
-                    logger.warning(f"{lp} Route: {route.name} ConnectionError: {e}")
-                    continue
-                except Exception as e:
-                    logger.warning(f"DBG>>>DBG??? {e.args=} {type(e)=}")
-                    continue
+                        assert isinstance(
+                            image, bytes
+                        ), "Image is not bytes after getting from pipeline"
+                        image: bytes
+                        image_name = int(str(image_name).split("fid_")[1].split(".")[0])
 
-                logger.debug(
-                    f"perf:: HTTP Detection request to '{route.name}' completed in {perf_counter() - _perf:.5f} seconds"
-                )
+                    if image_name not in final_detections:
+                        final_detections[str(image_name)] = []
+                    if image_name not in self.filtered_labels:
+                        self.filtered_labels[str(image_name)] = []
+                    if results:
+                        image = await self.convert_to_cv2(image)
+                        assert isinstance(
+                            image, np.ndarray
+                        ), "Image is not np.ndarray after converting from bytes"
+                        image: np.ndarray
+                        logger.debug(
+                            f"There are {len(results)} UNFILTERED Results for image '{image_name}' => {results}"
+                        )
+                        filter_start = perf_counter()
+                        res_loop = 0
 
-                results: List[Dict[str, Any]] = r.json()
-                logger.debug(
-                    f"There are {len(results)} UNFILTERED Results for image '{image_name}' => {results}"
-                )
-                filter_start = perf_counter()
-                res_loop = 0
+                        for result in results:
+                            res_loop += 1
 
-                matched_l = []
-                matched_model_names = ""
-                matched_c = []
-                matched_frame_id = ""
-                matched_detection_types = ""
-                matched_b = []
-                matched_processor = ""
-                matched_e = []
-                matched_frame_img = np.ndarray([])
-
-                for result in results:
-                    res_loop += 1
-
-                    if result["success"] is True:
-                        filtered_result = self.filter_detections(result, image_name)
-                        # check strategy
-                        strategy: MatchStrategy = g.config.matching.strategy
-                        if filtered_result["success"] is True:
-                            final_label = filtered_result["label"]
-                            final_confidence = filtered_result["confidence"]
-                            final_bbox = filtered_result["bounding_box"]
-
-                            if (
-                                (strategy == MatchStrategy.first)
-                                or (
-                                    (strategy == MatchStrategy.most)
-                                    and (len(final_label) > len(matched_l))
+                            if result["success"] is True:
+                                filtered_result = await self.filter_detections(
+                                    result, image_name
                                 )
-                                or (
-                                    (strategy == MatchStrategy.most)
-                                    and (len(final_label) == len(matched_l))
-                                    and (sum(matched_c) < sum(final_confidence))
-                                )
-                                # or (
-                                # (frame_strategy == "most_models")
-                                # and (len(item["detection_types"]) > len(matched_detection_types))
-                                # )
-                                #         or (
-                                #         (strategy == "most_models")
-                                #         and (len(item["detection_types"]) == len(matched_detection_types))
-                                #         and (sum(matched_c) < sum(item["confidences"]))
-                                # )
-                                or (
-                                    (strategy == MatchStrategy.most_unique)
-                                    and (len(set(final_label)) > len(set(matched_l)))
-                                )
-                                or (
-                                    # tiebreaker using sum of confidences
-                                    (strategy == MatchStrategy.most_unique)
-                                    and (len(set(final_label)) == len(set(matched_l)))
-                                    and (sum(matched_c) < sum(final_confidence))
-                                )
-                            ):
+                                # check strategy
+                                strategy: MatchStrategy = g.config.matching.strategy
+                                if filtered_result["success"] is True:
+                                    final_label = filtered_result["label"]
+                                    final_confidence = filtered_result["confidence"]
+                                    final_bbox = filtered_result["bounding_box"]
+
+                                    if (
+                                        (strategy == MatchStrategy.first)
+                                        or (
+                                            (strategy == MatchStrategy.most)
+                                            and (len(final_label) > len(matched_l))
+                                        )
+                                        or (
+                                            (strategy == MatchStrategy.most)
+                                            and (len(final_label) == len(matched_l))
+                                            and (sum(matched_c) < sum(final_confidence))
+                                        )
+                                        # or (
+                                        # (frame_strategy == "most_models")
+                                        # and (len(item["detection_types"]) > len(matched_detection_types))
+                                        # )
+                                        #         or (
+                                        #         (strategy == "most_models")
+                                        #         and (len(item["detection_types"]) == len(matched_detection_types))
+                                        #         and (sum(matched_c) < sum(item["confidences"]))
+                                        # )
+                                        or (
+                                            (strategy == MatchStrategy.most_unique)
+                                            and (
+                                                len(set(final_label))
+                                                > len(set(matched_l))
+                                            )
+                                        )
+                                        or (
+                                            # tiebreaker using sum of confidences
+                                            (strategy == MatchStrategy.most_unique)
+                                            and (
+                                                len(set(final_label))
+                                                == len(set(matched_l))
+                                            )
+                                            and (sum(matched_c) < sum(final_confidence))
+                                        )
+                                    ):
+                                        logger.debug(
+                                            f"\n\nFOUND A BETTER MATCH [{strategy=}] THAN model: {matched_model_names}"
+                                            f" image name: {matched_frame_id}: LABELS: {matched_l} with "
+                                            f" model: {result['model_name']} image name: {image_name} ||| "
+                                            f"LABELS: {final_label}\n\n"
+                                        )
+                                        # matched_poly = item['bbox2poly']
+                                        matched_l = final_label
+                                        matched_model_names = result["model_name"]
+                                        matched_c = final_confidence
+                                        matched_frame_id = image_name
+                                        matched_detection_types = result["type"]
+                                        matched_b = final_bbox
+                                        matched_processor = result["processor"]
+                                        matched_e = self.filtered_labels[
+                                            str(image_name)
+                                        ]
+                                        matched_frame_img = image.copy()
+
+                                    final_detections[str(image_name)].append(
+                                        filtered_result
+                                    )
+
                                 logger.debug(
-                                    f"\n\nFOUND A BETTER MATCH [{strategy=}] THAN model: {matched_model_names}"
-                                    f" image name: {matched_frame_id}: LABELS: {matched_l} with "
-                                    f" model: {result['model_name']} image name: {image_name} ||| "
-                                    f"LABELS: {final_label}\n\n"
+                                    f"perf:: Filtering for {image_name}:{result['model_name']} took "
+                                    f"{perf_counter() - filter_start:.5f} seconds"
                                 )
-                                # matched_poly = item['bbox2poly']
-                                matched_l = final_label
-                                matched_model_names = result["model_name"]
-                                matched_c = final_confidence
-                                matched_frame_id = image_name
-                                matched_detection_types = result["type"]
-                                matched_b = final_bbox
-                                matched_processor = result["processor"]
-                                matched_e = self.filtered_labels[str(image_name)]
-                                matched_frame_img = image.copy()
 
-                        final_detections[str(image_name)].append(filtered_result)
-                        logger.debug(
-                            f"perf:: Filtering for {image_name}:{result['model_name']} took "
-                            f"{perf_counter() - filter_start:.5f} seconds"
-                        )
+                            else:
+                                logger.warning(
+                                    f"Result was not successful, not filtering"
+                                )
 
-                    else:
-                        logger.warning(f"Result was not successful, not filtering")
+                            if strategy == MatchStrategy.first and matched_l:
+                                logger.debug(
+                                    f"Strategy is 'first' and there is a filtered match, breaking RESULT "
+                                    f"LOOP {res_loop}"
+                                )
+                                break
+                        if strategy == MatchStrategy.first and matched_l:
+                            logger.debug(
+                                f"Strategy is 'first' and there is a filtered match, breaking RESULT LOOP {res_loop}"
+                            )
+                            break
+                else:
+                    logger.warning(f"ZM_ML Server route '{route.name}' is disabled!")
 
-                    logger.debug(
-                        f"\n------------------- END OF RESULT LOOP # {res_loop} -------------------\n"
-                    )
-                    if strategy == MatchStrategy.first and matched_l:
-                        logger.debug(
-                            f"Strategy is 'first' and there is a filtered match, breaking RESULT LOOP {res_loop}"
-                        )
-                        break
                 logger.debug(
-                    f"\n------------------- END OF FUTURE LOOP {future_loop} -------------------\n"
+                    f"{lp}perf:: HTTP Detection request to '{route.name}' completed in "
+                    f"{perf_counter() - _perf:.5f} seconds // {image_name=}"
                 )
-                if strategy == MatchStrategy.first and matched_l:
-                    logger.debug(
-                        f"Strategy is 'first' and there is a filtered match, breaking FUTURE LOOP {future_loop}"
-                    )
-                    break
-
+        logger.debug(f"{lp} OUT OF WHILE LOOP (image/image_name while loop)")
         logger.debug(
             f"perf:: Total detections time {perf_counter() - _start:.5f} seconds"
         )
         # logger.debug(f"\n\n\nFINAL RESULTS: {final_detections}\n\n\n")
+        await self.clean_up()
         if matched_l:
             matched = {
                 "labels": matched_l,
@@ -1072,25 +946,13 @@ class ZMClient:
             self.post_process(matched)
             matched.pop("frame_img")
             logger.debug(f"Writing static_objects to disk")
-            static_pickle(matched_l, matched_c, matched_b, write=True)
+            self.static_objects.pickle(
+                labels=matched_l, confs=matched_c, bboxs=matched_b, write=True
+            )
             return matched
         return {}
 
-    def send_to_mlapi(
-        self, url, data, headers, timeout, image, image_name, route, started
-    ):
-        """Send image to MLAPI for detection."""
-        logger.debug(f"Sending image to MLAPI for detection")
-        response = requests.post(url, data=data, headers=headers, timeout=timeout)
-        return {
-            "response": response,
-            "image_name": image_name,
-            "image": self.convert_to_cv2(image),
-            "route": route,
-            "started": started,
-        }
-
-    def filter_detections(
+    async def filter_detections(
         self,
         result: Dict[str, Any],
         image_name: str,
@@ -1100,7 +962,7 @@ class ZMClient:
 
         labels, confidences, bboxes = [], [], []
         final_label, final_confidence, final_bbox = [], [], []
-        labels, confidences, bboxs = self._filter(result, image_name=image_name)
+        labels, confidences, bboxs = await self._filter(result, image_name=image_name)
 
         for lbl, cnf, boxes in zip(labels, confidences, bboxs):
             if cnf not in final_confidence and boxes not in final_bbox:
@@ -1141,7 +1003,7 @@ class ZMClient:
         # logger.debug(f"convert bbox:: {orig_} to Polygon points: {bbox}")
         return bbox
 
-    def _filter(
+    async def _filter(
         self,
         result: Dict[str, Any],
         image_name: str = None,
@@ -1150,7 +1012,7 @@ class ZMClient:
     ):
         """Filter detections using 2 loops, first loop is filter by object label, second loop is to filter by zone."""
         r_label, r_conf, r_bbox = [], [], []
-        zones = self.zones
+        zones = self.zones.copy()
         zone_filters = self.zone_filters
         object_label_filters = {}
         final_filters = None
@@ -1160,14 +1022,6 @@ class ZMClient:
         model_name = result["model_name"]
         processor = result["processor"]
         found_match: bool = False
-        # image_polygon = Polygon(
-        #     [
-        #         (0, 0),
-        #         (g.mon_width, 0),
-        #         (g.mon_width, g.mon_height),
-        #         (0, g.mon_height),
-        #     ]
-        # )
         label, confidence, bbox = None, None, None
         _zn_tot = len(zones)
         _lbl_tot = len(result["label"])
@@ -1185,6 +1039,8 @@ class ZMClient:
                     box,
                 )
             )
+
+        _lp = f"_filter:{image_name}:'{model_name}'::{type_}::"
 
         #
         # Outer Loop
@@ -1215,31 +1071,6 @@ class ZMClient:
                     )
                     continue
                 zone_points = zone_data.points
-                zone_resolution = zone_data.resolution
-                logger.debug(
-                    f"{__lp} Zone '{zone_name}' points: {zone_points} :: resolution: {zone_resolution} -- "
-                    f"monitor resolution = H:: {g.mon_height} -- W:: {g.mon_width}"
-                )
-                mon_res = (g.mon_width, g.mon_height)
-                if zone_resolution != mon_res:
-                    logger.warning(
-                        f"{__lp} Zone '{zone_name}' has a resolution of '{zone_resolution}'"
-                        f" which is different from the monitor resolution of {mon_res}! "
-                        f"Attempting to adjust zone points to match monitor resolution..."
-                    )
-
-                    xfact: float = mon_res[1] / zone_resolution[1] or 1.0
-                    yfact: float = mon_res[0] / zone_resolution[0] or 1.0
-                    logger.debug(
-                        f"{__lp} rescaling polygons: using x_factor: {xfact} and y_factor: {yfact}"
-                    )
-                    zone_points = [
-                        (int(x * xfact), int(y * yfact)) for x, y in zone_points
-                    ]
-                    logger.debug(
-                        f"{__lp} Zone '{zone_name}' points adjusted to: {zone_points}"
-                    )
-
                 zone_polygon = Polygon(zone_points)
                 if zone_polygon not in self.zone_polygons:
                     self.zone_polygons.append(zone_polygon)
@@ -1549,11 +1380,11 @@ class ZMClient:
                                     ):
                                         # success
                                         logger.debug(
-                                            f"SUCCESSFULLY PASSED the static object check"
+                                            f"{__lp} SUCCESSFULLY PASSED the static object check"
                                         )
 
                                     else:
-                                        logger.debug(f"FAILED the static object check")
+                                        logger.debug(f"{__lp} FAILED the static object check")
                                         # failed
                                         continue
                                 else:
@@ -1570,21 +1401,18 @@ class ZMClient:
                                 logger.debug(
                                     f"{lp} confidence={confidence} IS LESS THAN "
                                     f"min_confidence={type_filter.min_conf}, "
-                                    f"\n\nNO MATCH, SKIPPING...\n\n"
                                 )
                                 continue
 
                         else:
                             logger.debug(
                                 f"{lp} NOT matched in RegEx pattern [{pattern.pattern}], "
-                                f"\n\nNO MATCH, SKIPPING...\n\n"
                             )
                             continue
 
                     else:
                         logger.debug(
-                            f"{lp} MATCH FAILED [{match = }], "
-                            f"\n\nNO MATCH, SKIPPING...\n\n"
+                            f"{lp} NOT matched in RegEx pattern [{pattern.pattern}], "
                         )
                         continue
                 else:
@@ -1592,28 +1420,32 @@ class ZMClient:
                         f"{__lp} NOT in zone [{zone_name}], continuing to next zone..."
                     )
                 logger.debug(
-                    f"\n---------------------END OF ZONE LOOP # {idx} ---------------------\n\n"
+                    f"\n---------------------END OF ZONE LOOP # {idx} ---------------------"
                 )
 
             if found_match:
-                logger.debug(f"PASSED FILTERING, ADDING TO FINAL LIST")
+                logger.debug(f"{_lp} '{label}' PASSED FILTERING")
                 r_label.append(label)
                 r_conf.append(confidence)
                 r_bbox.append(bbox)
                 if (strategy := g.config.matching.strategy) == MatchStrategy.first:
                     logger.debug(
-                        f"Match strategy is '{strategy}', breaking out of LABEL loop..."
+                        f"{_lp} Match strategy: '{strategy}', breaking out of LABEL loop..."
                     )
                     break
             else:
                 logger.debug(
-                    f"'{label}' FAILED FILTERING COMPLETELY, adding to 'filtered out' data"
+                    f"{_lp} '{label}' FAILED FILTERING"
                 )
                 filter_out(label, confidence, bbox)
 
+            logger.debug(
+                f"\n---------------------END OF LABEL LOOP # {i} ---------------------"
+            )
+
         logger.warning(
-            f"OUT OF BOTH LABEL AND ZONE LOOP "
-            f"FINAL LABELS={r_label}, CONFIDENCE={r_conf}, BBOX={r_bbox}"
+            f"OUT OF LABEL AND ZONE LOOP "
+            f"FILTERED LABELS={r_label}, CONFIDENCE={r_conf}, BBOX={r_bbox}"
         )
 
         return r_label, r_conf, r_bbox
@@ -2177,8 +2009,6 @@ class ZMClient:
             f"DEBUG <>>> NOTES triggered Zone(s) {notes_zone} -- event cause {g.event_cause}"
         )
         new_notes = f"{new_notes} {g.event_cause}"
-        logger.debug(f"DBG <>>> {old_notes = } -- {new_notes = }")
-
         if old_notes is not None and g.config.zoneminder.misc.write_notes:
             if new_notes != old_notes:
                 try:

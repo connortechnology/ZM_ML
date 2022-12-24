@@ -1,5 +1,10 @@
 import logging
-from typing import List, Dict, Tuple, Optional
+from hashlib import new
+from pathlib import Path
+from typing import List, Dict, Tuple, Optional, Union
+
+import requests
+from pydantic import SecretStr
 
 from shapely.geometry import Polygon
 
@@ -40,9 +45,7 @@ def draw_filtered_bboxes(
     for bbox in filtered_bboxes:
         logger.debug(f"{lp} drawing {bbox}")
         # draw bounding box around object
-        cv2.rectangle(
-            image, (bbox[0], bbox[1]), (bbox[2], bbox[3]), color, thickness
-        )
+        cv2.rectangle(image, (bbox[0], bbox[1]), (bbox[2], bbox[3]), color, thickness)
     return image
 
 
@@ -58,21 +61,21 @@ def draw_zones(
         for zone_polygon in zone_polygons:
             try:
                 """
-                Syntax: cv2.polylines(image, [pts], isClosed, color, thickness) 
+                Syntax: cv2.polylines(image, [pts], isClosed, color, thickness)
 
-                image: It is the image on which circle is to be drawn. 
-                
-                pts: Array of polygonal curves. 
-                
-                npts: Array of polygon vertex counters. 
-                
-                ncontours: Number of curves. 
-                
-                isClosed: Flag indicating whether the drawn polylines are closed or not. If they are closed, the function draws a line from the last vertex of each curve to its first vertex. 
-                
-                color: It is the color of polyline to be drawn. For BGR, we pass a tuple. 
-                
-                thickness: It is thickness of the polyline edges. 
+                image: It is the image on which circle is to be drawn.
+
+                pts: Array of polygonal curves.
+
+                npts: Array of polygon vertex counters.
+
+                ncontours: Number of curves.
+
+                isClosed: Flag indicating whether the drawn polylines are closed or not. If they are closed, the function draws a line from the last vertex of each curve to its first vertex.
+
+                color: It is the color of polyline to be drawn. For BGR, we pass a tuple.
+
+                thickness: It is thickness of the polyline edges.
                 """
                 cv2.polylines(
                     image,
@@ -120,9 +123,7 @@ def draw_bounding_boxes(
             else:
                 label = f"{label} [{model}]"
         # draw bounding box around object
-        cv2.rectangle(
-            image, (bbox[0], bbox[1]), (bbox[2], bbox[3]), bbox_color, 2
-        )
+        cv2.rectangle(image, (bbox[0], bbox[1]), (bbox[2], bbox[3]), bbox_color, 2)
 
         # write label
         font_thickness = 1
@@ -174,3 +175,183 @@ def draw_bounding_boxes(
         )
 
     return image
+
+
+class CFGHash:
+    previous_hash: str
+    config_file: Path
+    hash: str
+
+    def __init__(self, config_file: Union[str, Path, None] = None):
+        self.previous_hash = ""
+        lp = "hash::init::"
+        self.hash = ""
+        if config_file:
+            from .validators import str_to_path
+            logger.debug(f"{lp} {config_file=}")
+            self.config_file = str_to_path(config_file)
+
+    def compute(
+        self,
+        input_file: Optional[Union[str, Path]] = None,
+        read_chunk_size: int = 65536,
+        algorithm: str = "sha256",
+    ):
+        """Hash a file using hashlib.
+        Default algorithm is SHA-256
+
+        :param input_file: File to hash
+        :param int read_chunk_size: Maximum number of bytes to be read from the file
+         at once. Default is 65536 bytes or 64KB
+        :param str algorithm: The hash algorithm name to use. For example, 'md5',
+         'sha256', 'sha512' and so on. Default is 'sha256'. Refer to
+         hashlib.algorithms_available for available algorithms
+        """
+
+        lp: str = f"hash::compute::{algorithm}::"
+        checksum = new(algorithm)  # Raises appropriate exceptions.
+        self.previous_hash = str(self.hash)
+        self.hash = ""
+        from .validators import str_to_path
+
+        if input_file:
+            logger.debug(f"{lp} input_file={input_file}")
+            self.config_file = str_to_path(input_file)
+
+        try:
+            with self.config_file.open("rb") as f:
+                for chunk in iter(lambda: f.read(read_chunk_size), b""):
+                    checksum.update(chunk)
+        except Exception as exc:
+            logger.warning(
+                f"{lp} ERROR while computing {algorithm} hash of "
+                f"'{self.config_file.as_posix()}' -> {exc}"
+            )
+            raise
+        else:
+            self.hash = checksum.hexdigest()
+            logger.debug(
+                f"{lp} the hex-digest for file '{self.config_file.as_posix()}' -> {self.hash}"
+            )
+        return self.hash
+
+    def compare(self, compare_hash: str) -> bool:
+        if self.hash == compare_hash:
+            return True
+        return False
+
+    def __repr__(self):
+        return f"{self.hash}"
+
+    def __str__(self):
+        return self.__repr__()
+
+
+from ..Libs.api import ZMApi
+def get_push_auth(api: ZMApi, user: SecretStr, pw: SecretStr, has_https: bool = False):
+    from urllib.parse import urlencode, quote_plus
+
+    lp = "get_api_auth::"
+    push_auth = ""
+    if user:
+        logger.debug(f"{lp} user supplied...")
+        if pw:
+            logger.debug(f"{lp} password supplied...")
+            if has_https:
+                logger.debug(f"{lp} HTTPS detected, using user/pass in url")
+
+                payload = {
+                    "user": user.get_secret_value(),
+                    "pass": pw.get_secret_value(),
+                }
+                push_auth = urlencode(payload, quote_via=quote_plus)
+            elif not has_https:
+                logger.warning(
+                    f"{lp} HTTP detected, using token (tokens expire, therefore "
+                    f"notification link_url will only be valid for life of token)"
+                )
+                login_data = {
+                    "user": user.get_secret_value(),
+                    "pass": pw.get_secret_value(),
+                }
+                url = f"{api.api_url}/host/login.json"
+                try:
+                    login_response = requests.post(url, data=login_data)
+                    login_response.raise_for_status()
+                    login_response_json = login_response.json()
+                except Exception as exc:
+                    logger.error(
+                        f"{lp} Error trying to obtain user: '{user.get_secret_value()}' token for push "
+                        f"notifications, token will not be provided"
+                    )
+                    logger.debug(f"{lp} EXCEPTION>>> {exc}")
+                else:
+                    push_auth = f"token={login_response_json.get('access_token')}"
+                    logger.debug(f"{lp} token retrieved!")
+
+        else:
+            logger.warning(f"{lp} pw not set while user is set")
+            # need password with username!
+            push_auth = f""
+
+    else:
+        logger.debug(f"{lp} link_url NO USER set, using creds from ZM API")
+        push_auth = f""
+
+    if not push_auth:
+        if api.access_token:
+            # Uses the zm_user and zm_password that ZMES uses if push_user and push_pass not set
+            logger.warning(
+                f"{lp} there does not seem to be a user and/or pass set using credentials from ZM API"
+            )
+            payload = {
+                "user": api.username.get_secret_value(),
+                "pass": api.password.get_secret_value(),
+            }
+            push_auth = urlencode(payload, quote_via=quote_plus)
+    return push_auth
+
+
+def check_imports():
+    try:
+        import cv2
+
+        maj, min_, patch = "", "", ""
+        x = cv2.__version__.split(".")
+        x_len = len(x)
+        if x_len <= 2:
+            maj, min_ = x
+            patch = "0"
+        elif x_len == 3:
+            maj, min_, patch = x
+            patch = patch.replace("-dev", "") or "0"
+        else:
+            logger.error(f'come and fix me again, cv2.__version__.split(".")={x}')
+
+        cv_ver = int(maj + min_ + patch)
+        if cv_ver < 420:
+            logger.error(
+                f"You are using OpenCV version {cv2.__version__} which does not support CUDA for DNNs. A minimum"
+                f" of 4.2 is required. See https://medium.com/@baudneo/install-zoneminder-1-36-x-6dfab7d7afe7"
+                f" on how to compile and install openCV 4.5.4 with CUDA"
+            )
+        del cv2
+        try:
+            import cv2.dnn
+        except ImportError:
+            logger.error(
+                f"OpenCV does not have DNN support! If you installed from "
+                f"pip you need to install 'opencv-contrib-python'. If you built from source, "
+                f"you did not compile with CUDA/cuDNN"
+            )
+            raise
+    except ImportError as e:
+        logger.error(f"Missing OpenCV 4.2+ (4.6+ recommended): {e}")
+        raise
+
+    try:
+        import numpy
+    except ImportError as e:
+        logger.error(f"Missing numpy: {e}")
+        raise
+    logger.debug("check imports:: All imports found!")

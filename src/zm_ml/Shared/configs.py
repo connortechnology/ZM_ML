@@ -3,7 +3,7 @@ import sys
 from decimal import Decimal
 from inspect import getframeinfo, stack
 from pathlib import Path
-from typing import Union, Any, Dict, List
+from typing import Union, Any, Dict, List, Type, Optional
 
 from pydantic import BaseSettings, Field, IPvAnyAddress, AnyUrl, SecretStr, validator, BaseModel
 from ..Client.Libs.api import ZMApi
@@ -12,7 +12,43 @@ from ..Client.Models.config import ConfigFileModel
 from ..Client.Models.validators import str_to_path
 
 logger = logging.getLogger("ZM_ML-Client")
-logger.debug(f'added logger in {__name__}')
+
+
+class Singleton:
+    """
+    A non-thread-safe helper class to ease implementing singletons.
+    This should be used as a decorator -- not a metaclass -- to the
+    class that should be a singleton.
+
+    The decorated class can define one `__init__` function that
+    takes only the `self` argument. Also, the decorated class cannot be
+    inherited from. Other than that, there are no restrictions that apply
+    to the decorated class.
+
+    To get the singleton instance, use the `instance` method. Trying
+    to use `__call__` will result in a `TypeError` being raised.
+
+    """
+    _decorated: Optional[Type] = None
+    _instance: Optional[object] = None
+    def __init__(self, decorated):
+        self._decorated = decorated
+
+    def instance(self, *args, **kwargs):
+        """
+        Returns the singleton instance. Upon its first call, it creates a
+        new instance of the decorated class and calls its `__init__` method.
+        On all subsequent calls, the already created instance is returned.
+
+        """
+        try:
+            return self._instance
+        except AttributeError:
+            self._instance = self._decorated(*args, **kwargs)
+            return self._instance
+
+    def __call__(self):
+        raise TypeError('Singletons must be accessed through `instance()`.')
 
 
 class ZMEnvVars(BaseSettings):
@@ -95,7 +131,7 @@ class ClientEnvVars(MLEnvVars):
 
 
 class GlobalConfig(BaseModel):
-    api: ZMApi = Field(None)
+    api: ZMApi = None
     mid: int = None
     config: ConfigFileModel = None
     config_file: Union[str, Path] = None

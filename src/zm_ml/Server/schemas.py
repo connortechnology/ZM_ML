@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, validator, BaseSettings
 from pydantic.fields import ModelField
 from .ml.coco17_cv2 import COCO17
 
-logger = logging.getLogger("ML-API")
+logger = logging.getLogger("ZM_ML-API")
 
 
 def str_to_path(v, values, field: ModelField) -> Optional[Path]:

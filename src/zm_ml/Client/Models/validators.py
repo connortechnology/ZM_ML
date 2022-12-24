@@ -9,7 +9,7 @@ from pydantic import AnyUrl
 logger = logging.getLogger("ZM_ML-Client")
 
 
-def percentage_and_pixels_validator(v, values, field):
+def validate_percentage_or_pixels(v, values, field):
     # get func name programmatically
     _name_ = inspect.currentframe().f_code.co_name
     if v:
@@ -79,7 +79,7 @@ def percentage_and_pixels_validator(v, values, field):
     return v
 
 
-def no_scheme_url_validator(v, field, values, config):
+def validate_no_scheme_url(v, field, values, config):
     _name_ = inspect.currentframe().f_code.co_name
     # logger.debug(f"{_name_}:: Validating '{field.name}' -> {v}")
     if v:
@@ -106,13 +106,27 @@ def validate_octal(v, **kwargs):
             raise ValueError(f"Invalid octal string: {v}")
     return v
 
+
 def validate_log_level(v, **kwargs):
     """Validate and transform log level string into a log level"""
     if v:
         assert isinstance(v, str)
         v = v.strip().upper()
         if re.match(r"^(DEBUG|INFO|WARN|WARNING|ERROR|FATAL|CRITICAL)$", v):
-            v = logging._nameToLevel[v]
+            if v == "WARN":
+                v = "WARNING"
+            elif v == "FATAL":
+                v = "CRITICAL"
+            if v == "INFO":
+                v = logging.INFO
+            elif v == "DEBUG":
+                v = logging.DEBUG
+            elif v == "WARNING":
+                v = logging.WARNING
+            elif v == "ERROR":
+                v = logging.ERROR
+            elif v == "CRITICAL":
+                v = logging.CRITICAL
         else:
             raise ValueError(f"Invalid log level string: {v}")
     return v

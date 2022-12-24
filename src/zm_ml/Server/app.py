@@ -34,10 +34,19 @@ from .imports import (
     ModelFrameWork,
 )
 
-__version__ = "0.0.1"
+__version__ = "0.0.1a"
 __version_type__ = "dev"
 
-logger = logging.getLogger("ML-API")
+logger = logging.getLogger("ZM_ML-API")
+SERVER_LOG_FORMAT = logging.Formatter(
+    "%(asctime)s.%(msecs)04d %(name)s[%(process)s] %(levelname)s %(module)s:%(lineno)d -> %(message)s",
+    "%m/%d/%y %H:%M:%S",
+)
+logger.setLevel(logging.DEBUG)
+logger.addHandler(logging.NullHandler())
+
+
+logger = logging.getLogger("ZM_ML-API")
 logger.setLevel(logging.INFO)
 formatter = logging.Formatter(
     "%(asctime)s.%(msecs)04d %(name)s[%(process)s] %(levelname)s %(module)s:%(lineno)d -> %(message)s",
