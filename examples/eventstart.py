@@ -18,22 +18,14 @@ import uvloop
 import asyncio
 
 from zm_ml import Client
-from zm_ml.Client import str_to_path, CLIENT_LOG_FORMAT
+from zm_ml.Shared.Models.validators import str_to_path
 from zm_ml.Shared.configs import ClientEnvVars, GlobalConfig
-from zm_ml.Client.main import parse_client_config_file, create_global_config, init_logs
-from src.zm_ml.Shared.Log.handlers import BufferedLogHandler
+from zm_ml.Client.main import parse_client_config_file, create_global_config, create_logs
 
 __version__ = "0.0.0-a1"
 __version_type__ = "dev"
 # Setup basic console logging (hook into library logging)
-logger = logging.getLogger("ZM_ML-Client")
-console_handler = logging.StreamHandler(stream=sys.stdout)
-console_handler.setFormatter(CLIENT_LOG_FORMAT)
-buffered_log_handler = BufferedLogHandler()
-buffered_log_handler.setFormatter(CLIENT_LOG_FORMAT)
-logger.setLevel(logging.DEBUG)
-logger.addHandler(console_handler)
-logger.addHandler(buffered_log_handler)
+logger: logging.Logger = create_logs()
 
 def _parse_cli():
     from argparse import ArgumentParser

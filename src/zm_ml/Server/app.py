@@ -37,7 +37,8 @@ from .imports import (
 __version__ = "0.0.1a"
 __version_type__ = "dev"
 
-logger = logging.getLogger("ZM_ML-API")
+SERVER_LOGGER_NAME = "ZM_ML-API"
+logger = logging.getLogger(SERVER_LOGGER_NAME)
 SERVER_LOG_FORMAT = logging.Formatter(
     "%(asctime)s.%(msecs)04d %(name)s[%(process)s] %(levelname)s %(module)s:%(lineno)d -> %(message)s",
     "%m/%d/%y %H:%M:%S",
@@ -45,23 +46,12 @@ SERVER_LOG_FORMAT = logging.Formatter(
 logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.NullHandler())
 
-
-logger = logging.getLogger("ZM_ML-API")
-logger.setLevel(logging.INFO)
-formatter = logging.Formatter(
-    "%(asctime)s.%(msecs)04d %(name)s[%(process)s] %(levelname)s %(module)s:%(lineno)d -> %(message)s",
-    "%m/%d/%y %H:%M:%S",
-)
-stream_handler = logging.StreamHandler(stream=sys.stdout)
-stream_handler.setFormatter(formatter)
-logger.addHandler(stream_handler)
-
 logger.info(
     f"ZM_MLAPI: {__version__} (type: {__version_type__}) [Python: {python_version()} - "
     f"OpenCV: {cv2.__version__} - Numpy: {np.__version__} - FastAPI: {fastapi_version} - "
     f"Pydantic: {pydantic.VERSION}]"
 )
-
+ 
 app = FastAPI(debug=True)
 g = GlobalConfig()
 LP: str = "mlapi:"
@@ -95,7 +85,17 @@ LP: str = "mlapi:"
     setattr(cls, "as_form", as_form_func)
     return cls"""
 
-
+def create_logs() -> logging.Logger:
+    from zm_ml.Shared.Log.handlers import BufferedLogHandler
+    logger = logging.getLogger(SERVER_LOGGER_NAME)
+    console_handler = logging.StreamHandler(stream=sys.stdout)
+    console_handler.setFormatter(SERVER_LOG_FORMAT)
+    buffered_log_handler = BufferedLogHandler()
+    buffered_log_handler.setFormatter(SERVER_LOG_FORMAT)
+    logger.setLevel(logging.DEBUG)
+    logger.addHandler(console_handler)
+    logger.addHandler(buffered_log_handler)
+    return logger
 def get_global_config() -> GlobalConfig:
     return g
 
@@ -305,36 +305,36 @@ async def single_detection(
 
 class MLAPI:
     cached_settings: Settings
-    env_file: Path
+    cfg_file: Path
     server: uvicorn.Server
 
-    def __init__(self, env_file: Union[str, Path], run_server: bool = False):
+    def __init__(self, cfg_file: Union[str, Path], run_server: bool = False):
         """
         Initialize the FastAPI MLAPI server object, read a supplied environment file, and start the server if requested.
-        :param env_file: The settings file to read in the Bash ENVIRONMENT style.
+        :param cfg_file: The settings file to read in the Bash ENVIRONMENT style.
         :param run_server: Start the server after initialization.
         """
 
-        if not isinstance(env_file, (str, Path)):
-            raise ValueError(
-                f"The supplied ENVIRONMENT file must be a str or pathlib.Path object, not {type(env_file)}"
+        if not isinstance(cfg_file, (str, Path)):
+            raise TypeError(
+                f"The YAML config file must be a str or pathlib.Path object, not {type(cfg_file)}"
             )
-        # test that the env file exists and is a file
-        self.env_file = Path(env_file)
-        if not self.env_file.exists():
-            raise FileNotFoundError(f"'{self.env_file.as_posix()}' does not exist")
-        elif not self.env_file.is_file():
-            raise ValueError(f"'{self.env_file.as_posix()}' is not a file")
+        # test that the file exists and is a file
+        self.cfg_file = Path(cfg_file)
+        if not self.cfg_file.exists():
+            raise FileNotFoundError(f"'{self.cfg_file.as_posix()}' does not exist")
+        elif not self.cfg_file.is_file():
+            raise TypeError(f"'{self.cfg_file.as_posix()}' is not a file")
         self.read_settings()
         if run_server:
             self.start_server()
 
     def read_settings(self):
         logger.info(
-            f"reading settings from '{self.env_file.as_posix()}' - {self.env_file.exists() = }"
+            f"reading settings from '{self.cfg_file.as_posix()}' - {self.cfg_file.exists() = }"
         )
-        if self.env_file.exists():
-            self.cached_settings = Settings(_env_file=self.env_file)
+        if self.cfg_file.exists():
+            self.cached_settings = Settings(_env_file=self.cfg_file)
             get_global_config().settings = self.cached_settings
             # logger.debug(f"{g.settings = }")
             available_models = (
@@ -355,7 +355,7 @@ class MLAPI:
                     f"{LP} TOTAL ThreadPool loading {len(futures)} models took {time.perf_counter() - timer:.5f}ms"
                 )
         else:
-            raise FileNotFoundError(f"'{self.env_file.as_posix()}' does not exist")
+            raise FileNotFoundError(f"'{self.cfg_file.as_posix()}' does not exist")
 
         return self.cached_settings
 

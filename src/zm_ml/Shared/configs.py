@@ -9,7 +9,7 @@ from pydantic import BaseSettings, Field, IPvAnyAddress, AnyUrl, SecretStr, vali
 from ..Client.Libs.api import ZMApi
 from ..Client.Models.config import ConfigFileModel
 
-from ..Client.Models.validators import str_to_path
+from .Models.validators import str_to_path
 
 logger = logging.getLogger("ZM_ML-Client")
 

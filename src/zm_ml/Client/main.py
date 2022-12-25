@@ -26,7 +26,6 @@ from .Models.utils import CFGHash, get_push_auth, check_imports
 from .Models.config import (
     ConfigFileModel,
     ServerRoute,
-    Testing,
     OverRideMatchFilters,
     MonitorZones,
     MatchFilters,
@@ -37,13 +36,15 @@ from .Models.config import (
     MatchStrategy,
     NotificationZMURLOptions,
 )
+from ..Shared.Models.config import Testing
 from ..Shared.configs import ClientEnvVars, GlobalConfig
 
 __version__: str = "0.0.1"
 __version_type__: str = "dev"
 ZM_INSTALLED: Optional[str] = which("zmpkg.pl")
 
-logger = logging.getLogger("ZM_ML-Client")
+LOGGER_NAME: str = "ZM_ML_Client"
+logger = logging.getLogger(LOGGER_NAME)
 CLIENT_LOG_FORMAT = logging.Formatter(
     "%(asctime)s.%(msecs)04d %(name)s[%(process)s] %(levelname)s %(module)s:%(lineno)d -> %(message)s",
     "%m/%d/%y %H:%M:%S",
@@ -54,6 +55,19 @@ logger.addHandler(logging.NullHandler())
 ENV_VARS: Optional[ClientEnvVars] = None
 g: Optional[GlobalConfig] = None
 LP: str = "Client::"
+
+def create_logs() -> logging.Logger:
+    import sys
+    from ..Shared.Log.handlers import BufferedLogHandler
+    logger = logging.getLogger(LOGGER_NAME)
+    console_handler = logging.StreamHandler(stream=sys.stdout)
+    console_handler.setFormatter(CLIENT_LOG_FORMAT)
+    buffered_log_handler = BufferedLogHandler()
+    buffered_log_handler.setFormatter(CLIENT_LOG_FORMAT)
+    logger.setLevel(logging.DEBUG)
+    logger.addHandler(console_handler)
+    logger.addHandler(buffered_log_handler)
+    return logger
 
 async def init_logs(config: ConfigFileModel) -> None:
     """Initialize the logging system."""

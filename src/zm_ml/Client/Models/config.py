@@ -1,23 +1,16 @@
 import logging
 import re
-import tempfile
 from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Tuple, Pattern, Union, Any, Optional
 
 from pydantic import BaseModel, Field, AnyUrl, validator, IPvAnyAddress, SecretStr
 
-from .validators import validate_percentage_or_pixels, validate_no_scheme_url, str_to_path, validate_log_level
+from .validators import validate_percentage_or_pixels
+from ...Shared.Models.validators import validate_no_scheme_url
+from ...Shared.Models.config import Testing, SystemSettings, DefaultEnabled, DefaultNotEnabled, LoggingSettings
 
 logger = logging.getLogger("ZM_ML-Client")
-
-
-class DefaultEnabled(BaseModel):
-    enabled: bool = Field(True)
-
-
-class DefaultNotEnabled(DefaultEnabled):
-    enabled: bool = Field(False)
 
 
 class ZMAPISettings(BaseModel):
@@ -34,42 +27,6 @@ class ZMAPISettings(BaseModel):
     _validate_host_portal = validator("api", "portal", allow_reuse=True, pre=True)(
         validate_no_scheme_url
     )
-
-
-class LoggingLevelBase(BaseModel):
-    level: Optional[int] = None
-
-    _validate_log_level = validator('level', allow_reuse=True, pre=True, always=True)(validate_log_level)
-
-
-class LoggingSettings(LoggingLevelBase):
-    class ConsoleLogging(DefaultEnabled, LoggingLevelBase):
-        pass
-
-    class SyslogLogging(DefaultNotEnabled, LoggingLevelBase):
-        address: Optional[str] = Field("")
-
-    class FileLogging(DefaultEnabled, LoggingLevelBase):
-        path: Path = Field('/var/log/zm')
-        filename_prefix: str = Field("zmML")
-        user: str = Field(default="www-data")
-        group: str = Field(default="www-data")
-
-        _validate_path = validator("path", allow_reuse=True, pre=True)(
-            str_to_path
-        )
-    class SanitizeLogging(DefaultNotEnabled):
-        replacement_str: str = Field(default="<sanitized>")
-
-    class IntegrateZMLogging(DefaultNotEnabled):
-        debug_level: int = Field(default=4)
-
-    level = logging.INFO
-    console: ConsoleLogging = Field(default_factory=ConsoleLogging)
-    syslog: SyslogLogging = Field(default_factory=SyslogLogging)
-    integrate_zm: IntegrateZMLogging = Field(default_factory=IntegrateZMLogging)
-    file: FileLogging = Field(default_factory=FileLogging)
-    sanitize: SanitizeLogging = Field(default_factory=SanitizeLogging)
 
 
 class ServerRoute(BaseModel):
@@ -420,17 +377,6 @@ class MonitorsSettings(BaseModel):
     static_objects: Optional[OverRideStaticObjects] = Field(default_factory=OverRideStaticObjects)
     filters: Optional[OverRideMatchFilters] = Field(default_factory=OverRideMatchFilters)
     zones: Optional[Dict[str, MonitorZones]] = Field(default_factory=dict)
-
-
-class Testing(BaseModel):
-    enabled: bool = Field(False)
-    substitutions: Dict[str, str] = Field(default_factory=dict)
-
-
-class SystemSettings(BaseModel):
-    variable_data_path: Optional[Path] = Field(Path("/var/lib/zm_ml"))
-    tmp_path: Optional[Path] = Field(Path(tempfile.gettempdir()) / "zm_ml")
-    thread_workers: Optional[int] = Field(4)
 
 
 class ConfigFileModel(BaseModel):

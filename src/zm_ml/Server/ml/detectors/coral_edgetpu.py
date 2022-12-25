@@ -10,7 +10,7 @@ from ...imports import (
     TPUModelConfig,
 
 )
-from ...schemas import ModelType
+from src.zm_ml.Server.Models.schemas import ModelType
 
 logger = getLogger("ML-API")
 LP: str = "Coral:"

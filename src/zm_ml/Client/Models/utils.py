@@ -187,7 +187,7 @@ class CFGHash:
         lp = "hash::init::"
         self.hash = ""
         if config_file:
-            from .validators import str_to_path
+            from ...Shared.Models.validators import str_to_path
             logger.debug(f"{lp} {config_file=}")
             self.config_file = str_to_path(config_file)
 
@@ -212,7 +212,7 @@ class CFGHash:
         checksum = new(algorithm)  # Raises appropriate exceptions.
         self.previous_hash = str(self.hash)
         self.hash = ""
-        from .validators import str_to_path
+        from ...Shared.Models.validators import str_to_path
 
         if input_file:
             logger.debug(f"{lp} input_file={input_file}")
