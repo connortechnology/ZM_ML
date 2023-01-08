@@ -1,7 +1,12 @@
 """This stores the MMAP data needed to determine image offsets in SHM"""
 from collections import namedtuple
+import logging
 
 from pydantic import BaseModel
+
+from ..Log import CLIENT_LOGGER_NAME
+
+logger = logging.getLogger(CLIENT_LOGGER_NAME)
 
 
 class SharedBase(BaseModel):

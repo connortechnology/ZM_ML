@@ -5,8 +5,9 @@ import requests
 
 from ..main import get_global_config
 from ...Shared.configs import GlobalConfig
+from ..main import CLIENT_LOGGER_NAME
 
-logger = logging.getLogger("ZM_ML-Client")
+logger = logging.getLogger(CLIENT_LOGGER_NAME)
 g: Optional[GlobalConfig] = None
 
 

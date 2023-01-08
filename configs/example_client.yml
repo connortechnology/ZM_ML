@@ -3,7 +3,7 @@
 
 substitutions:
   # Order matters!
-  DATA_DIR: "/etc/zm/ml"
+  DATA_DIR: "/etc/zm/ML"
 
   # These will be imported from the file to be used as variables (secrets)
   IncludeFile: "${DATA_DIR}/secrets.yml"
@@ -25,7 +25,7 @@ system:
   # Store temp data in this Directory [/tmp/zm_ml]
   tmp_path:
 
-  # Override the default config path [/etc/zm/ml]
+  # Override the default config path [/etc/zm/ML]
   config_path:
   # Maximum parallel threaded processes [4]
   thread_workers: 4
@@ -383,8 +383,8 @@ monitors:
 
     zones:
     # -- These are zones that are defined in the config file on top of imported ZoneMinder zones
-    # -- If you import ZM zones you can add a ml config for that zone here.
-    # -- Example: If the imported zone is named "Front Yard", this would set the ml config for it.
+    # -- If you import ZM zones you can add a ML config for that zone here.
+    # -- Example: If the imported zone is named "Front Yard", this would set the ML config for it.
         Front Yard:
           pattern: "(person|car|truck|bus|dog|cat)"
 

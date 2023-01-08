@@ -1,14 +1,17 @@
 from logging import getLogger
 from typing import Optional, Union
 
-from ....imports import ModelProcessor, BaseModelOptions, BaseModelConfig, CV2YOLOModelConfig, CV2YOLOModelOptions, CV2TFModelConfig, CV2TFModelOptions, CV2HOGModelConfig
+from ....Models.config import BaseModelOptions, CV2YOLOModelOptions, CV2TFModelOptions, BaseModelConfig, \
+    CV2YOLOModelConfig, CV2HOGModelConfig, CV2TFModelConfig
+from src.zm_ml.Shared.Models.Enums import ModelProcessor
 
 import cv2
 import numpy as np
 
 from ...file_locks import FileLock
 
-logger = getLogger("ML-API")
+from zm_ml.Server import SERVER_LOGGER_NAME
+logger = getLogger(SERVER_LOGGER_NAME)
 LP: str = "OpenCV DNN:"
 
 

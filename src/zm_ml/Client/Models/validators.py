@@ -3,7 +3,9 @@ import re
 import inspect
 from typing import Optional, Dict, Tuple
 
-logger = logging.getLogger("ZM_ML-Client")
+from ..Log import CLIENT_LOGGER_NAME
+
+logger = logging.getLogger(CLIENT_LOGGER_NAME)
 
 
 def validate_percentage_or_pixels(v, values, field):

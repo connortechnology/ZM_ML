@@ -8,12 +8,15 @@ import numpy as np
 from jose import jwt
 from passlib.context import CryptContext
 
-logger = getLogger("ZM_ML-API")
+from .Log import SERVER_LOGGER_NAME, SERVER_LOG_FORMAT
+
+
+logger = getLogger(SERVER_LOGGER_NAME)
 ACCESS_TOKEN_EXPIRE_MINUTES = 30  # 30 minutes
 REFRESH_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 ALGORITHM = "HS256"
-JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY")  # should be kept secret
-JWT_REFRESH_SECRET_KEY = os.environ.get("JWT_REFRESH_SECRET_KEY")  # should be kept secret
+JWT_SECRET_KEY = os.environ.get("ML_SERVER_JWT_SECRET_KEY")  # should be kept secret
+JWT_REFRESH_SECRET_KEY = os.environ.get("ML_SERVER_JWT_REFRESH_SECRET_KEY")  # should be kept secret
 
 password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

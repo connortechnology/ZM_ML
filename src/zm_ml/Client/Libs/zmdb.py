@@ -1,20 +1,23 @@
+from __future__ import annotations
 import glob
 from configparser import ConfigParser
 from datetime import datetime
 from decimal import Decimal
 import logging
 from pathlib import Path
-from typing import Optional, Union, Tuple
+from typing import Optional, Union, Tuple, TYPE_CHECKING
 
 from sqlalchemy import MetaData, create_engine, select
 from sqlalchemy.engine import Engine, Connection, CursorResult
 from sqlalchemy.exc import SQLAlchemyError
 
+from ..Log import CLIENT_LOGGER_NAME
+if TYPE_CHECKING:
+    from ..main import GlobalConfig
 
-logger = logging.getLogger("ZM_ML-Client")
-LOGGING_EXTRA = {}
+logger = logging.getLogger(CLIENT_LOGGER_NAME)
 LP = "zmdb::"
-g = None
+g: Optional[GlobalConfig] = None
 
 
 def _rel_path(eid: int, mid: int, scheme: str, dt: Optional[datetime] = None) -> str:
@@ -75,7 +78,9 @@ class ZMDB:
                 logger.error(f"{lp} error opening ZoneMinder .conf files! -> {files}")
             else:
                 logger.debug(f"{lp} ZoneMinder .conf files -> {files}")
-                logger.debug(f"{lp} ZoneMinder .conf files DATA as ConfigParser -> {config_file}")
+                for section in config_file.sections():
+                    for key, value in config_file.items(section):
+                        logger.debug(f"{section} >>> {key} = {value}")
                 conf_data = config_file["zm_root"]
                 if not db_config.db_user:
                     db_config.db_user = conf_data["ZM_DB_USER"]
@@ -109,6 +114,7 @@ class ZMDB:
             logger.error(f"Exception while checking DB connection on _check_conn() -> {e}")
 
     def _refresh_meta(self):
+        self.meta = None
         self.meta = MetaData(self.engine)
         self.meta.reflect(only=["Events", "Monitors", "Monitor_Status", "Storage"])
 
@@ -138,10 +144,10 @@ class ZMDB:
         if mid:
             mid = int(mid)
             logger.debug(f"{LP} ZoneMinder DB returned Monitor ID: {mid}")
+            if g.mid and g.mid != mid:
+                logger.debug(f"{LP} CLI supplied monitor ID ({g.mid}) INCORRECT! Changed to: {mid}")
             g.mid = mid
             # add extra logging data
-            global LOGGING_EXTRA
-            LOGGING_EXTRA = {"mid": mid, "eid": eid}
         else:
             logger.warning(
                 f"{LP} the database query did not return a monitor ID for this event?"

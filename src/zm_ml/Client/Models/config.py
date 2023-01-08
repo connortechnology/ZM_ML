@@ -9,8 +9,9 @@ from pydantic import BaseModel, Field, AnyUrl, validator, IPvAnyAddress, SecretS
 from .validators import validate_percentage_or_pixels
 from ...Shared.Models.validators import validate_no_scheme_url
 from ...Shared.Models.config import Testing, SystemSettings, DefaultEnabled, DefaultNotEnabled, LoggingSettings
+from ..Log import CLIENT_LOGGER_NAME
 
-logger = logging.getLogger("ZM_ML-Client")
+logger = logging.getLogger(CLIENT_LOGGER_NAME)
 
 
 class ZMAPISettings(BaseModel):
@@ -382,7 +383,7 @@ class MonitorsSettings(BaseModel):
 class ConfigFileModel(BaseModel):
     testing: Testing = Field(default_factory=Testing)
     substitutions: Dict[str, str] = Field(default_factory=dict)
-    config_path: Path = Field(Path("/etc/zm/ml"))
+    config_path: Path = Field(Path("/etc/zm/ML"))
     system: SystemSettings = Field(default_factory=SystemSettings)
     zoneminder: ZMAPISettings = Field(default_factory=ZMAPISettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
@@ -403,3 +404,4 @@ class ConfigFileModel(BaseModel):
             if isinstance(v, str):
                 v = Path(v)
         return v
+

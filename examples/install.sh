@@ -19,13 +19,15 @@ INSTALLER=${INSTALLER:-$(which apt-get || which yum)}
 # If you do not want them, pass them as variables to install.sh
 # example: sudo INSTALL_YOLO4=no ./install.sh
 
-INSTALL_YOLOV3=${INSTALL_YOLOV3:-yes}
-INSTALL_TINYYOLOV3=${INSTALL_TINYYOLOV3:-yes}
+INSTALL_YOLOV3=${INSTALL_YOLOV3:-no}
+INSTALL_TINYYOLOV3=${INSTALL_TINYYOLOV3:-no}
 INSTALL_YOLOV4=${INSTALL_YOLOV4:-yes}
 INSTALL_TINYYOLOV4=${INSTALL_TINYYOLOV4:-yes}
+INSTALL_YOLOv4_P6=${INSTALL_YOLOv4_P6:-no}
 INSTALL_CORAL_EDGETPU=${INSTALL_CORAL_EDGETPU:-no}
-INSTALL_TINYYOLOV7=${INSTALL_TINYYOLOV7:-no}
+INSTALL_TINYYOLOV7=${INSTALL_TINYYOLOV7:-yes}
 INSTALL_YOLOV7=${INSTALL_YOLOV7:-no}
+INSTALL_YOLOv7X=${INSTALL_YOLOv7X:-no}
 
 TARGET_CONFIG=${TARGET_CONFIG:-'/etc/zm/ml'}
 TARGET_DATA=${TARGET_DATA:-'/var/lib/zm_ml'}
@@ -561,7 +563,7 @@ display_help() {
         --no-download-models: If specified will not download any models.
         You may want to do this if using mlapi
 
-        --hook-config-upgrade: Updates objectconfig.ini with any new/modified attributes
+        --hook-config-upgrade: Updates objectconfig.ini with any new/modifie22222222222d attributes
         and creates a sample output file. You will need to manually merge/update/review your real config
         --no-hook-config-upgrade: skips aboe process
 

@@ -14,11 +14,13 @@ import numpy as np
 import requests
 from requests import Response
 
-
-from ...imports import ModelProcessor, OpenALPRLocalModelOptions, ALPRModelConfig, ALPRAPIType, ALPRService, OpenALPRCloudModelOptions, PlateRecognizerModelOptions
+from ...Models.config import OpenALPRLocalModelOptions, \
+    OpenALPRCloudModelOptions, PlateRecognizerModelOptions, ALPRModelConfig
+from src.zm_ml.Shared.Models.Enums import ModelProcessor, ALPRAPIType, ALPRService
 from ...utils import resize_cv2_image
 
-logger = getLogger("ML-API")
+from zm_ml.Server import SERVER_LOGGER_NAME
+logger = getLogger(SERVER_LOGGER_NAME)
 
 
 class AlprBase:

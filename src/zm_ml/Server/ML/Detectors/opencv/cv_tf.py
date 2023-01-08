@@ -2,12 +2,16 @@ import time
 from logging import getLogger
 from typing import Optional
 
-from .cv_base import CV2Base
-from ....imports import ModelProcessor, BaseModelOptions, BaseModelConfig, cv2, np, CV2YOLOModelConfig, CV2TFModelConfig
+import cv2
+import numpy as np
 
+from .cv_base import CV2Base
+from ....Models.config import BaseModelOptions, BaseModelConfig, CV2YOLOModelConfig, CV2TFModelConfig
+from src.zm_ml.Shared.Models.Enums import ModelProcessor
 
 LP: str = "OpenCV:TF:"
-logger = getLogger("ML-API")
+from zm_ml.Server import SERVER_LOGGER_NAME
+logger = getLogger(SERVER_LOGGER_NAME)
 
 
 class CV2TFDetector(CV2Base):

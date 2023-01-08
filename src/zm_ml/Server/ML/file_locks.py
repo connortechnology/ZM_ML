@@ -8,7 +8,8 @@ from portalocker import BoundedSemaphore, AlreadyLocked
 
 from ..app import locks_enabled, get_global_config
 
-logger = getLogger("ML-API")
+from zm_ml.Server import SERVER_LOGGER_NAME
+logger = getLogger(SERVER_LOGGER_NAME)
 LP: str = 'Lock:'
 
 
@@ -28,7 +29,7 @@ class FileLock:
                     logger.warning(
                         f"{LP} '{self.name}' LOCK ALREADY EXISTS BUT IS NOT A BoundedSemaphore!!! creating new lock"
                     )
-            if locks := get_global_config().settings.lock_settings:
+            if locks := get_global_config().config.lock_settings:
                 self.lock_dir = locks.lock_dir
                 lock = locks.get(self.processor.casefold())
                 self.lock_name = f"{lock.name}-{getuid()}"

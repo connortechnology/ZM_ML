@@ -13,8 +13,9 @@ from pydantic import BaseModel, Field, validator, SecretStr, AnyUrl, IPvAnyAddre
 
 from ..main import get_global_config
 from ...Shared.configs import GlobalConfig
+from ..main import CLIENT_LOGGER_NAME
 
-logger = logging.getLogger("ZM_ML-Client")
+logger = logging.getLogger(CLIENT_LOGGER_NAME)
 g: Optional[GlobalConfig] = None
 
 
@@ -461,6 +462,7 @@ class ZMNinja:
             if pkl_path:
                 logger.debug(f"{lp} serializing timestamp to {pkl_path}")
                 try:
+                    pkl_path.touch(exist_ok=True, mode=0o640)
                     # write_bytes as pickle is binary data
                     pkl_path.write_bytes(pickle.dumps(time.time()))
                 except Exception as e:

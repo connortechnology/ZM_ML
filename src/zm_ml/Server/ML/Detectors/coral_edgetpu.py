@@ -2,17 +2,15 @@ import time
 from logging import getLogger
 
 from PIL import Image
+import cv2
+import numpy as np
 
 from ..file_locks import FileLock
-from ...imports import (
-    cv2,
-    np,
-    TPUModelConfig,
+from ...Models.config import TPUModelConfig
+from src.zm_ml.Shared.Models.Enums import ModelType
 
-)
-from src.zm_ml.Server.Models.schemas import ModelType
-
-logger = getLogger("ML-API")
+from zm_ml.Server import SERVER_LOGGER_NAME
+logger = getLogger(SERVER_LOGGER_NAME)
 LP: str = "Coral:"
 
 # global placeholders for TPU lib imports

@@ -2,12 +2,16 @@ import time
 from logging import getLogger
 from typing import Optional
 
+import cv2
+import numpy as np
 
-from ....imports import ModelProcessor, BaseModelOptions, BaseModelConfig, cv2, np, CV2YOLOModelConfig
+from ....Models.config import BaseModelOptions, BaseModelConfig, CV2YOLOModelConfig
+from .....Shared.Models.Enums import ModelProcessor
 from .cv_base import CV2Base
 
 LP: str = "OpenCV:YOLO:"
-logger = getLogger("ML-API")
+from zm_ml.Server import SERVER_LOGGER_NAME
+logger = getLogger(SERVER_LOGGER_NAME)
 
 
 class CV2YOLODetector(CV2Base):

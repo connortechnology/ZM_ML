@@ -5,20 +5,23 @@ from logging import getLogger
 
 import numpy as np
 
-from ...imports import RekognitionModelConfig, cv2
-
+from ...Models.config import RekognitionModelConfig
 
 LP: str = "AWS:Rekognition:"
-logger = getLogger("ML-API")
-
-try:
-    import boto3
-except ImportError:
-    logger.warning(f"{LP} the 'boto3' package is needed for aws rekognition support!")
-
+from zm_ml.Server import SERVER_LOGGER_NAME
+logger = getLogger(SERVER_LOGGER_NAME)
+boto3 = None
 
 class AwsRekognition:
+    init: bool = False
     def __init__(self, model_config: RekognitionModelConfig):
+        global boto3
+        try:
+            import boto3
+        except ImportError:
+            logger.warning(
+                f"{LP} the 'boto3' package is needed for aws rekognition support! not loading rekognition model")
+            return
         self.config = model_config
         self.options = model_config.detection_options
         self.name: str = self.config.name
@@ -31,6 +34,7 @@ class AwsRekognition:
         }
         self.model = boto3.client("rekognition", **boto3_kwargs)
         logger.debug(f"{LP} initialized")
+        self.init = True
 
     def detect(self, input_image: np.ndarray):
         b_boxes, labels, confs = [], [], []

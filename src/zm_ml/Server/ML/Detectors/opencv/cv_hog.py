@@ -1,11 +1,13 @@
 from logging import getLogger
 
-from ...imports import CV2HOGModelConfig
-from ...imports import cv2
+import cv2
+
+from ....imports import CV2HOGModelConfig
 from .cv_base import CV2Base
 
 LP: str = "OpenCV:HOG:"
-logger = getLogger("ML-API")
+from zm_ml.Server import SERVER_LOGGER_NAME
+logger = getLogger(SERVER_LOGGER_NAME)
 
 
 class CV2HOG(CV2Base):

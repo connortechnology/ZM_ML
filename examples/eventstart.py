@@ -43,13 +43,14 @@ def _parse_cli():
     )
     parser.add_argument("--config", "-C", help="Config file to use", type=Path)
     parser.add_argument(
-        "--event",
+        "--event-mode",
         "-E",
         action="store_true",
         dest="event",
-        help="Run in event mode (triggered by a ZM motion alarm/event)",
+        help="Run in event mode (triggered by a ZM event)",
     )
     parser.add_argument(
+        "--event-id",
         "--eid",
         "-e",
         help="Event ID to process (Required for --event/-E)",
@@ -58,7 +59,7 @@ def _parse_cli():
         default=0,
     )
     parser.add_argument(
-        "--monitor",
+        "--monitor-id",
         "--mid",
         "-m",
         help="Monitor ID to process (Required for --shm)",
@@ -95,10 +96,10 @@ async def main():
     if args.event:
         _mode = "event"
         logger.debug(f"{lp} Running in event mode")
-        if args.eid == 0:
+        if eid == 0:
             logger.error(f"{lp} Event ID is required for event mode")
             sys.exit(1)
-        if args.mid == 0:
+        if mid == 0:
             logger.warning(
                 f"{lp} When monitor ID is not supplied in event mode, ZoneMinder DB is queried for it"
             )
@@ -106,9 +107,10 @@ async def main():
     elif args.shm:
         _mode = "shm"
         logger.debug(f"{lp} Running in shared memory mode (Monitor ID REQUIRED)")
-        if args.mid == 0:
+        if mid == 0:
             logger.error(f"{lp} Monitor ID is required for shared memory mode")
             sys.exit(1)
+
     if "config" in args and args.config:
         # logger.info(f"Configuration file supplied as: {args.config}")
         cfg_file = args.config
@@ -133,7 +135,7 @@ async def main():
     _end_init = time.perf_counter()
     __event_modes = ["event", ""]
     if _mode in __event_modes:
-        return await zm_client.detect(eid=eid, mid=mid)
+        return await zm_client.detect(eid=eid, mid=g.mid)
 
     elif _mode == "shm":
         return await zm_client.detect(mid=mid)
@@ -147,7 +149,6 @@ if __name__ == "__main__":
     ENV_VARS = ClientEnvVars()
     g: GlobalConfig = create_global_config()
     g.Environment = ENV_VARS
-    logger.debug(f"About to run event loop -  g [type: {type(g)}] ")
     detections = loop.run_until_complete(main())
     # Allow 250ms for aiohttp SSl session context to close properly
     loop.run_until_complete(asyncio.sleep(0.25))

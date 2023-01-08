@@ -5,13 +5,13 @@ from typing import List, Dict, Tuple, Optional, Union
 
 import requests
 from pydantic import SecretStr
-
 from shapely.geometry import Polygon
-
 import cv2
 import numpy as np
 
-logger = logging.getLogger("ZM_ML-Client")
+from ..Log import CLIENT_LOGGER_NAME
+
+logger = logging.getLogger(CLIENT_LOGGER_NAME)
 
 SLATE_COLORS: List[Tuple[int, int, int]] = [
     (39, 174, 96),

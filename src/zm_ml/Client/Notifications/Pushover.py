@@ -14,8 +14,9 @@ from pydantic import BaseModel, Field, AnyUrl
 
 from ..main import get_global_config
 from ...Shared.configs import GlobalConfig
+from ..main import CLIENT_LOGGER_NAME
 
-logger = logging.getLogger("ZM_ML-Client")
+logger = logging.getLogger(CLIENT_LOGGER_NAME)
 g: Optional[GlobalConfig] = None
 
 
@@ -224,6 +225,7 @@ class Pushover:
             if data:
                 if isinstance(data, float):
                     try:
+                        file.touch(exist_ok=True, mode=0o640)
                         file.write_bytes(pickle.dumps(data))
                         logger.debug(
                             f"{lp} LAST successful push sent at {datetime.datetime.fromtimestamp(data)} ({data}) to '{file}'"

@@ -43,12 +43,12 @@ __version__: str = "0.0.1"
 __version_type__: str = "dev"
 ZM_INSTALLED: Optional[str] = which("zmpkg.pl")
 
-LOGGER_NAME: str = "ZM_ML_Client"
-logger = logging.getLogger(LOGGER_NAME)
+CLIENT_LOGGER_NAME: str = "ZM_ML-Client"
 CLIENT_LOG_FORMAT = logging.Formatter(
     "%(asctime)s.%(msecs)04d %(name)s[%(process)s] %(levelname)s %(module)s:%(lineno)d -> %(message)s",
     "%m/%d/%y %H:%M:%S",
 )
+logger = logging.getLogger(CLIENT_LOGGER_NAME)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.NullHandler())
 
@@ -59,7 +59,7 @@ LP: str = "Client::"
 def create_logs() -> logging.Logger:
     import sys
     from ..Shared.Log.handlers import BufferedLogHandler
-    logger = logging.getLogger(LOGGER_NAME)
+    logger = logging.getLogger(CLIENT_LOGGER_NAME)
     console_handler = logging.StreamHandler(stream=sys.stdout)
     console_handler.setFormatter(CLIENT_LOG_FORMAT)
     buffered_log_handler = BufferedLogHandler()
@@ -73,7 +73,7 @@ async def init_logs(config: ConfigFileModel) -> None:
     """Initialize the logging system."""
     import getpass
     import grp
-    from src.zm_ml.Shared.Log.handlers import BufferedLogHandler
+    from ..Shared.Log.handlers import BufferedLogHandler
 
     sys_user: str = getpass.getuser()
     sys_gid: int = os.getgid()
@@ -330,7 +330,7 @@ class StaticObjects(BaseModel):
                 logger.warning(f"{lp} no history data file found for monitor '{g.mid}'")
         else:
             try:
-                filename.touch(exist_ok=True)
+                filename.touch(exist_ok=True, mode=0o640)
                 with filename.open("wb") as f:
                     pickle.dump(labels, f)
                     pickle.dump(confs, f)
@@ -450,11 +450,12 @@ class ZMClient:
 
         # setup async signal catcher
         loop = asyncio.get_event_loop()
-        for signame in ("SIGINT", "SIGTERM"):
-            logger.debug(f"{lp} registering signal handler for {signame}")
+        signals = ("SIGINT", "SIGTERM")
+        logger.debug(f"{lp} registering signal handler for {' ,'.join(signals).rstrip(',')}")
+        for sig_name in signals:
             loop.add_signal_handler(
-                getattr(signal, signame),
-                lambda: loop.create_task(self.signal_handler(signame)),
+                getattr(signal, sig_name),
+                lambda: loop.create_task(self.signal_handler(sig_name)),
             )
 
         logger.debug(f"{lp} Preparing client...")
@@ -753,10 +754,8 @@ class ZMClient:
                 continue
             if image is False:
                 logger.warning(
-                    f"{lp} Image stream ended! Moving on to futures (figure out "
-                    f"how to iterate futures as they complete while still in this threadpool loop)"
+                    f"{lp} Image stream has been exhausted!"
                 )
-
                 break
 
             if any([g.config.animation.gif.enabled, g.config.animation.mp4.enabled]):
@@ -791,7 +790,7 @@ class ZMClient:
                         part.set_content_disposition(
                             "form-data", name="image", filename=image_name
                         )
-                        logger.debug(f"Sending image to '{route.name}' @ {url}")
+                        logger.debug(f"Sending image to ZM-ML API ['{route.name}' @ {url}]")
                         _perf = perf_counter()
                         r: aiohttp.ClientResponse
                         session: aiohttp.ClientSession = g.api.async_session
@@ -833,7 +832,6 @@ class ZMClient:
                         )
                         filter_start = perf_counter()
                         res_loop = 0
-
                         for result in results:
                             res_loop += 1
 

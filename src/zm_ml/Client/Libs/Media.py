@@ -1,3 +1,4 @@
+from __future__ import annotations
 import mmap
 import struct
 from _ctypes import Structure
@@ -8,24 +9,25 @@ from enum import IntEnum
 import logging
 from sys import maxsize as sys_maxsize
 from time import sleep
-from typing import Optional, IO, Union
-from typing import Set, Tuple
+from typing import Optional, IO, Union, TYPE_CHECKING, Set, Tuple
 
-import requests
+from ..Log import CLIENT_LOGGER_NAME
 
-from ..Models.config import APIPullMethod
+if TYPE_CHECKING:
+    from ..main import GlobalConfig
 
 IS_64BITS = sys_maxsize > 2**32
 # This will compensate for 32/64 bit
 struct_time_stamp = r"l"
 TIMEVAL_SIZE: int = struct.calcsize(struct_time_stamp)
-
-logger = logging.getLogger("ZM_ML-Client")
+logger = logging.getLogger(CLIENT_LOGGER_NAME)
 LP = "media::"
-g = None
+g: Optional[GlobalConfig] = None
 
 
 class APIImagePipeLine:
+    from ..Models.config import APIPullMethod
+
     def __init__(
         self,
         options: APIPullMethod,
@@ -177,8 +179,9 @@ class APIImagePipeLine:
                     f"{lp} attempt #{image_grab_attempt}/{self.max_attempts} to grab image ID: {self.current_frame}"
                 )
                 image = await g.api.make_async_request(fid_url)
-                if isinstance(image, bytes):
-                    logger.debug(f"ZM API returned an Image! {image[:50]}")
+                if isinstance(image, bytes) and image.startswith(b'\xff\xd8\xff\xe0\x00\x10JFIF'):
+
+                    logger.debug(f"ZM API returned a JPEG formatted image!")
                     return self._process_frame(image=image)
                 else:
                     resp_msg = ""

@@ -126,6 +126,8 @@ torch = [
 client-cpu = [
     'opencv-contrib-python>=4.6.0',
     # Client
+    'psutil>=5.9.4',
+    'psutil-extra>=0.2.0',
     "requests-toolbelt>=0.10.0",
     "sqlalchemy>=1.4.42",
     'pymysql>=1.0.2',
@@ -169,6 +171,8 @@ all-frameworks = [
 ]
 
 client = [
+    'psutil>=5.9.4',
+    'psutil-extra>=0.2.0',
     "requests-toolbelt>=0.10.0",
     "sqlalchemy>=1.4.42",
     'pymysql>=1.0.2',
@@ -220,6 +224,8 @@ all = [
     'aiosmtpd>=1.4.2',
     'python-jose>=3.3.0',
     'python-multipart>=0.0.5',
+    'psutil>=5.9.4',
+    'psutil-extra>=0.2.0',
     'python-dotenv>=0.21.0'
     ]
 

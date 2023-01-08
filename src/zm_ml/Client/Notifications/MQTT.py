@@ -10,13 +10,14 @@ import paho.mqtt.client as mqtt_client
 
 from .. import get_global_config
 from ...Shared.configs import GlobalConfig
+from ..main import CLIENT_LOGGER_NAME
 
 g: GlobalConfig
 
 wasConnected = False
 Connected = False  # global variable for the state of the connection
 
-logger = logging.getLogger("ZM_ML-Client")
+logger = logging.getLogger(CLIENT_LOGGER_NAME)
 
 
 def on_log(client, userdata, level, buf):

@@ -17,7 +17,8 @@ from ..Models.config import ZMAPISettings, MonitorsSettings
 
 GRACE: int = 60 * 5  # 5 mins
 lp: str = "api::"
-logger = logging.getLogger("ZM_ML-Client")
+from ..Log import CLIENT_LOGGER_NAME
+logger = logging.getLogger(CLIENT_LOGGER_NAME)
 g = None
 LP: str = "api::"
 
@@ -222,29 +223,30 @@ class ZMApi:
         if not self.access_token:
             logger.warning(f"{lp} no access token to evaluate, calling login()")
             _login = True
-        claims = jwt.decode(self.access_token, verify=False)
-        iss = claims.get("iss")
-        if iss and iss != "ZoneMinder":
-            logger.error(
-                f"{lp} invalid 'iss' [{iss}] for access token, calling login()"
+        else:
+            claims = jwt.decode(self.access_token, verify=False)
+            iss = claims.get("iss")
+            if iss and iss != "ZoneMinder":
+                logger.error(
+                    f"{lp} invalid 'iss' [{iss}] for access token, calling login()"
+                )
+                _login = True
+            elif not iss:
+                logger.error(f"{lp} no 'Issuer' ['iss'] for access token, calling login()")
+                _login = True
+            iat = claims["iat"]
+            exp = claims["exp"]
+            now = time.time()
+            remaining = exp - now
+            m, s = divmod(remaining, 60)
+            h, m = divmod(m, 60)
+            if not grace_period:
+                grace_period = GRACE
+            logger.debug(
+                f"{lp} GRACE: {grace_period} --  ISSUED AT: {datetime.datetime.fromtimestamp(iat)}"
+                f" EXPIRES AT: {datetime.datetime.fromtimestamp(exp)} -- CURRENTLY: "
+                f"{datetime.datetime.fromtimestamp(now)}   -------- remaining seconds = {remaining}"
             )
-            _login = True
-        elif not iss:
-            logger.error(f"{lp} no 'Issuer' ['iss'] for access token, calling login()")
-            _login = True
-        iat = claims["iat"]
-        exp = claims["exp"]
-        now = time.time()
-        remaining = exp - now
-        m, s = divmod(remaining, 60)
-        h, m = divmod(m, 60)
-        if not grace_period:
-            grace_period = GRACE
-        logger.debug(
-            f"{lp} GRACE: {grace_period} --  ISSUED AT: {datetime.datetime.fromtimestamp(iat)}"
-            f" EXPIRES AT: {datetime.datetime.fromtimestamp(exp)} -- CURRENTLY: "
-            f"{datetime.datetime.fromtimestamp(now)}   -------- remaining seconds = {remaining}"
-        )
         if not _login and not _relogin:
             if exp > now > (exp - grace_period):
                 logger.debug(
@@ -515,7 +517,7 @@ class ZMApi:
                 "refresh_token": self.refresh_token,
             }
         try:
-            self.token_file.touch(exist_ok=True)
+            self.token_file.touch(exist_ok=True, mode=0o640)
             with self.token_file.open("wb") as f:
                 pickle.dump(
                     tokens,
@@ -614,7 +616,6 @@ class ZMApi:
             try:
                 resp.raise_for_status()
             except aiohttp.ClientResponseError as err:
-                logger.error(f"{lp} API call failed: {err}")
                 if resp_status == 401:
                     logger.error(
                         f"{lp} 401 Unauthorized, attempting to re-authenticate"
@@ -656,7 +657,7 @@ class ZMApi:
                     # A non 0 byte response will usually mean it's an image eid request that needs re-login
                     if content_length:
                         if content_length != "0":
-                            if resp_text.lower().startswith("no frame found"):
+                            if resp_text.casefold().startswith("no frame found"):
                                 #  r.text = 'No Frame found for event(69129) and frame id(280)']
                                 logger.warning(
                                     f"{lp} Frame was not found by API! >>> {resp.text}"

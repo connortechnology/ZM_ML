@@ -4,7 +4,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from platform import python_version
-from typing import Union, Dict, List
+from typing import Union, Dict, List, Optional
 
 import cv2
 import numpy as np
@@ -23,26 +23,16 @@ from fastapi.responses import RedirectResponse
 
 from .imports import (
     Settings,
-    GlobalConfig,
-    BaseModelOptions,
-    FaceRecognitionLibModelOptions,
-    OpenALPRLocalModelOptions,
-    APIDetector,
-    BaseModelConfig,
-    ModelType,
-    ModelProcessor,
-    ModelFrameWork,
 )
+from .Models.config import BaseModelOptions, FaceRecognitionLibModelOptions, \
+    OpenALPRLocalModelOptions, BaseModelConfig, APIDetector, GlobalConfig
+from ..Shared.Models.Enums import ModelType, ModelFrameWork, ModelProcessor
 
 __version__ = "0.0.1a"
 __version_type__ = "dev"
 
-SERVER_LOGGER_NAME = "ZM_ML-API"
+from .Log import SERVER_LOGGER_NAME
 logger = logging.getLogger(SERVER_LOGGER_NAME)
-SERVER_LOG_FORMAT = logging.Formatter(
-    "%(asctime)s.%(msecs)04d %(name)s[%(process)s] %(levelname)s %(module)s:%(lineno)d -> %(message)s",
-    "%m/%d/%y %H:%M:%S",
-)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.NullHandler())
 
@@ -53,40 +43,12 @@ logger.info(
 )
  
 app = FastAPI(debug=True)
-g = GlobalConfig()
+g: Optional[GlobalConfig] = None
 LP: str = "mlapi:"
-
-# Allow Form() to contain JSON, Nested JSON is not allowed though - Transforms into Query()
-"""def as_form(cls: Type[BaseModel]):
-    logger.info(f"as_form: {cls}")
-    new_parameters = []
-
-    for field_name, model_field in cls.__fields__.items():
-        model_field: ModelField  # type: ignore
-        logger.info(f"as_form: {field_name} -> {model_field}")
-
-        new_parameters.append(
-            inspect.Parameter(
-                model_field.alias,
-                inspect.Parameter.POSITIONAL_ONLY,
-                default=Form(...)
-                if not model_field.required
-                else Form(model_field.default),
-                annotation=model_field.outer_type_,
-            )
-        )
-
-    async def as_form_func(**data):
-        return cls(**data)
-
-    sig = inspect.signature(as_form_func)
-    sig = sig.replace(parameters=new_parameters)
-    as_form_func.__signature__ = sig  # type: ignore
-    setattr(cls, "as_form", as_form_func)
-    return cls"""
 
 def create_logs() -> logging.Logger:
     from zm_ml.Shared.Log.handlers import BufferedLogHandler
+    from .Libs.Logging import SERVER_LOG_FORMAT
     logger = logging.getLogger(SERVER_LOGGER_NAME)
     console_handler = logging.StreamHandler(stream=sys.stdout)
     console_handler.setFormatter(SERVER_LOG_FORMAT)
@@ -96,12 +58,20 @@ def create_logs() -> logging.Logger:
     logger.addHandler(console_handler)
     logger.addHandler(buffered_log_handler)
     return logger
+
 def get_global_config() -> GlobalConfig:
     return g
 
+def create_global_config() -> GlobalConfig:
+    """Create the global config object"""
+    global g
+    if not isinstance(g, GlobalConfig):
+        g = GlobalConfig()
+    return get_global_config()
+
 
 def get_settings() -> Settings:
-    return get_global_config().settings
+    return get_global_config().config
 
 
 def get_available_models() -> List[BaseModelConfig]:
@@ -110,7 +80,7 @@ def get_available_models() -> List[BaseModelConfig]:
 
 def locks_enabled():
     ret_ = True
-    if get_settings().disable_locks is True:
+    if get_settings().locks.enabled is True:
         ret_ = False
     return ret_
 
@@ -168,7 +138,7 @@ async def threaded_detect(model_hints: List[str], image) -> List[Dict]:
             detectors.append(detector)
     image = load_image_into_numpy_array(await image.read())
     detections: List[Dict] = []
-    # logger.info(f"detectors ({len(detectors)}) -> {detectors}")
+    # logger.info(f"Detectors ({len(Detectors)}) -> {Detectors}")
     timer = time.perf_counter()
     import concurrent.futures
 
@@ -180,7 +150,7 @@ async def threaded_detect(model_hints: List[str], image) -> List[Dict]:
             futures.append(executor.submit(detector.detect, image))
     for future in futures:
         detections.append(future.result())
-    # for detector in detectors:
+    # for detector in Detectors:
     #     import threading
     #     thread = threading.Thread(target=detector.detect, args=(image,))
     #     threads.append(thread)
@@ -310,11 +280,11 @@ class MLAPI:
 
     def __init__(self, cfg_file: Union[str, Path], run_server: bool = False):
         """
-        Initialize the FastAPI MLAPI server object, read a supplied environment file, and start the server if requested.
-        :param cfg_file: The settings file to read in the Bash ENVIRONMENT style.
+        Initialize the FastAPI MLAPI server object, read a supplied YAML config file, and start the server if requested.
+        :param cfg_file: The config file to read.
         :param run_server: Start the server after initialization.
         """
-
+        create_global_config()
         if not isinstance(cfg_file, (str, Path)):
             raise TypeError(
                 f"The YAML config file must be a str or pathlib.Path object, not {type(cfg_file)}"
@@ -331,31 +301,34 @@ class MLAPI:
 
     def read_settings(self):
         logger.info(
-            f"reading settings from '{self.cfg_file.as_posix()}' - {self.cfg_file.exists() = }"
+            f"reading settings from '{self.cfg_file.as_posix()}'"
         )
-        if self.cfg_file.exists():
-            self.cached_settings = Settings(_env_file=self.cfg_file)
-            get_global_config().settings = self.cached_settings
-            # logger.debug(f"{g.settings = }")
-            available_models = (
-                get_global_config().available_models
-            ) = self.cached_settings.available_models
+        from .Models.config import parse_client_config_file
 
-            if available_models:
-                futures = []
-                timer = time.perf_counter()
-                with ThreadPoolExecutor() as executor:
-                    for model in available_models:
-                        futures.append(
-                            executor.submit(get_global_config().get_detector, model)
-                        )
-                for future in futures:
-                    future.result()
-                logger.info(
-                    f"{LP} TOTAL ThreadPool loading {len(futures)} models took {time.perf_counter() - timer:.5f}ms"
-                )
-        else:
-            raise FileNotFoundError(f"'{self.cfg_file.as_posix()}' does not exist")
+        self.cached_settings = parse_client_config_file(self.cfg_file)
+        get_global_config().config = self.cached_settings
+        # logger.debug(f"{g.settings = }")
+        logger.info(
+f"should be loading models"
+        )
+
+        available_models = (
+            get_global_config().available_models
+        ) = self.cached_settings.available_models
+
+        if available_models:
+            futures = []
+            timer = time.perf_counter()
+            with ThreadPoolExecutor() as executor:
+                for model in available_models:
+                    futures.append(
+                        executor.submit(get_global_config().get_detector, model)
+                    )
+            for future in futures:
+                future.result()
+            logger.info(
+                f"{LP} TOTAL ThreadPool loading {len(futures)} models took {time.perf_counter() - timer:.5f}ms"
+            )
 
         return self.cached_settings
 
@@ -409,11 +382,12 @@ class MLAPI:
         uvicorn.config.LOGGING_CONFIG["handlers"]["default"]["level"] = "DEBUG"
         uvicorn.config.LOGGING_CONFIG["loggers"]["uvicorn"]["level"] = "DEBUG"
         uvicorn.config.LOGGING_CONFIG["loggers"]["uvicorn.error"]["level"] = "DEBUG"
+        server_cfg = get_global_config().config.server
         config = uvicorn.Config(
             "zm_ml.Server.app:app",
-            host=self.cached_settings.host,
-            port=self.cached_settings.port,
-            reload=self.cached_settings.reload,
+            host=str(server_cfg.address),
+            port=server_cfg.port,
+            reload=server_cfg.reload,
             log_config=uvicorn.config.LOGGING_CONFIG,
             log_level="debug",
             proxy_headers=True,

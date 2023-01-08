@@ -8,22 +8,16 @@ from logging import getLogger
 
 import numpy as np
 
-from ...imports import (
-    ModelProcessor,
-    FaceRecognitionLibModelOptions,
-    FaceRecognitionLibModelTypes,
-    BaseModelConfig,
-    ModelFrameWork,
-    FaceRecognitionLibModelConfig,
-    ALPRModelConfig,
-)
+from ...Models.config import FaceRecognitionLibModelOptions, BaseModelConfig, FaceRecognitionLibModelConfig, ALPRModelConfig
+from src.zm_ml.Shared.Models.Enums import ModelFrameWork, ModelProcessor, FaceRecognitionLibModelTypes
 
 import cv2
 from sklearn import neighbors
 
 from ..file_locks import FileLock
 
-logger = getLogger("ML-API")
+from zm_ml.Server import SERVER_LOGGER_NAME
+logger = getLogger(SERVER_LOGGER_NAME)
 
 face_recognition = None
 dlib = None
@@ -58,6 +52,7 @@ class FaceRecognitionLibDetector(FileLock):
             import dlib
         except ImportError as e:
             logger.error(f"{LP} UNABLE to import D-Lib library, is it installed?")
+            return
         else:
             logger.debug(f"{LP} successfully imported D-Lib library")
 
@@ -70,6 +65,7 @@ class FaceRecognitionLibDetector(FileLock):
             logger.error(
                 f"{LP} Could not import face_recognition, is the face-recognition library installed?)"
             )
+            return
         else:
             logger.debug(
                 f"perf:{LP}{self.processor}: importing Face Recognition library "

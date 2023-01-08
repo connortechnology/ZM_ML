@@ -5,10 +5,12 @@ from logging import getLogger
 from pathlib import Path
 from typing import Optional
 
-from ...imports import cv2, np
+import cv2
+import numpy as np
 
 LP: str = "TensorFlow:"
-logger = getLogger("ML-API")
+from zm_ml.Server import SERVER_LOGGER_NAME
+logger = getLogger(SERVER_LOGGER_NAME)
 
 
 class TFDetector:

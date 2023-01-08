@@ -5,7 +5,7 @@ from typing import Dict, Optional
 
 from pydantic import BaseModel, Field, validator
 
-from src.zm_ml.Shared.Models.validators import validate_log_level, str_to_path
+from .validators import validate_log_level, str_to_path
 
 
 class Testing(BaseModel):
