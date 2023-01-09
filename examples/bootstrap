@@ -5,7 +5,7 @@ TESTING=${TESTING:-true}
 GIT=${GIT:-$(which git)}
 PIP=${PIP:-pip3}
 PYTHON=${PYTHON:-python3}
-INSTALLER=${INSTALLER:-$(get_installer)}
+INSTALLER=${INSTALLER}
 
 # utility functions for color coded pretty printing
 print_error() {
@@ -82,7 +82,10 @@ get_installer() {
     esac
     echo "${installer}"
 }
-
+if [[ -z "${INSTALLER}" ]]; then
+    INSTALLER=$(get_installer)
+fi
+echo "Distro Based On: $(get_distro) -- Install Command: ${INSTALLER}"
 echo
     echo "Checking for git binary...."
     if [ -z "$GIT" ]; then
@@ -130,11 +133,12 @@ echo
       print_important "TESTING: $GIT clone"
     else
       "${GIT} clone https://github.com/baudneo/ZM_ML"
+      cd zm_ml || exit 1
     fi
-    cd zm_ml || exit 1
     if [[ "$TESTING" == "true" ]]; then
-      print_important "Installing ZM_ML using ${PWD}/examples/install.py..."
+      print_important "TESTING: ${PYTHON3} ${PWD}/examples/install.py"
     else
+      print_important "Installing ZM_ML using ${PWD}/examples/install.py..."
       "${PYTHON3}" examples/install.py # >/dev/null 2>&1
 
     fi
