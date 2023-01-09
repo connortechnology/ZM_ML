@@ -1,10 +1,3 @@
-###
-data/
-data/*
-configs/secrets.yml
-configs/client.yml
-configs/server.yml
-
 ### Example user template
 # IntelliJ project files
 .idea
@@ -151,4 +144,11 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-/data/
+###
+data/
+data/*
+configs/secrets.yml
+configs/client.yml
+configs/server.yml
+/examples/*_install*
+/examples/*.log
