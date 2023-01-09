@@ -482,10 +482,10 @@ def get_pkg_manager():
         binary = "dnf"
     elif distro.ID in ("arch", "manjaro"):
         binary = "pacman"
-        prefix = "-Sy"
+        prefix = ["-S", "--noconfirm"]
     elif distro.ID == "gentoo":
         binary = "emerge"
-        prefix = "-a"
+        prefix = ["-av"]
     elif distro.ID == "alpine":
         binary = "apk"
         prefix = ["add", "-q"]
@@ -493,22 +493,19 @@ def get_pkg_manager():
         binary = "zypper"
     elif distro.ID == "void":
         binary = "xbps-install"
-        prefix = "-Sy"
+        prefix = ["-y"]
     elif distro.ID == "nixos":
         binary = "nix-env"
-        prefix = "-i"
+        prefix = ["-i"]
     elif distro.ID == "freebsd":
         binary = "pkg"
-        prefix = "-y"
     elif distro.ID == "openbsd":
         binary = "pkg_add"
-        prefix = "-I"
+        prefix = []
     elif distro.ID == "netbsd":
         binary = "pkgin"
-        prefix = "-y"
     elif distro.ID == "solus":
         binary = "eopkg"
-        prefix = "-y"
     elif distro.ID == "windows":
         binary = "choco"
     elif distro.ID == "macos":
