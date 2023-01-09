@@ -103,7 +103,7 @@ logger.addHandler(console)
 
 ## Misc.
 __version__ = "0.0.1a1"
-__dependancies__ = "psutil", "requests", "dotenv"
+__dependancies__ = "psutil", "requests"
 __doc__ = """Install ZM-ML Server / Client"""
 
 # Logic

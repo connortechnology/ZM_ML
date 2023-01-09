@@ -18,13 +18,13 @@ This project is based on the work of [@pliablepixels](https://github.com/pliable
 ## Prerequisites
 
 - ZoneMinder 1.37.5+ (*EventStartCommand* is **REQUIRED**)
-- Python 3.7+ (3.9 recommended) (TPU: pycoral only has support up to 3.10, but 3.9 is preferred for ease of installation)
-- OpenCV (Contrib) 4.2.0+ (4.5.4+ recommended) (~~yolov7, yolov7x - [**_REQUIRE_** Custom Built OPENCV](https://github.com/opencv/opencv/issues/22409 "SiLu Activation")~~ It appears 'SiLu' activation was replaced with 'swish')
+- Python 3.8+ (3.9 recommended)
+- OpenCV (Contrib) 4.2.0+ (4.5.4+ recommended)
 - NumPy 1.19.5+ (1.21.2+ recommended)
 
 #### Notes:
 
-1. **EventStartCommand**/**EventEndCommand** is what runs the object detection script. Before, SHM was polled every \<X> seconds to see if a new event had been triggered.
+1. [**EventStartCommand**/**EventEndCommand**](https://zoneminder.readthedocs.io/en/latest/userguide/definemonitor.html#recording-tab:~:text=events%20are%20recorded.-,Event%20Start%20Command,the%20command%20will%20be%20the%20event%20id%20and%20the%20monitor%20id.,-Viewing%20Tab) is what runs the object detection script. Before, SHM was polled every \<X> seconds to see if a new event had been triggered.
 
 ---
 
@@ -34,9 +34,12 @@ This project is based on the work of [@pliablepixels](https://github.com/pliable
 2. OpenCV DNN for CPU/GPU
 3. [OpenALPR](https://github.com/openalpr/openalpr) local binary supported (Must compile OpenALPR with CUDA for GPU support)
 4. Cloud ALPR integrations. [[See notes](#_cloud-alpr_)]
-5. [pycoral](https://github.com/google-coral/pycoral) (tflite) for TPU support (Object, Face *detection*).
+5. [pycoral](https://github.com/google-coral/pycoral) (tflite) for TPU support.
 6. DLib based [face-recognition](https://github.com/ageitgey/face_recognition) (GPU Recommended)
 7. Run locally on ZoneMinder machine or deploy to a remote machine.
+
+### Docker
+An amd64 image will be created that has OpenCV/face_recognition with GPU support and also includes TPU libs. No idea if other architectures will be supported.
 
 ### _NVIDIA GPU Accelerated Server_
 
@@ -57,8 +60,7 @@ For Cloud ALPR you will need to create an account with the service you want to u
 2. Intel ARC/iGPU's are __CURRENTLY NOT__ supported. (this may change)
 3. If you do not need GPU acceleration you can install OpenCV using pip. (`pip install opencv-contrib-python`)
 4. pycoral recently released wheels for Python3.10 See [here](https://github.com/google-coral/pycoral/issues/85#issuecomment-1305826142 "Pycoral 3.10 wheels")
-5. ~~YOLOv7, YOLOv7X Require a small change in OpenCV source code to make use of 'SiLu Activation' -> [Custom Build OPENCV](https://github.com/opencv/opencv/pull/22410/files "OpenCV add SiLu Activation")~~ 'SiLu' activation ahs been changed to 'swish'
-6. I am working on a script to make building OpenCV with GPU support easier.
+5. I am working on a script to make building OpenCV with GPU support easier.
 
 ---
 
