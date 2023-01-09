@@ -3,7 +3,7 @@
 This is a project aiming to update how [ZoneMinder](https://github.com/ZoneMinder/zoneminder) Object Detection works.
 A server and client are supplied to allow for easy integration with ZoneMinder.
 
-The server is a semaphore bound, asynchronous [FastAPI](https://fastapi.tiangolo.com/) based REST API that runs Machine Learning models on supplied images, the server can be run on the ZoneMinder host or a remote host.
+The server is an asynchronous [FastAPI](https://fastapi.tiangolo.com/) based REST API that runs Machine Learning models on supplied images, the server can be run on the ZoneMinder host or a remote host.
 
 The client is installed on the ZoneMinder machine, grabs and sends images to a ZM_ML server for
 inference and then processes the results to annotate images, create animations and send notifications.
@@ -19,6 +19,8 @@ This project is based on the work of [@pliablepixels](https://github.com/pliable
 
 - ZoneMinder 1.37.5+ (*EventStartCommand* is **REQUIRED**)
 - Python 3.8+ (3.9 recommended)
+  - psutil
+  - requests
 - OpenCV (Contrib) 4.2.0+ (4.5.4+ recommended)
 - NumPy 1.19.5+ (1.21.2+ recommended)
 
@@ -30,7 +32,7 @@ This project is based on the work of [@pliablepixels](https://github.com/pliable
 
 ## Server
 
-1. Based on [FastAPI]((https://fastapi.tiangolo.com/ "FastAPI")) (With all the Pydantic goodness!)
+1. Based on [FastAPI](https://fastapi.tiangolo.com/ "FastAPI") (With all the Pydantic goodness!)
 2. OpenCV DNN for CPU/GPU
 3. [OpenALPR](https://github.com/openalpr/openalpr) local binary supported (Must compile OpenALPR with CUDA for GPU support)
 4. Cloud ALPR integrations. [[See notes](#_cloud-alpr_)]
@@ -39,6 +41,7 @@ This project is based on the work of [@pliablepixels](https://github.com/pliable
 7. Run locally on ZoneMinder machine or deploy to a remote machine.
 
 ### Docker
+
 An amd64 image will be created that has OpenCV/face_recognition with GPU support and also includes TPU libs. No idea if other architectures will be supported.
 
 ### _NVIDIA GPU Accelerated Server_
