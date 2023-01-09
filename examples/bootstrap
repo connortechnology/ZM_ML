@@ -125,21 +125,23 @@ echo
             else
                 "sudo -H ${PIP} install ${dep}"
             fi
+          else
+            print_success "${dep} python3 module found"
         fi
     done
     echo
-    echo "Cloning baudneo's ZM_ML library..."
+    echo "Cloning ZM_ML library..."
     if [[ "$TESTING" == "true" ]]; then
-      print_important "TESTING: $GIT clone"
+      print_important "TESTING: $GIT clone https://github.com/baudneo/ZM_ML"
     else
       "${GIT} clone https://github.com/baudneo/ZM_ML"
-      cd zm_ml || exit 1
+      cd ZM_ML || exit 1
     fi
     if [[ "$TESTING" == "true" ]]; then
-      print_important "TESTING: ${PYTHON3} ${PWD}/examples/install.py"
+      print_important "TESTING: ${PYTHON3} ./examples/install.py"
     else
-      print_important "Installing ZM_ML using ${PWD}/examples/install.py..."
-      "${PYTHON3}" examples/install.py # >/dev/null 2>&1
+      print_important "Installing ZM_ML using ./examples/install.py..."
+      "${PYTHON3}" ./examples/install.py # >/dev/null 2>&1
 
     fi
     echo
