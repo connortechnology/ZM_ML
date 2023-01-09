@@ -83,8 +83,18 @@ get_installer() {
     echo "${installer}"
 }
 
-
-
+usage() {
+    echo "Usage: bootstrap [-t|--testing] [-h|--help] [-g|--git GIT_BINARY] [-p|--pip PIP_BINARY] [-u|--python PYTHON_BINARY] [-i|--installer INSTALLER_COMMAND]"
+    echo
+    echo "Optional:"
+    echo "  -t, --testing:      Enable testing mode"
+    echo "  -g, --git:          Path to git executable"
+    echo "  -p, --pip:          Path to pip executable"
+    echo "  -u, --python:       Path to python3 executable"
+    echo "  -i, --installer:    Path to installer executable with args and flags"
+    echo "  -h, --help:         Print this help message"
+    exit 1
+}
 
 
 # NOTE: This requires GNU getopt.  On Mac OS X and FreeBSD, you have to install this
@@ -108,23 +118,6 @@ while true; do
     * ) break ;;
   esac
 done
-
-
-
-
-usage() {
-    echo "Usage: bootstrap [-t|--testing] [-h|--help] [-g|--git GIT_BINARY] [-p|--pip PIP_BINARY] [-u|--python PYTHON_BINARY] [-i|--installer INSTALLER_COMMAND]"
-    echo
-    echo "Optional:"
-    echo "  -t, --testing:      Enable testing mode"
-    echo "  -g, --git:          Path to git executable"
-    echo "  -p, --pip:          Path to pip executable"
-    echo "  -u, --python:       Path to python3 executable"
-    echo "  -i, --installer:    Path to installer executable with args and flags"
-    echo "  -h, --help:         Print this help message"
-    exit 1
-}
-
 print_important "This script will attempt to bootstrap the installation of ZoneMinder Machine Learning (ZM_ML) library."
 if [[ -z "${INSTALLER}" ]]; then
   echo "Attempting to determine package manager install command"
