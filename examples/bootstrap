@@ -11,25 +11,25 @@ INSTALLER=${INSTALLER:-}
 print_error() {
     COLOR="\033[1;31m"
     NOCOLOR="\033[0m"
-    echo -e "${COLOR}ERROR:${NOCOLOR}$1"
+    echo -e "${COLOR}ERROR::${NOCOLOR} $1"
 }
 
 print_important() {
     COLOR="\033[0;34m"
     NOCOLOR="\033[0m"
-    echo -e "${COLOR}IMPORTANT:${NOCOLOR}$1"
+    echo -e "${COLOR}IMPORTANT::${NOCOLOR} $1"
 }
 
 print_warning() {
     COLOR="\033[0;33m"
     NOCOLOR="\033[0m"
-    echo -e "${COLOR}WARNING:${NOCOLOR}$1"
+    echo -e "${COLOR}WARNING::${NOCOLOR} $1"
 }
 
 print_success() {
     COLOR="\033[1;32m"
     NOCOLOR="\033[0m"
-    echo -e "${COLOR}Success:${NOCOLOR}$1"
+    echo -e "${COLOR}Success::${NOCOLOR} $1"
 }
 
 get_distro() {
@@ -83,54 +83,49 @@ get_installer() {
     echo "${installer}"
 }
 
+
+
+
+
+# NOTE: This requires GNU getopt.  On Mac OS X and FreeBSD, you have to install this
+# separately; see below.
+TEMP=$(getopt -o thg:p:u:i: --long testing,help,git:,pip:,python:,installer: \
+              -n 'bootstrap' -- "$@")
+if [ $? != 0 ] ; then print_error "Terminating..." >&2 ; exit 1 ; fi
+
+# Note the quotes around '$TEMP': they are essential!
+eval set -- "$TEMP"
+
+while true; do
+  case "$1" in
+    -t | --testing ) TESTING=true; shift ;;
+    -h | --help ) usage ;;
+    -g | --git ) GIT="$2"; shift 2 ;;
+    -p | --pip ) PIP="$2"; shift 2 ;;
+    -u | --python ) PYTHON="$2"; shift 2 ;;
+    -i | --installer ) INSTALLER="$2"; shift 2 ;;
+    -- ) shift; break ;;
+    * ) break ;;
+  esac
+done
+
+
+
+
 usage() {
-    echo "Usage: bootstrap [-t] [-h] [-g GIT_BINARY] [-p PIP_BINARY] [-u PYTHON_BINARY] [-i INSTALLER_COMMAND]"
+    echo "Usage: bootstrap [-t|--testing] [-h|--help] [-g|--git GIT_BINARY] [-p|--pip PIP_BINARY] [-u|--python PYTHON_BINARY] [-i|--installer INSTALLER_COMMAND]"
     echo
     echo "Optional:"
-    echo "  -t enable testing mode"
-    echo "  -g: Path to git executable"
-    echo "  -p: Path to pip executable"
-    echo "  -u: Path to python3 executable"
-    echo "  -i: Path to installer executable with args and flags"
-    echo "  -h: Print this help message"
+    echo "  -t, --testing:      Enable testing mode"
+    echo "  -g, --git:          Path to git executable"
+    echo "  -p, --pip:          Path to pip executable"
+    echo "  -u, --python:       Path to python3 executable"
+    echo "  -i, --installer:    Path to installer executable with args and flags"
+    echo "  -h, --help:         Print this help message"
     exit 1
 }
 
-# getopts
-while getopts ":thg:p:u:i:" opt; do
-    case $opt in
-        t)
-            TESTING=true
-            ;;
-        g)
-            GIT=$OPTARG
-            ;;
-        p)
-            PIP=$OPTARG
-            ;;
-        u)
-            PYTHON=$OPTARG
-            ;;
-        i)
-            INSTALLER=$OPTARG
-            ;;
-        h)
-            usage
-            ;;
-        \?)
-            echo "Invalid option: -$OPTARG" >&2
-            usage
-            ;;
-        :)
-            echo "Option -$OPTARG requires an argument." >&2
-            exit 1
-            ;;
-    esac
-done
-shift $((OPTIND-1))
-
-
-
+print_important "This script will attempt to bootstrap the installation of ZoneMinder Machine Learning (ZM_ML) library."
 if [[ -z "${INSTALLER}" ]]; then
   echo "Attempting to determine package manager install command"
     INSTALLER=$(get_installer)
