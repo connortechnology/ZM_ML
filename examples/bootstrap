@@ -1,11 +1,36 @@
 #!/usr/bin/env bash
 
 # This will attempt to set up the environment and install ZoneMinder Machine Learning library using git
-
+TESTING=${TESTING:-true}
 GIT=${GIT:-$(which git)}
 PIP=${PIP:-pip3}
 PYTHON=${PYTHON:-python3}
 INSTALLER=${INSTALLER:-$(get_installer)}
+
+# utility functions for color coded pretty printing
+print_error() {
+    COLOR="\033[1;31m"
+    NOCOLOR="\033[0m"
+    echo -e "${COLOR}ERROR:${NOCOLOR}$1"
+}
+
+print_important() {
+    COLOR="\033[0;34m"
+    NOCOLOR="\033[0m"
+    echo -e "${COLOR}IMPORTANT:${NOCOLOR}$1"
+}
+
+print_warning() {
+    COLOR="\033[0;33m"
+    NOCOLOR="\033[0m"
+    echo -e "${COLOR}WARNING:${NOCOLOR}$1"
+}
+
+print_success() {
+    COLOR="\033[1;32m"
+    NOCOLOR="\033[0m"
+    echo -e "${COLOR}Success:${NOCOLOR}$1"
+}
 
 get_distro() {
     local DISTRO=''
@@ -62,29 +87,55 @@ echo
     echo "Checking for git binary...."
     if [ -z "$GIT" ]; then
         print_error "git not found, installing git..."
-        "sudo -H ${INSTALLER} git"
+        if [[ "$TESTING" == "true" ]]; then
+            echo "TESTING: $INSTALLER git"
+        else
+            "sudo -H ${INSTALLER} git"
+        fi
     fi
     echo "Checking for pip3 binary...."
     if [ -z "$PIP" ]; then
         print_error "pip3 not found, installing pip3..."
-        "sudo -H ${INSTALLER} python3-pip"
+        if [[ "$TESTING" == "true" ]]; then
+            print_important "TESTING: $INSTALLER python3-pip"
+        else
+            "sudo -H ${INSTALLER} python3-pip"
+        fi
+
     fi
     echo "Checking for python3 binary...."
     if [ -z "$PYTHON" ]; then
         print_error "python3 not found, installing python3..."
-        "sudo -H ${INSTALLER} python3"
+        if [[ "$TESTING" == "true" ]]; then
+            print_important "TESTING: $INSTALLER python3"
+        else
+            "sudo -H ${INSTALLER} python3"
+        fi
     fi
     deps=('requests' 'psutil')
     for dep in "${deps[@]}"; do
         echo "Checking for ${dep} python3 module...."
         if ! python3 -c "import ${dep}" 2>/dev/null; then
             print_error "${dep} python3 module not found, installing ${dep} python3 module..."
-            "sudo -H ${PIP} install ${dep}"
+            if [[ "$TESTING" == "true" ]]; then
+                print_important "TESTING: $PIP install ${dep}"
+            else
+                "sudo -H ${PIP} install ${dep}"
+            fi
         fi
     done
     echo
     echo "Cloning baudneo's ZM_ML library..."
-    "${GIT} clone https://github.com/baudneo/ZM_ML"
+    if [[ "$TESTING" == "true" ]]; then
+      print_important "TESTING: $GIT clone"
+    else
+      "${GIT} clone https://github.com/baudneo/ZM_ML"
+    fi
     cd zm_ml || exit 1
-    echo "Installing ZM_ML using ${PWD}/examples/install.py..."
-    "${PYTHON3}" examples/install.py # >/dev/null 2>&1
+    if [[ "$TESTING" == "true" ]]; then
+      print_important "Installing ZM_ML using ${PWD}/examples/install.py..."
+    else
+      "${PYTHON3}" examples/install.py # >/dev/null 2>&1
+
+    fi
+    echo
