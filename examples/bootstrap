@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
 # This will attempt to set up the environment and install ZoneMinder Machine Learning library using git
-TESTING=${TESTING:-true}
+TESTING=${TESTING:-false}
 GIT=${GIT:-$(which git)}
 PIP=${PIP:-pip3}
 PYTHON=${PYTHON:-python3}
-INSTALLER=${INSTALLER}
+INSTALLER=${INSTALLER:-}
 
 # utility functions for color coded pretty printing
 print_error() {
@@ -82,7 +82,57 @@ get_installer() {
     esac
     echo "${installer}"
 }
+
+usage() {
+    echo "Usage: $0 [-t] [-g] [-p] [-u] [-i] [-h]"
+    echo
+    echo "Optional:"
+    echo "  -t enable testing mode"
+    echo "  -g: Path to git executable"
+    echo "  -p: Path to pip executable"
+    echo "  -u: Path to python3 executable"
+    echo "  -i: Path to installer executable"
+    echo "  -h: Print this help message"
+    exit 1
+}
+
+# getopts
+while getopts ":thg:p:u:i:" opt; do
+    case $opt in
+        t)
+            TESTING=true
+            ;;
+        g)
+            GIT=$OPTARG
+            ;;
+        p)
+            PIP=$OPTARG
+            ;;
+        u)
+            PYTHON=$OPTARG
+            ;;
+        i)
+            INSTALLER=$OPTARG
+            ;;
+        h)
+            usage
+            ;;
+        \?)
+            echo "Invalid option: -$OPTARG" >&2
+            usage
+            ;;
+        :)
+            echo "Option -$OPTARG requires an argument." >&2
+            exit 1
+            ;;
+    esac
+done
+shift $((OPTIND-1))
+
+
+
 if [[ -z "${INSTALLER}" ]]; then
+  echo "Attempting to determine package manager install command"
     INSTALLER=$(get_installer)
 fi
 echo "Distro Based On: $(get_distro) -- Install Command: ${INSTALLER}"
@@ -138,10 +188,10 @@ echo
       cd ZM_ML || exit 1
     fi
     if [[ "$TESTING" == "true" ]]; then
-      print_important "TESTING: ${PYTHON3} ./examples/install.py"
+      print_important "TESTING: ${PYTHON} ./examples/install.py"
     else
       print_important "Installing ZM_ML using ./examples/install.py..."
-      "${PYTHON3}" ./examples/install.py # >/dev/null 2>&1
+      "${PYTHON}" ./examples/install.py # >/dev/null 2>&1
 
     fi
     echo
