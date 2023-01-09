@@ -84,14 +84,14 @@ get_installer() {
 }
 
 usage() {
-    echo "Usage: $0 [-t] [-g] [-p] [-u] [-i] [-h]"
+    echo "Usage: bootstrap [-t] [-h] [-g GIT_BINARY] [-p PIP_BINARY] [-u PYTHON_BINARY] [-i INSTALLER_COMMAND]"
     echo
     echo "Optional:"
     echo "  -t enable testing mode"
     echo "  -g: Path to git executable"
     echo "  -p: Path to pip executable"
     echo "  -u: Path to python3 executable"
-    echo "  -i: Path to installer executable"
+    echo "  -i: Path to installer executable with args and flags"
     echo "  -h: Print this help message"
     exit 1
 }
