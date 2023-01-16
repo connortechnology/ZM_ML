@@ -629,6 +629,7 @@ class Settings(BaseModel):
     def validate_available_models(cls, v, values):
         models = values.get("models")
         logger.info(f"Settings._validate_available_models: {models is None = }")
+        logger.info(f"{models = }")
         if models:
             v = []
             for model in models:

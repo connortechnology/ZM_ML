@@ -44,22 +44,27 @@ class CV2YOLODetector(CV2Base):
                 f"{LP} Error while loading model file and/or config! "
                 f"(May need to re-download the model/cfg file) => {model_load_exc}"
             )
-            raise model_load_exc
+            # raise model_load_exc
         # DetectionModel allows to set params for preprocessing input image. DetectionModel creates net
         # from file with trained weights and config, sets preprocessing input, runs forward pass and return
         # result detections. For DetectionModel SSD, Faster R-CNN, YOLO topologies are supported.
-        self.model = cv2.dnn.DetectionModel(self.net)
-        self.model.setInputParams(
-            scale=1 / 255, size=(self.config.width, self.config.height), swapRB=True
-        )
-        self.cv2_processor_check()
-        logger.debug(
-            f"{LP} set CUDA/cuDNN backend and target"
-        ) if self.processor == ModelProcessor.GPU else None
+        if self.net is not None:
+            self.model = cv2.dnn.DetectionModel(self.net)
+            self.model.setInputParams(
+                scale=1 / 255, size=(self.config.width, self.config.height), swapRB=True
+            )
+            self.cv2_processor_check()
+            logger.debug(
+                f"{LP} set CUDA/cuDNN backend and target"
+            ) if self.processor == ModelProcessor.GPU else None
 
-        logger.debug(
-            f"perf:{LP} '{self.name}' loading completed in {time.perf_counter() - load_timer:.5f}ms"
-        )
+            logger.debug(
+                f"perf:{LP} '{self.name}' loading completed in {time.perf_counter() - load_timer:.5f}ms"
+            )
+        else:
+            logger.debug(
+                f"perf:{LP} '{self.name}' FAILED in {time.perf_counter() - load_timer:.5f}ms"
+            )
 
     def detect(self, input_image: np.ndarray):
         if input_image is None:

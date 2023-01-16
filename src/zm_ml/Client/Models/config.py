@@ -23,6 +23,9 @@ class ZMAPISettings(BaseModel):
     user: Optional[SecretStr] = Field(None)
     password: Optional[SecretStr] = Field(None)
     ssl_verify: bool = Field(True)
+    cf_0trust_secret: Optional[SecretStr] = Field(None)
+    cf_0trust_header: Optional[SecretStr] = Field(None)
+    cf_0trust_expires: Optional[SecretStr] = Field(None)
 
     # validators
     _validate_host_portal = validator("api", "portal", allow_reuse=True, pre=True)(

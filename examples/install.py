@@ -24,12 +24,12 @@ DEFAULT_MODELS = ["yolov4", "yolov4_tiny", "yolov7", "yolov7_tiny"]
 # Do not change these unless you know what you are doing
 available_models = {
     "yolov8m": {
-        "folder": "yolo/v8",
+        "folder": "yolo",
         "model": ["https://github.com/baudneo/ZM_ML/releases/download/v0.0.1-alpha1/yolov8m.onnx"],
         "config": [],
     },
     "yolov4": {
-        "folder": "yolo/v4",
+        "folder": "yolo",
         "model": [
             "https://github.com/AlexeyAB/darknet/releases/download/yolov4/yolov4.weights",
             "https://github.com/AlexeyAB/darknet/releases/download/yolov4/yolov4_new.weights",
@@ -40,7 +40,7 @@ available_models = {
         ],
     },
     "yolov4_tiny": {
-        "folder": "yolo/v4_tiny",
+        "folder": "yolo",
         "model": [
             "https://github.com/AlexeyAB/darknet/releases/download/yolov4/yolov4-tiny.weights"
         ],
@@ -49,7 +49,7 @@ available_models = {
         ],
     },
     "yolov4_p6": {
-        "folder": "yolo/v4_p6",
+        "folder": "yolo",
         "model": [
             "https://github.com/AlexeyAB/darknet/releases/download/yolov4/yolov4-p6.weights"
         ],
@@ -58,7 +58,7 @@ available_models = {
         ],
     },
     "yolov7": {
-        "folder": "yolo/v7",
+        "folder": "yolo",
         "model": [
             "https://github.com/AlexeyAB/darknet/releases/download/yolov4/yolov7.weights"
         ],
@@ -67,7 +67,7 @@ available_models = {
         ],
     },
     "yolov7_tiny": {
-        "folder": "yolo/v7_tiny",
+        "folder": "yolo",
         "model": [
             "https://github.com/AlexeyAB/darknet/releases/download/yolov4/yolov7-tiny.weights"
         ],
@@ -76,7 +76,7 @@ available_models = {
         ],
     },
     "yolov7x": {
-        "folder": "yolo/v7x",
+        "folder": "yolo",
         "model": [
             "https://github.com/AlexeyAB/darknet/releases/download/yolov4/yolov7x.weights"
         ],

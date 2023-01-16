@@ -108,8 +108,8 @@ models:
       model_type: object # Optional. Defaults to object - object/face/alpr (for identification).
       processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
 
-      input: "${model_dir}/yolov4/yolov4_tiny.weights"  # Required if yolo framework.
-      config: "${model_dir}/yolov4/yolov4_tiny.cfg"  # Optional (.weights requires .cfg, .onnx and .tflite does not).
+      input: "${model_dir}/yolo/yolov4_tiny.weights"  # Required if yolo framework.
+      config: "${model_dir}/yolo/yolov4_tiny.cfg"  # Optional (.weights requires .cfg, .onnx and .tflite does not).
 
     - name: YOLOv4  # REQUIRED
       enabled: true  # Optional. Defaults to True.
@@ -118,8 +118,8 @@ models:
       model_type: object # Optional. Defaults to object - object/face/alpr (for identification).
       processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
 
-      input: "${model_dir}/yolov4/yolov4.weights"  # Required if yolo framework.
-      config: "${model_dir}/yolov4/yolov4.cfg"  # Optional (.weights requires .cfg, .onnx and .tflite does not).
+      input: "${model_dir}/yolo/yolov4.weights"  # Required if yolo framework.
+      config: "${model_dir}/yolo/yolov4.cfg"  # Optional (.weights requires .cfg, .onnx and .tflite does not).
       classes: "${model_dir}/coco.names"  # Optional. Default is COCO 2017 classes.
 
       # Image will be resized to these dimensions before being passed to the model
@@ -137,28 +137,42 @@ models:
         nms: 0.4  # Optional. Defaults to 0.4.
 
     - name: YOLOv4-P6
-      input: "${model_dir}/yolov4/yolov4-p6.weights"
-      config: "${model_dir}/yolov4/yolov4-p6.cfg"
+      input: "${model_dir}/yolo/yolov4-p6.weights"
+      config: "${model_dir}/yolo/yolov4-p6.cfg"
       description: "Scaled YOLO v4-P6 pretrained DarkNet 1280x1280"
       height: 1280
       width: 1280
 
     - name: yolov7 tiny
-      description: "yolov7 tiny DarkNet model"
-      input: "${model_dir}/yolov7/yolov7-tiny.weights"
-      config: "${model_dir}/yolov7/yolov7-tiny_darknet.cfg"
+      description: "yolov7 tiny pretrained DarkNet model"
+      input: "${model_dir}/yolo/yolov7-tiny.weights"
+      config: "${model_dir}/yolo/yolov7-tiny_darknet.cfg"
       square: yes
 
     - name: yolov7
-      description: "yolov7 DarkNet model"
-      input: "${model_dir}/yolov7/yolov7.weights"
-      config: "${model_dir}/yolov7/yolov7_darknet.cfg"
+      enabled: no
+      description: "YOLO v7 pretrained DarkNet model - Requires SiLu activation in OpenCV"
+      input: "${model_dir}/yolo/yolov7.weights"
+      config: "${model_dir}/yolo/yolov7_darknet.cfg"
       square: yes
+      height: 640
+      width: 640
 
-    - name: yolov8
-      description: "yolov8 Ultralytics ONNX model"
-      input: "${model_dir}/yolov8/yolov8.onnx"
+    - name: yolov7x
+      enabled: no
+      description: "YOLO v7-X pretrained DarkNet model - Requires SiLu activation in OpenCV"
+      input: "${model_dir}/yolo/yolov7x.weights"
+      config: "${model_dir}/yolo/yolov7x_darknet.cfg"
       square: yes
+      height: 640
+      width: 640
+
+    - name: yolov8m
+      description: "yolov8m Ultralytics ONNX model"
+      input: "${model_dir}/yolo/yolov8m.onnx"
+      square: yes
+      height: 640
+      width: 640
 
 
     - name: dlib face
@@ -255,16 +269,3 @@ models:
         config:
           region: 'strict'
           mode:  'fast'
-
-    - name: yolov7
-      enabled: no
-      description: "YOLO v7 pretrained DarkNet model - Requires SiLu activation in OpenCV"
-      input: "${model_dir}/yolov7/yolov7.weights"
-      config: "${model_dir}/yolov7/yolov7_darknet.cfg"
-      square: yes
-
-    - name: yolov7x
-      enabled: no
-      description: "YOLO v7-X pretrained DarkNet model - Requires SiLu activation in OpenCV"
-      input: "${model_dir}/yolov7/yolov7x.weights"
-      config: "${model_dir}/yolov7/yolov7x_darknet.cfg"

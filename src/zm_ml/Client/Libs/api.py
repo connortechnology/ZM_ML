@@ -598,6 +598,7 @@ class ZMApi:
         url: Optional[str] = None,
         query: Optional[Dict] = None,
         payload: Optional[Dict] = None,
+        headers: Optional[Dict] = None,
         type_action: str = "get",
         re_auth: bool = True,
         quiet: bool = False,
@@ -677,8 +678,14 @@ class ZMApi:
             payload = {}
         if query is None:
             query = {}
+        if headers is None:
+            headers = {}
 
         type_action = type_action.casefold()
+        if self.config.cf_0trust_header and self.config.cf_0trust_secret:
+            logger.debug(f"{lp} adding cloudflare 0-trust secret and client ID header")
+            headers["CF-Access-Client-Secret"] = self.config.cf_0trust_secret.get_secret_value()
+            headers["CF-Access-Client-Id"] = self.config.cf_0trust_header.get_secret_value()
         if self.access_token:
             query["token"] = self.access_token
         show_url: str = (
@@ -698,21 +705,21 @@ class ZMApi:
         if payload:
             show_payload = f" payload={payload}"
         logger.debug(
-            f"{lp} {show_url}{show_payload} query={show_query}",
+            f"{lp} {show_url}{show_payload} query={show_query} headers={headers}"
         ) if not quiet else None
         r: Optional[aiohttp.ClientResponse] = None
         if type_action == "get":
-            async with self.async_session.get(url, params=query, ssl=ssl) as r:
+            async with self.async_session.get(url, params=query, ssl=ssl, headers=headers) as r:
                 return await parse_response(r)
         elif type_action == "post":
-            async with self.async_session.post(url, data=payload, params=query, ssl=ssl) as r:
+            async with self.async_session.post(url, data=payload, params=query, ssl=ssl, headers=headers) as r:
                 return await parse_response(r)
         elif type_action == "put":
-            async with self.async_session.put(url, data=payload, params=query, ssl=ssl) as r:
+            async with self.async_session.put(url, data=payload, params=query, ssl=ssl, headers=headers) as r:
                 return await parse_response(r)
         elif type_action == "delete":
             async with self.async_session.delete(
-                url, data=payload, params=query, ssl=ssl
+                url, data=payload, params=query, ssl=ssl, headers=headers
             ) as r:
                 return await parse_response(r)
         else:
@@ -723,6 +730,7 @@ class ZMApi:
         url: Optional[str] = None,
         query: Optional[Dict] = None,
         payload: Optional[Dict] = None,
+        headers: Optional[Dict] = None,
         type_action: str = "get",
         re_auth: bool = True,
         quiet: bool = False,
@@ -732,8 +740,14 @@ class ZMApi:
             payload = {}
         if query is None:
             query = {}
+        if headers is None:
+            headers = {}
 
         type_action = type_action.casefold()
+        if self.config.cf_0trust_header and self.config.cf_0trust_secret:
+            logger.debug(f"{lp} adding cloudflare 0-trust secret and client ID header")
+            headers["CF-Access-Client-Secret"] = self.config.cf_0trust_secret.get_secret_value()
+            headers["CF-Access-Client-Id"] = self.config.cf_0trust_header.get_secret_value()
         if self.access_token:
             query["token"] = self.access_token
         show_url: str = (
@@ -759,13 +773,13 @@ class ZMApi:
         try:
             r: Response
             if type_action == "get":
-                r = self.session.get(url, params=query, timeout=240)
+                r = self.session.get(url, params=query, headers=headers, timeout=240)
             elif type_action == "post":
-                r = self.session.post(url, data=payload, params=query)
+                r = self.session.post(url, data=payload, params=query, headers=headers)
             elif type_action == "put":
-                r = self.session.put(url, data=payload, params=query)
+                r = self.session.put(url, data=payload, params=query, headers=headers)
             elif type_action == "delete":
-                r = self.session.delete(url, data=payload, params=query)
+                r = self.session.delete(url, data=payload, params=query, headers=headers)
             else:
                 logger.error(f"{lp} unsupported request type: {type_action}")
                 raise ValueError(f"Unsupported request type: {type_action}")

@@ -750,8 +750,9 @@ class ZMClient:
         image: Union[bytes, np.ndarray, None]
         matched_l, matched_c, matched_b = [], [], []
         import aiohttp
-
+        image_loop = 0
         while self.image_pipeline.is_image_stream_active():
+            image_loop += 1
             image, image_name = await self.image_pipeline.get_image()
 
             if image is None:
@@ -781,7 +782,9 @@ class ZMClient:
                     f"{lp}animations:: Added image to frame buffer: {image_name} -- {type(image)=}"
                 )
             results: Optional[List[Dict[str, Any]]] = None
+            route_loop = 0
             for route in self.routes:
+                route_loop += 1
                 if route.enabled:
                     url = f"{route.host}:{route.port}/detect/group"
                     with aiohttp.MultipartWriter("form-data") as mpwriter:
@@ -929,7 +932,7 @@ class ZMClient:
                                 break
                         if strategy == MatchStrategy.first and matched_l:
                             logger.debug(
-                                f"Strategy is 'first' and there is a filtered match, breaking RESULT LOOP {res_loop}"
+                                f"Strategy is 'first' and there is a filtered match, breaking ROUTE loop {route_loop}"
                             )
                             break
                 else:
@@ -939,6 +942,11 @@ class ZMClient:
                     f"{lp}perf:: HTTP Detection request to '{route.name}' completed in "
                     f"{perf_counter() - _perf:.5f} seconds // {image_name=}"
                 )
+            if strategy == MatchStrategy.first and matched_l:
+                logger.debug(
+                    f"Strategy is 'first' and there is a filtered match, breaking out of image loop {image_loop}"
+                )
+                break
         logger.debug(f"{lp} OUT OF WHILE LOOP (image/image_name while loop)")
         logger.debug(
             f"perf:: Total detections time {perf_counter() - _start:.5f} seconds"
