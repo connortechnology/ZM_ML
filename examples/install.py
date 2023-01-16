@@ -25,7 +25,7 @@ DEFAULT_MODELS = ["yolov4", "yolov4_tiny", "yolov7", "yolov7_tiny"]
 available_models = {
     "yolov8m": {
         "folder": "yolo/v8",
-        "model": ["https://github.com/baudneo/ZM_ML/releases/download/yolov8/yolov8m.onnx"],
+        "model": ["https://github.com/baudneo/ZM_ML/releases/download/v0.0.1-alpha1/yolov8m.onnx"],
         "config": [],
     },
     "yolov4": {
