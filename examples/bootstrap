@@ -1,35 +1,42 @@
 #!/usr/bin/env bash
 
 # This will attempt to set up the environment and install ZoneMinder Machine Learning library using git
+
 TESTING=${TESTING:-false}
-GIT=${GIT:-$(which git)}
+GIT=${GIT:-git}
 PIP=${PIP:-pip3}
 PYTHON=${PYTHON:-python3}
 INSTALLER=${INSTALLER:-}
 
-# utility functions for color coded pretty printing
-print_error() {
-    COLOR="\033[1;31m"
-    NOCOLOR="\033[0m"
-    echo -e "${COLOR}ERROR::${NOCOLOR} $1"
-}
+REPO=${REPO:-https://github.com/baudneo/ZM_ML}
+CLONE_DIR=${CLONE_DIR:-zm_ml}
 
-print_important() {
-    COLOR="\033[0;34m"
-    NOCOLOR="\033[0m"
-    echo -e "${COLOR}IMPORTANT::${NOCOLOR} $1"
-}
 
-print_warning() {
-    COLOR="\033[0;33m"
-    NOCOLOR="\033[0m"
-    echo -e "${COLOR}WARNING::${NOCOLOR} $1"
-}
+pprint_() {
+  local type_='info'
+while true; do
+  case "$1" in
+    error ) type_=error; shift ;;
+    success ) type_=success; shift ;;
+    testing ) type_=testing; shift  ;;
+    important ) type_=important; shift  ;;
+    warning ) type_=warning; shift  ;;
+    * ) break ;;
+  esac
+done
 
-print_success() {
-    COLOR="\033[1;32m"
-    NOCOLOR="\033[0m"
-    echo -e "${COLOR}Success::${NOCOLOR} $1"
+    local msg="$*"
+    local color=''
+    local reset='\033[0m'
+    case "$type_" in
+      error ) color='\033[1;31mERROR::' ;;
+      success ) color='\033[1;32mSUCCESS::' ;;
+      testing ) color='\033[1;14mTESTING::' ;;
+      important ) color='\033[1;34mIMPORTANT::' ;;
+      warning ) color='\033[1;33mWARNING::' ;;
+      * ) color='\033[1;36mINFO::' ;;
+    esac
+    echo -e "${color}${reset} ${msg}"
 }
 
 get_distro() {
@@ -83,103 +90,100 @@ get_installer() {
     echo "${installer}"
 }
 
+testing() {
+    if [ "$TESTING" == "true" ]; then
+        pprint_ testing "would run :: $*"
+    else
+      pprint_ important "running command :: $*"
+        "$@"
+    fi
+}
+
 usage() {
-    echo "Usage: bootstrap [-t|--testing] [-h|--help] [-g|--git GIT_BINARY] [-p|--pip PIP_BINARY] [-u|--python PYTHON_BINARY] [-i|--installer INSTALLER_COMMAND]"
+    echo "Usage: bootstrap [-t|--testing] [-h|--help] [-g|--git GIT_BINARY] [-P|--pip PIP_BINARY] [-u|--python PYTHON_BINARY] [-i|--installer INSTALLER_COMMAND] [--type client|server|both]"
     echo
     echo "Optional:"
     echo "  -t, --testing:      Enable testing mode"
     echo "  -g, --git:          Path to git executable"
-    echo "  -p, --pip:          Path to pip executable"
+    echo "  -P, --pip:          Path to pip executable"
     echo "  -u, --python:       Path to python3 executable"
     echo "  -i, --installer:    Path to installer executable with args and flags"
+    echo "  --type:             Type of install; client, server, or both [Default: client]"
     echo "  -h, --help:         Print this help message"
     exit 1
 }
 
-
 # NOTE: This requires GNU getopt.  On Mac OS X and FreeBSD, you have to install this
 # separately; see below.
-TEMP=$(getopt -o thg:p:u:i: --long testing,help,git:,pip:,python:,installer: \
+TEMP=$(getopt -o thg:P:u:i: --long testing,help,git:,pip:,python:,installer:,type: \
               -n 'bootstrap' -- "$@")
-if [ $? != 0 ] ; then print_error "Terminating..." >&2 ; exit 1 ; fi
-
+if [ $? != 0 ] ; then
+  pprint_ error "Options parsing error!! Terminating..." >&2
+  exit 1
+fi
 # Note the quotes around '$TEMP': they are essential!
 eval set -- "$TEMP"
-
+TYPE='client'
 while true; do
   case "$1" in
-    -t | --testing ) TESTING=true; shift ;;
+    -t | --testing ) TESTING=true; pprint_ important "Testing Mode ENABLED"; shift ;;
     -h | --help ) usage ;;
     -g | --git ) GIT="$2"; shift 2 ;;
     -p | --pip ) PIP="$2"; shift 2 ;;
     -u | --python ) PYTHON="$2"; shift 2 ;;
     -i | --installer ) INSTALLER="$2"; shift 2 ;;
+    --type) TYPE="$2"; shift 2 ;;
     -- ) shift; break ;;
     * ) break ;;
   esac
 done
-print_important "This script will attempt to bootstrap the installation of ZoneMinder Machine Learning (ZM_ML) library."
+allowed_types=('client' 'server' 'both')
+if [[ ! " ${allowed_types[*]} " =~ ${TYPE} ]]; then
+    pprint_ error "Invalid --type: ${TYPE}"
+    usage
+fi
+
+pprint_ important "This script will attempt to bootstrap the installation of ZoneMinder Machine Learning (ZM_ML) library."
 if [[ -z "${INSTALLER}" ]]; then
-  echo "Attempting to determine package manager install command"
+  pprint_ info "Attempting to determine package manager install command"
     INSTALLER=$(get_installer)
 fi
-echo "Distro Based On: $(get_distro) -- Install Command: ${INSTALLER}"
+pprint_ info "Distro Based On: $(get_distro) -- Install Command: ${INSTALLER}"
+
+host_deps=("$GIT" "$PIP" "$PYTHON")
+for h_dep in "${host_deps[@]}"; do
+  if [[ -z "${h_dep}" ]]; then
+    pprint_ error "Missing host dependency :: ${h_dep} , trying to install..."
+    if [[ "$h_dep" == 'pip3' ]]; then
+      h_dep='python3-pip'
+    fi
+    testing "sudo -H ${INSTALLER} $h_dep"
+  else
+    pprint_ success "Found host dependency :: ${h_dep}"
+  fi
+done
+deps=('requests' 'psutil')
+for dep in "${deps[@]}"; do
+    echo "Checking for python3 module: ${dep}  ...."
+    if ! python3 -c "import ${dep}" 2>/dev/null; then
+        pprint_ error "${dep} python3 module not found, installing ${dep} python3 module..."
+        testing "${PIP} install ${dep}"
+    else
+      pprint_ success "python3 module found: ${dep}"
+    fi
+done
+
 echo
-    echo "Checking for git binary...."
-    if [ -z "$GIT" ]; then
-        print_error "git not found, installing git..."
-        if [[ "$TESTING" == "true" ]]; then
-            echo "TESTING: $INSTALLER git"
-        else
-            "sudo -H ${INSTALLER} git"
-        fi
-    fi
-    echo "Checking for pip3 binary...."
-    if [ -z "$PIP" ]; then
-        print_error "pip3 not found, installing pip3..."
-        if [[ "$TESTING" == "true" ]]; then
-            print_important "TESTING: $INSTALLER python3-pip"
-        else
-            "sudo -H ${INSTALLER} python3-pip"
-        fi
+testing "${GIT} clone ${REPO} ${CLONE_DIR}"
 
-    fi
-    echo "Checking for python3 binary...."
-    if [ -z "$PYTHON" ]; then
-        print_error "python3 not found, installing python3..."
-        if [[ "$TESTING" == "true" ]]; then
-            print_important "TESTING: $INSTALLER python3"
-        else
-            "sudo -H ${INSTALLER} python3"
-        fi
-    fi
-    deps=('requests' 'psutil')
-    for dep in "${deps[@]}"; do
-        echo "Checking for ${dep} python3 module...."
-        if ! python3 -c "import ${dep}" 2>/dev/null; then
-            print_error "${dep} python3 module not found, installing ${dep} python3 module..."
-            if [[ "$TESTING" == "true" ]]; then
-                print_important "TESTING: $PIP install ${dep}"
-            else
-                "sudo -H ${PIP} install ${dep}"
-            fi
-          else
-            print_success "${dep} python3 module found"
-        fi
-    done
-    echo
-    echo "Cloning ZM_ML library..."
-    if [[ "$TESTING" == "true" ]]; then
-      print_important "TESTING: $GIT clone https://github.com/baudneo/ZM_ML"
-    else
-      "${GIT} clone https://github.com/baudneo/ZM_ML"
-      cd ZM_ML || exit 1
-    fi
-    if [[ "$TESTING" == "true" ]]; then
-      print_important "TESTING: ${PYTHON} ./examples/install.py"
-    else
-      print_important "Installing ZM_ML using ./examples/install.py..."
-      "${PYTHON}" ./examples/install.py # >/dev/null 2>&1
-
-    fi
-    echo
+if [[ "$TESTING" == "true" ]]; then
+  ROOT_DIR="$(dirname "$(dirname "$(readlink -f "$0")")")"
+  cd $ROOT_DIR  || echo "Failed to cd to $ROOT_DIR"
+  pprint_ testing "doing test run of install.py :: ${PYTHON} ./examples/install.py --install-type ${TYPE} -TD"
+  eval ${PYTHON} "$(pwd)"/examples/install.py --install-type "${TYPE}" -TD
+else
+  cd "$CLONE_DIR" || echo "Failed to cd to $CLONE_DIR"
+  pprint_ important "Installing ZM_ML using ./examples/install.py -D --install-type ${TYPE}  ..."
+  "${PYTHON} $(pwd)/examples/install.py -D --install-type ${TYPE}" # >/dev/null 2>&1
+fi
+echo

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import datetime
 import platform
 from collections import namedtuple
@@ -658,7 +659,7 @@ def install_host_dependencies(_type: str):
                                 f"Running as non-root user but this is test mode! continuing to test... "
                             )
                         install_cmd = [inst_binary, inst_prefix, dep]
-                        msg = f"Running HOST package manager installation command: '{' '.join(install_cmd)}'"
+                        msg = f"Running HOST package manager installation command: {install_cmd}"
                         if not interactive:
                             if not testing:
                                 logger.info(msg)
@@ -872,18 +873,19 @@ def main():
                 )
 
             else:
-                logger.info(
-                    f"Installing {_inst_type} pip dependencies (USING --dry-run)..."
-                )
-                ran = subprocess.run(
-                    [
+                _pip_inst_cmd=[
                         _pip_prefix,
                         "install",
                         "--report",
                         f"./pip_install_report.json",
                         "--dry-run",
                         _src,
-                    ],
+                    ]
+                logger.info(
+                    f"Installing {_inst_type} pip dependencies (USING --dry-run) :: {_pip_inst_cmd}..."
+                )
+                ran = subprocess.run(
+                    _pip_inst_cmd,
                     capture_output=True,
                     text=True,
                 )

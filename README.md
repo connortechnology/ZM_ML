@@ -28,7 +28,22 @@ This project is based on the work of [@pliablepixels](https://github.com/pliable
 
 1. [**EventStartCommand**/**EventEndCommand**](https://zoneminder.readthedocs.io/en/latest/userguide/definemonitor.html#recording-tab:~:text=events%20are%20recorded.-,Event%20Start%20Command,the%20command%20will%20be%20the%20event%20id%20and%20the%20monitor%20id.,-Viewing%20Tab) is what runs the object detection script. Before, SHM was polled every \<X> seconds to see if a new event had been triggered.
 
----
+## Installation
+
+### **Bootstrap**
+- Download the file first and read it before running
+    - ```bash 
+      curl -H 'Cache-Control: no-cache' -s https://raw.githubusercontent.com/baudneo/ZM_ML/master/examples/bootstrap > bootstrap && chmod +x bootstrap && ./bootstrap --help
+      ```
+- This will attempt to install git if it isn't already installed, clone the repo and install ZM_ML using defaults (Install client only).
+    - ```bash
+      curl -H 'Cache-Control: no-cache' -s https://raw.githubusercontent.com/baudneo/ZM_ML/master/examples/bootstrap | bash /dev/stdin --help 
+      ```
+
+
+### **Manual**
+```bash
+
 
 ## Server
 
