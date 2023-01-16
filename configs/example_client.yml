@@ -3,35 +3,42 @@
 
 substitutions:
   # Order matters!
-  DATA_DIR: "/etc/zm/ML"
+  DATA_DIR: ${ML_INSTALL_DATA_DIR}
+  TMP_DIR: ""
+  CFG_DIR: ${ML_INSTALL_CFG_DIR}
+  LOGGING_DIR: ${ML_INSTALL_LOGGING_DIR}
 
   # These will be imported from the file to be used as variables (secrets)
-  IncludeFile: "${DATA_DIR}/secrets.yml"
+  IncludeFile: "${CFG_DIR}/secrets.yml"
 
-  LOGGING_DIR: "/var/log/zm"
-  ROUTE_NAME: "Default Route"
-  ROUTE_HOST: "localhost"
-  ROUTE_PORT: "5000"
+  ROUTE_NAME: ${ML_INSTALL_ROUTE_NAME}
+  ROUTE_HOST: ${ML_INSTALL_ROUTE_HOST}
+  ROUTE_PORT: ${ML_INSTALL_ROUTE_PORT}
   # --------- Example
   EXAMPLE: "World!"
 
 THIS IS AN EXAMPLE:
   of substitution variables: "Hello, ${EXAMPLE}"
-  or: ${EXAMPLE}
 
 system:
-  # Store variable data in this Directory [/var/lib/zm_ml]
-  variable_data_path:
-  # Store temp data in this Directory [/tmp/zm_ml]
-  tmp_path:
-
-  # Override the default config path [/etc/zm/ML]
-  config_path:
-  # Maximum parallel threaded processes [4]
+  # Override the default config path [/opt/etc/zm/ml]
+  config_path: ${CFG_DIR}
+  # Path where the system will store variable data [/opt/var/lib/zm_ml]
+  variable_data_path: ${DATA_DIR}
+  # Path where temp files will be stored, leave empty to auto-detect
+  tmp_path: ${TMP_DIR}
+  image_dir: ${DATA_DIR}/images
+  # A warning will be printed to logs when the image dir is over this size
+  image_dir_warning_size: 150 MB
+  # The image dir will start dropping oldest files when it reaches this size
+  image_dir_max_size: 300 MB
+  # Maximum parallel threaded processes
   thread_workers: 4
 
-
 zoneminder:
+  misc:
+    write_notes: yes
+
   api: ${ZM_API}
   portal: ${ZM_PORTAL}
   user: ${ZM_USER}
@@ -40,17 +47,37 @@ zoneminder:
   ssl_verify: ${ZM_SSL}
 
 logging:
+#  root logging level
   level: debug
-  # log to console
-  console: yes
-  # Hook into ZM logging system (WIP!)
-  integrate_zm: no
-  # log to file
-  dir: ${LOGGING_DIR}
-  file_name: zm_ml.log
-  # override log file permissions
-#  user: default-www-user
-#  group: default-www-user
+
+  sanitize:
+    # Try to sanitize tokens, keys, passwords, usernames, host and ip addresses from logs
+    enabled: yes
+    replacement_str: <sanitized>
+
+  console:
+    # log to console
+    enabled: ${ML_INSTALL_LOGGING_CONSOLE_ENABLED}
+  #    level: debug
+
+  syslog:
+    enabled: ${ML_INSTALL_LOGGING_SYSLOG_ENABLED}
+    #    level: debug
+#    address: /dev/log
+    address: ${ML_INSTALL_LOGGING_SYSLOG_ADDRESS}
+
+  file:
+    # log to file
+    enabled: ${ML_INSTALL_LOGGING_FILE_ENABLED}
+    #    level: debug
+    # directory where log files will be stored
+    path: ${LOGGING_DIR}
+    # log file name
+    filename: zm_mlapi.log
+    # override log file permissions
+    # user:
+    # group:
+
 
 mlapi:
   routes:
@@ -85,16 +112,83 @@ animations:
     enabled: true
 
 
+
 notifications:
+  mqtt:
+    #-- use python mqtt client to
+    #-- Options to use no encryption or secure/insecure TLS/mTLS
+    #-- Default ports: for TCP: non-TLS: 1883  TLS:8883 .
+    enabled: no
+
+    #-- Send image to MQTT topic
+    image:
+      enabled: yes
+      topic: "zm_ml/image"
+
+    animation:
+      enabled: yes
+      topic: "zm_ml/animation"
+
+    # Force mqtt to send pic and data even if it's a PAST event
+    force: no
+
+    #-- Allow you to set a custom MQTT topic name, formats for topics are: name/sub-name/sub-sub-name
+    #-- notice no leading or trailing '/'
+    #-- python mqtt default topic: zm_ml/detection
+    #topic:  myown_topic/here
+
+    #-- if using tls remember about host verification (tls_insecure :  no host verification but still encrypted)
+    #broker:  brokers.hostname
+    broker: ${MQTT_BROKER}
+
+    #-- Only use this if not using standard tcp ports, it defaults to 1883 if no TLS and 8883 if TLS, this setting will override
+    #port:  1234
+
+    #-- MQTT Credentials if enabled in broker
+    user: ${MQTT_USERNAME}
+    pass: ${MQTT_PASSWORD}
+
+    #-- MQTT over TLS
+    #-- Location to MQTT broker CA certificate. Uncomment this line will enable MQTT over TLS.
+    #-- Strict certificate checking
+    #-- [Default: no]
+    allow_self_signed: yes
+
+    #-- To allow insecure TLS - disable peer verifier/don't verify hostname in COMMON NAME (CN:  field), [Default: no]
+    #-- if using ip address in cert's COMMON NAME field then this needs to be 'yes'
+    #-- [Default: no]
+    tls_insecure: yes
+
+    #-- mTLS CA (self signed?)
+    tls_ca: /path_to/mqtt_certs/ca.crt
+
+    #-- Here is a good guide on setting up a CA and signing server/client certificates for MQTT, even if you're using mqtt over your LAN only,
+    #-- it is always good to enable encryption and learn about it -> http://www.steves-internet-guide.com/creating-and-using-client-certificates-with-mqtt-and-mosquitto/
+    #-- I DO NOT RECOMMEND using Home Assistant MQTT broker add-on as it's a nightmare to get TLS working. (I am still unable to get the MQTT integration to connect to my broker using TLS)
+    #-- I run an MQTT mosquitto broker on my ZM host and hass connects to that over unencrypted connection.
+    #-- To enable 2-ways TLS, add client certificate and private key, Meaning you had a CA sign your broker's server key/cert
+    #-- and also had the CA sign the client key/cert that you are using here
+    #-- Location to client certificate and private key
+    tls_cert :  /path_to/mqtt_certs/client-zm.crt
+    tls_key :  /path_to/mqtt_certs/client-zm.key
+
+
   zmninja:
     enabled: no
+
     fcm:
-    # Try to send a notifications to zmNinja using FCM
-      enabled: no
     # Default YES - switch to no until ZM team recompiles zmninja with new creds
-      v1: no
-      # Location of FCM tokens file that the websocket server tracks from zmNinja
-      local_tokens: '${DATA_DIR}/zmninja_tokens'
+      v1:
+        enabled: no
+        # When push messages are sent, your ES sends a message to my cloud function
+        # that sends the message to Google's FCM servers. This is the key that authorizes
+        # your ES to send messages to my cloud function. By default, it will contain a key
+        # that authorizes with my server. If you switch to your own server, change this value
+        # You will also need to switch the server URL to your own server, use fcm:v1:url for that
+        key:
+        url:
+      # Location of tokens.txt that the websocket server tracks from zmNinja
+      token_file: '${DATA_DIR}/push/tokens.txt'
       # if yes, will replace notifications with the latest one
       replace_messages: no
       # Date format to use when sending notification over push (FCM)
@@ -104,11 +198,11 @@ notifications:
 
       # Set priority for android push.
       # You can set it to high or normal.
-      # There is weird foo going on here. If you set it too high,
+      # There is weird foo going on here. If you set it to high,
       # and don't interact with push, users report after a while they
       # get delayed by Google. I haven't quite figured out what is the precise
       # value to put here to make sure it always reaches you. Also make sure
-      # [Default: high]
+      # you read the zmES faq on delayed push [Default: high]
       android_priority: high
 
       # Make this yes if you are having push notification issues and want me to
@@ -133,16 +227,13 @@ notifications:
       # while others say it won't. YMMV.
       android_ttl: 0
 
-      # When push messages are sent, a message is sent to a ZM controlled cloud function
-      # that sends the message to Google's FCM servers. This is the key that authorizes
-      # messages to the cloud function. If you switch to your own server, change this value
-      # You will also need to switch the server URL to your own server, use fcm_v1_url for that
 
-      fcm_v1_key: ''
-      fcm_v1_url: ''
 
   gotify:
-    enabled: no
+    enabled: yes
+    # If you are not receiving images in gotify notifications, set this to yes to set image to a publicly available URL
+    # This will tell you if your gotify android clients are not able to access your ZM server from outside the LAN
+    test_image: no
     host: ${GOTI_HOST}
     # Gotify App token
     token: ${GOTI_TOKEN}
@@ -155,16 +246,16 @@ notifications:
     # Show a clickable link to view the event in a browser (only once inside the Gotify App).
     # this is handy if the notification goes out to a device without zmNinja installed.
     # They can just click the link and view the event in a regular browser.
-    # -- NOTE: ZM must be accessible from the internet for this to work
+    # -- NOTE: Your ZM server may need to be accessible externally for this to work correctly.
 
     # !! WARNING: If you use this, you are sending your ZM user and password to the Gotify server/clients,
     # if no SSL is used IT WILL BE CLEAR TEXT! So USE SSL!
 
     # [Default: no]
-    link_url: no
+    link_url: yes
 
     # The ZM API user for the clickable URL link in the pushover notification. I HIGHLY recommend HTTPS on your ZM host,
-    # making a user with VIEW privileges of stream and events only and using that for link_user and link_pass
+    # making a user with VIEW privileges of stream and events only and using that for push_user and pas
     # -- EXAMPLE: make a user named 'PushView' with VIEW privs only for STREAM and EVENT
     # [Default: None]
     link_user: ${LINKURL_USER}
@@ -191,6 +282,17 @@ notifications:
     token: ${PUSHOVER_TOKEN}
     key: ${PUSHOVER_KEY}
 
+    # PushOver has a monthly limit, 'cooldown' means at least X seconds must have passed since the last push for that monitor
+    # i.e: cooldown: 30 means only send a pushover notification if it has been at least 30 seconds since the
+    # last SUCCESSFUL pushover notification for that MONITOR
+    # [Default: 30]
+    cooldown: 30
+    # send the message to a specififc device (leave blank to send to all devices)
+    # [Default: <Nothing>]
+    device:
+
+
+
     animation:
       enabled: no
       # If a gif is being created, send it as a separate pushover animation (Pushover only works with GIF)
@@ -201,13 +303,13 @@ notifications:
     # *** NOTE: has to be setup in your pushover account first.
     # *** Meaning you have to upload mp3s and label the sound files with the same name as the sound you want to use.
     sounds:
-      #-- You can override these sounds on a per-monitor basis, see the per monitor examples for how to achieve
-      #-- 'person detected in the front yard' sound for the front yard notification when a person is in the detected objects
-#      default: motion_detected
-      #-- per object overrides are formatted as such
-#      person: person_detected
+      # You can override these sounds on a per-monitor basis, see the per monitor examples for how to achieve
+      # 'person detected in the front yard' sound for the front yard notification when a person is in the detected objects
+      default: motion_detected
+      # per object overrides are formatted as such
+      person: person_detected
       #    dog: dog_detected
-      #-- custom groups can be specified as such
+      # custom groups can be specified as such
       #    vehicles: vehicle_detected
       #    animals: animal_detected
 
@@ -220,10 +322,10 @@ notifications:
     # if no SSL is used IT WILL BE CLEAR TEXT! So USE SSL!
 
     # [Default: no]
-    link_url: no
+    link_url: yes
 
     # The ZM API user for the clickable URL link in the pushover notification. I HIGHLY recommend HTTPS on your ZM host,
-    # making a user with VIEW privileges of stream and events only and using that for push_user and pas
+    # making a user with VIEW privileges of stream and events only and using that for link_user and link_pass
     # example: make a user named 'PushView' with VIEW privs only for STREAM and EVENT
     # [Default: None]
     link_user: ${LINKURL_USER}
@@ -246,13 +348,7 @@ notifications:
 
   shell_script:
     enabled: no
-    script: /tmp/zm_mlapi/scripts/notify.sh
-
-  hass:
-    enabled: false
-    host:
-    token:
-    ssl_verify: false
+    script: ${DATA_DIR}/scripts/notify.sh
 
 label_groups:
   animals:
@@ -282,7 +378,7 @@ detection_settings:
 
   # Import the zones defined in ZM
   import_zones: no
-  # object must be in one of the zones that triggered the motion event to be considered for a match
+  # object must be in one of the zones that triggered the motion event
   match_origin_zone: no
 
   images:
@@ -296,7 +392,7 @@ detection_settings:
         # ANY of the delay options can be set as xx or xx.yy (int/float)
         attempts: 3  # attempts to grab the requested frame
         delay: 0.2   # delay between failed attempts
-        max_frames: 5  # Only grab x frames (Default: Calculated based on event duration and monitor capturing FPS)
+        max_frames: 10  # Only grab x frames (Default: Calculated based on event duration and monitor capturing FPS)
         # snapshot is the highest alarmed frame ID and can change during an event
         # This will check if the snapshot frame ID has changed and if so, grab the new snapshot frame
         check_snapshots: yes
@@ -307,8 +403,8 @@ detection_settings:
     debug:
       # Shows bounding box of filtered out detections in RED
       enabled: no
-      # Where to save the debug images
-      path: /tmp/zm_mlapi/images/debug
+      # Where to save the debug images Default: $TMP_DIR/images/debug
+      path:
 
     annotation:
       # Draw zone polygons on image
@@ -323,6 +419,7 @@ detection_settings:
       model:
         enabled: yes
         # Show which processor the model used
+
         processor: yes
 
       # Show the confidence level of the detection
@@ -331,12 +428,16 @@ detection_settings:
     training:
       # Save 2 images and a JSON file for matching detections
       enabled: no
-      path: /tmp/zm_mlapi/images/training
+      path: /home/<user>/ml/training_images
 
 
 matching:
-  # If using more than 2 Object type Models, try to confirm matches by checking
-  #  if the object is in roughly the same place across Models
+  # same as zmeventnotification - first, most, most_unique, union[WIP]
+  # Tiebreakers will use the SUM of confidences for the model
+  strategy: most
+
+  # If using more than 2 Object type Models (yolov4, tiny-yolov7), try to confirm matches by checking
+  #  if the object is in roughly the same place across Models.
   object_confirm: yes
 
   # Remove matches that seem to be 'in the same place'. Comparison is between the previous detections best match.
@@ -352,8 +453,8 @@ matching:
   filters:
     # This is globally applied to all monitors but can be overridden on a per-monitor basis
     object:
-      min_conf: 0.5
-      pattern: "(car|truck|bus|person|dog|cat)"
+      min_conf: 0.4
+      pattern: "(DEFAULT|car|truck|bus|person|dog|cat)"
       total_max_area: 100%
       total_min_area: 1px
     face:
@@ -368,71 +469,124 @@ monitors:
     models:
       # Models to run. Name must match the name of the model obtained from its configuration or the API request
       yolov4:
-#      yolov4-p6:
-#      yolov7 tiny:
-#      yolov7:
-#      yolov7x:
+        enabled: no
+        options:
+          # options to pass to the model
+          # see the model's documentation for options
+          # if the model is not enabled, these options will be ignored
+          conf: 0.5
+          nms:
 
+#      yolov4-p6:
+      yolov7 tiny:
+#      yolov7:
+      yolov7x:
+
+    # Add matching filters for this monitor (inherits/overrides config:matching)
+#    object_confirm: no
 
     static_objects:
       enabled: no
       # -- difference in area between current and previous detection
-      difference: 13%
+      difference: 69%
       labels:
-        - vehicles
+        - car
+#      ignore_labels:
+#        - bird
+
 
     zones:
     # -- These are zones that are defined in the config file on top of imported ZoneMinder zones
     # -- If you import ZM zones you can add a ML config for that zone here.
     # -- Example: If the imported zone is named "Front Yard", this would set the ML config for it.
         Front Yard:
-          pattern: "(person|car|truck|bus|dog|cat)"
+          enabled: yes
 
           # -- Polygon points
-          # points: 0,0 0,0 0,0 0,0 # Omitted because this is an imported zone
-
+          points: 0,2146 3818,2146 3820,1058 2604,426 2526,534 198,466 124,632 8,648
           # -- Used to scale polygon points if the monitor resolution has changed.
-          # -- Strings like "1080p" "4k" "720p" are supported
-#          resolution: "1080p"  # Omitted because this is an imported zone
+          # -- Strings like "1080p" "4k" "4kuhd"("uhd") "720p" are supported or a tuple of (width, height)
+          resolution: 4kuhd
 
           # Currently there are 3 types of ML model groups supported object, face, alpr
+          # Zone level matching filters can be set for each type
+#          object_confirm: no
+#
+          static_objects:
+            enabled: no
+            # -- difference in area between current and previous detection, % or pixel value
+            difference: 25%
+            labels:
+              - vehicles
+
           filters:
             object:
+              pattern: "(person|dog|cat|chewbacca)"
               # -- Per label filtering (label_groups supported)
+              # -- Trained faces are labeled with the name of the person
               labels:
-                vehicles:
-                  min_conf: 0.33
-
                 person:
                   min_conf: 0.5
                     # -- The minimum and maximum area of the detection box in pixels or percentage of the zone.
                     # -- (how much of the zone is covered by the detection box)
-                  min_area: 10px
-                  max_area: 10%
+#                  min_area: 10px
+#                  max_area: 10%
                   # -- The minimum and maximum area of the detection box in pixels or percentage of the full image.
                   # -- (how much of the image is covered by the detection box)
-                  total_min_area: 10px
-                  total_max_area: 10%
+#                  total_min_area: 10px
+#                  total_max_area: 10%
             face:
-              # -- You can specify trained face names here
+              # -- You can specify trained face names here, only pattern supported currently
               pattern: ".*"
               # pattern: "(James|Addison)"
             alpr:
-              # only pattern and min_conf supported
+              # -- Only pattern and min_conf supported
               pattern: ".*"
               min_conf: 0.1
+  2:
+    models:
+      # Models to run. Name must match the name of the model obtained from its configuration or the API request
+      yolov4:
+#      yolov4-p6:
+      yolov7 tiny:
+#      yolov7:
+      yolov7x:
+      static_objects:
+        enabled: yes
+        # -- difference in area between current and previous detection
+        difference: 69%
+        labels:
+          - car
+#        ignore_labels:
+#          - bird
 
-        Example of non-imported self defined zone 1:
-          # Polygon points. Use ZM zone editor to draw the polygon and copy the points here
-          points: 0,722 1592,94 1920,380 1920,1073 0,1080
-          # Used to scale polygon points if the monitor resolution has changed
-          resolution: "1080p"
-          filters:
-            object:
-              labels:
-                person:
-                  conf: 0.2
-                  # In relation to the zone
-                  min_area: 20px
-                  max_area: 20%
-
+    zones:
+      parking area:
+        enabled: yes
+        # Polygon points. Use ZM zone editor to draw the polygon and copy the points here
+        points: 0,722 1592,94 1920,380 1920,1073 0,1080
+        resolution: 1080p
+        filters:
+          object:
+            pattern: "(person|dog|cat|car|truck|bus|bicycle)"
+            # -- Per label filtering (label_groups supported)
+            # -- Trained faces are labeled with the name of the person
+            labels:
+              person:
+                min_conf: 0.5
+                # -- The minimum and maximum area of the detection box in pixels or percentage of the zone.
+                # -- (how much of the zone is covered by the detection box)
+                min_area: 10px
+#                max_area: 10%
+                # -- The minimum and maximum area of the detection box in pixels or percentage of the full image.
+                # -- (how much of the image is covered by the detection box)
+                total_min_area: 10px
+#                total_max_area: 10%
+          face:
+            # -- You can specify trained face names here, only pattern supported currently
+            pattern: ".*"
+            # pattern: "(James|Addison)"
+          alpr:
+            # -- Only pattern and min_conf supported
+            pattern: ".*"
+            min_conf: 0.1

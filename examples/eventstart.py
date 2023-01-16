@@ -147,6 +147,7 @@ if __name__ == "__main__":
     asyncio.set_event_loop(loop)
     _start = time.perf_counter()
     ENV_VARS = ClientEnvVars()
+    logger.info(f"ENV VARS: {ENV_VARS}")
     g: GlobalConfig = create_global_config()
     g.Environment = ENV_VARS
     detections = loop.run_until_complete(main())

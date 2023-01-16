@@ -43,6 +43,7 @@ class LoggingSettings(LoggingLevelBase):
     class FileLogging(DefaultEnabled, LoggingLevelBase):
         path: Path = Field('/var/log/zm')
         filename_prefix: str = Field("zmML")
+        file_name: Optional[str] = None
         user: str = Field(default="www-data")
         group: str = Field(default="www-data")
 

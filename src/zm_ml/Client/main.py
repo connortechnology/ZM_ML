@@ -79,7 +79,8 @@ async def init_logs(config: ConfigFileModel) -> None:
     sys_gid: int = os.getgid()
     sys_group: str = grp.getgrgid(sys_gid).gr_name
     sys_uid: int = os.getuid()
-    cfg = config.logging
+    from ..Shared.Models.config import LoggingSettings
+    cfg: LoggingSettings = config.logging
     root_level = cfg.level
     logger.debug(
         f"Setting root logger level to {root_level} [Type: {type(root_level)}] [logging module "
@@ -94,8 +95,10 @@ async def init_logs(config: ConfigFileModel) -> None:
                 logger.removeHandler(h)
 
     if cfg.file.enabled:
-        # fixme: add monitor number to log file name
-        _filename = f"{cfg.file.filename_prefix}_m{g.mid}.log"
+        if cfg.file.file_name:
+            _filename = cfg.file.file_name
+        else:
+            _filename = f"{cfg.file.filename_prefix}_m{g.mid}.log"
         abs_logfile = cfg.file.path / _filename
         try:
             if not abs_logfile.exists():
@@ -178,6 +181,8 @@ def parse_client_config_file(cfg_file: Path) -> Optional[ConfigFileModel]:
             substitutions = testing.substitutions
 
     logger.debug(f"Replacing ${{VARS}} in config:substitutions")
+    substitutions = _replace_vars(str(substitutions), substitutions)
+    substitutions = _replace_vars(str(substitutions), substitutions)
     substitutions = _replace_vars(str(substitutions), substitutions)
     if inc_file := substitutions.get("IncludeFile"):
         inc_file = Path(inc_file)

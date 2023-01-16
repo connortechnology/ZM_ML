@@ -1018,5 +1018,12 @@ class GlobalConfig(BaseModel):
         return ret_
 class ServerEnvVars(BaseSettings):
     """Server Environment Variables"""
-    conf_file: str = Field(None, env="CONF_FILE", description="YAML config file")
+    conf_file: str = Field(None, env="CONF_FILE", description="Server YAML config file")
+
+    class Config:
+        # env_file = ".env"
+        # env_file_encoding = "utf-8"
+        case_sensitive = True
+        # extra = "forbid"
+        env_prefix = "ZM_ML_SERVER_"
 

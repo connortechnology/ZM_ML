@@ -48,7 +48,7 @@ LP: str = "mlapi:"
 
 def create_logs() -> logging.Logger:
     from zm_ml.Shared.Log.handlers import BufferedLogHandler
-    from .Libs.Logging import SERVER_LOG_FORMAT
+    from .Log import SERVER_LOG_FORMAT
     logger = logging.getLogger(SERVER_LOGGER_NAME)
     console_handler = logging.StreamHandler(stream=sys.stdout)
     console_handler.setFormatter(SERVER_LOG_FORMAT)

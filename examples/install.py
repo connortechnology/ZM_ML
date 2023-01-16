@@ -23,6 +23,11 @@ DEFAULT_MODELS = ["yolov4", "yolov4_tiny", "yolov7", "yolov7_tiny"]
 
 # Do not change these unless you know what you are doing
 available_models = {
+    "yolov8m": {
+        "folder": "yolo/v8",
+        "model": ["https://github.com/baudneo/ZM_ML/releases/download/yolov8/yolov8m.onnx"],
+        "config": [],
+    },
     "yolov4": {
         "folder": "yolo/v4",
         "model": [
@@ -291,6 +296,12 @@ def parse_cli():
         choices=available_models.keys(),
     )
     parser.add_argument(
+        "--all-models",
+        action="store_true",
+        dest="all_models",
+        help="Download all available model files",
+    )
+    parser.add_argument(
         "--force-models",
         action="store_true",
         dest="force_models",
@@ -445,19 +456,19 @@ def install_dirs(
 
 
 def download_file(url: str, dest: Path, user: str, group: str, mode: int):
-    msg = f"Downloading {url}..."
-    if not args.test:
-        logger.info(msg)
-        import requests
+    msg = f"Downloading {url}..." if not testing else f"TESTING if file exists at {url}..."
+    logger.info(msg)
+    import requests
 
-        r = requests.get(url, allow_redirects=True)
-        if r.status_code == 200:
+    r = requests.get(url, allow_redirects=True)
+    if r.status_code == 200:
+        if not args.test:
             dest.write_bytes(r.content)
             chown_mod(dest, user, group, mode)
         else:
-            logger.error(f"Failed to download [code: {r.status_code}] {url}!")
+            logger.info(f"TESTING: File exists at {url}")
     else:
-        test_msg(msg)
+        logger.error(f"Failed to download [code: {r.status_code}] {url}!")
 
 
 def copy_file(src: Path, dest: Path, user: str, group: str, mode: int):
@@ -914,6 +925,32 @@ def main():
     if install_client:
         do_install("client", cfg_dir)
 
+def create_profile(_type: str):
+    _env_vars = {}
+    if _type == "server":
+        _env_vars = {
+            "ZM_ML_SERVER_CONF_FILE": f"{cfg_dir}/server.yml",
+            "ZM_ML_SERVER_SECRETS": f"{cfg_dir}/secrets.yml",
+        }
+
+    # create an /etc/profile.d/ file to set some default ZM ML env vars
+    profile_file = Path("/etc/profile.d/zm_ml.sh")
+    if profile_file.exists():
+        logger.warning(f"Profile file '{profile_file}' already exists, skipping...")
+    else:
+        logger.info(f"Creating profile file '{profile_file}'...")
+        return
+        profile_file.write_text(
+            f"""#!/bin/bash
+            
+                export ZM_ML_CONFIG_DIR={cfg_dir.as_posix()}
+                export ZM_ML_DATA_DIR={data_dir.as_posix()}
+                export ZM_ML_LOG_DIR={log_dir.as_posix()}
+                export ZM_ML_MODEL_DIR={model_dir.as_posix()}
+                export ZM_ML_WEB_USER={web_user}
+                export ZM_ML_WEB_GROUP={web_group}
+                """
+        )
 
 if __name__ == "__main__":
     install_file_dir = Path(__file__).parent
@@ -935,6 +972,10 @@ if __name__ == "__main__":
     cfg_dir = args.config_dir
     log_dir = args.log_dir
     models: List[str] = args.models
+    if args.all_models:
+        models = [str(x) for x in available_models.keys()]
+        logger.info(f"Using all available models: {models}")
     model_dir: Optional[Path] = None
     web_user, web_group = "", ""
     main()
+    create_profile()

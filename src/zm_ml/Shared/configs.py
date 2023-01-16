@@ -74,11 +74,11 @@ class ZMEnvVars(BaseSettings):
 
 
 class MLEnvVars(ZMEnvVars):
-    conf_dir: Path = Field(
+    ml_conf_dir: Path = Field(
         None, description="Path to ZoneMinder ML config files", env="CONF_DIR"
     )
 
-    @validator("conf_dir", pre=True, always=True)
+    @validator("ml_conf_dir", pre=True, always=True)
     def _validate_conf_dir(cls, v, **kwargs):
         field = kwargs["field"]
         if v:
@@ -95,20 +95,26 @@ class MLEnvVars(ZMEnvVars):
 
 class ServerEnvVars(MLEnvVars):
     server_conf_file: Path = Field(
-        None, description="Path to ZM-ML SERVER config file", env="SERVER_CONF_FILE"
+        None, description="Path to ZM-ML SERVER config file", env="CONF_FILE"
     )
+
+    class Config:
+        env_prefix = "ML_SERVER_"
+        check_fields = False
 
 
 class ClientEnvVars(MLEnvVars):
-    conf_file: Path = Field(
-        None, description="Path to ZM-ML CLIENT config file", env="CLIENT_CONF_FILE"
+    client_conf_file: Path = Field(
+        None, description="Path to ZM-ML CLIENT config file", env="CONF_FILE"
     )
     db_host: Union[IPvAnyAddress, AnyUrl] = Field("127.0.0.1", description="Database host", env="DBHOST")
     db_user: str = Field("zmuser", description="Database user", env="DBUSER")
     db_password: SecretStr = Field("zmpass", description="Database password", env="DBPASS")
     db_name: str = Field("zm", description="Database name", env="DBNAME")
     db_driver: str = Field("mysql+pymysql", description="Database driver", env="DBDRIVER")
-
+    class Config:
+        env_prefix = "ML_CLIENT_"
+        check_fields = False
     @validator("db_host", pre=True)
     def _validate_db_host(cls, v, field, **kwargs):
         # logger.debug(f"Validating ENVVAR {field}: {v}")
@@ -117,7 +123,7 @@ class ClientEnvVars(MLEnvVars):
                 v = "127.0.0.1"
         return v
 
-    @validator("conf_file", pre=True, always=True)
+    @validator("conf_file", pre=True, always=True, check_fields=False)
     def _validate_conf_file(cls, v, **kwargs):
         field = kwargs.get("field")
         values = kwargs.get("values")

@@ -227,7 +227,7 @@ class DetectionSettings(BaseModel):
             zmu: bool = Field(False)
 
         class Debug(DefaultNotEnabled):
-            path: Path = Field(Path("/tmp"))
+            path: Optional[Path] = Field(Path("/tmp"))
 
         class Annotations(BaseModel):
             class Zones(DefaultNotEnabled):
