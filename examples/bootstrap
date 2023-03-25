@@ -178,9 +178,9 @@ testing "${GIT} clone ${REPO} ${CLONE_DIR}"
 
 if [[ "$TESTING" == "true" ]]; then
   ROOT_DIR="$(dirname "$(dirname "$(readlink -f "$0")")")"
-  cd $ROOT_DIR  || echo "Failed to cd to $ROOT_DIR"
+  cd "$ROOT_DIR"  || echo "Failed to cd to $ROOT_DIR"
   pprint_ testing "doing test run of install.py :: ${PYTHON} ./examples/install.py --install-type ${TYPE} -TD"
-  eval ${PYTHON} "$(pwd)"/examples/install.py --install-type "${TYPE}" -TD
+  eval "${PYTHON}" "$(pwd)"/examples/install.py --install-type "${TYPE}" -TD
 else
   cd "$CLONE_DIR" || echo "Failed to cd to $CLONE_DIR"
   pprint_ important "Installing ZM_ML using ./examples/install.py -D --install-type ${TYPE}  ..."

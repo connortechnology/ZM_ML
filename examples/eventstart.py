@@ -154,6 +154,7 @@ if __name__ == "__main__":
     # Allow 250ms for aiohttp SSl session context to close properly
     loop.run_until_complete(asyncio.sleep(0.25))
     logger.debug(f"DETECTIONS FROM uvloop: {detections}")
+    print(f"DETECTIONS FROM uvloop: {detections}")
     logger.info(
         f"perf::FINAL:: Total: {time.perf_counter() - _start:.5f} seconds"
     )

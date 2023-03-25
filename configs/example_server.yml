@@ -1,3 +1,4 @@
+# ANY SUBSTITUTION VARIABLE STARTING WITH "ML_INSTALL_" ARE 'envsubst' DURING INSTALL
 substitutions:
   # Order matters!
   DATA_DIR: ${ML_INSTALL_DATA_DIR}
@@ -11,6 +12,7 @@ substitutions:
   ROUTE_NAME: ${ML_INSTALL_ROUTE_NAME}
   ROUTE_HOST: ${ML_INSTALL_ROUTE_HOST}
   ROUTE_PORT: ${ML_INSTALL_ROUTE_PORT}
+
   # --------- Example
   EXAMPLE: "World!"
 
@@ -24,17 +26,13 @@ system:
   # Path where temp files will be stored
   tmp_path: ${ML_INSTALL_TMP_DIR}
   image_dir: ${DATA_DIR}/images
-  # A warning will be printed to logs when the image dir is over this size
-  image_dir_warning_size: 150 MB
-  # The image dir will start dropping oldest files when it reaches this size
-  image_dir_max_size: 300 MB  # Maximum threaded processes
+  # Maximum threaded processes
   thread_workers: 4
 
 server:
   address: ${ML_INSTALL_SERVER_ADDRESS}
   port: ${ML_INSTALL_SERVER_PORT}
   debug: yes
-  reload: yes
   jwt:
     #  the secret key that will be used to sign JWT tokens.
     #  ***MAKE SURE YOU CHANGE THE DEFAULT VALUE***
@@ -46,12 +44,6 @@ logging:
   # Logging levels are: debug, info, warning, error, critical
   # Root logging level
   level: ${ML_INSTALL_LOGGING_LEVEL}
-
-  integrate_zm:
-    # Use ZM logging system instead of our own (ZM has syslog, file, db, its own debug, etc)
-    enabled: no
-    # ZM debug logging has its own levels 1-9, 1 being the most verbose. ALL debug messages from the client will carry this level
-    debug_level: 3
 
   sanitize:
   # Try to sanitize tokens, keys, passwords, usernames, host and ip addresses from logs
@@ -72,10 +64,10 @@ logging:
 #    level: debug
     # directory where log files will be stored
     path: ${LOGGING_DIR}
-    # prepend logname with this string, 'zmML' will become zmML_m1.log for monitor 1
+    # prefix logname with this string, 'zmML' will become zmML_m1.log for monitor 1
     filename_prefix: zmML
-    # Do not prefix logs with monitor id, log to one single file (Leave blank to disable)
-    file_name: zm_ml.log
+    # Do not suffix logs with monitor id, log everything to a single file (Leave blank to disable)
+    file_name:
     # override log file permissions
     # user:
     # group:
@@ -167,13 +159,6 @@ models:
       height: 640
       width: 640
 
-    - name: yolov8m
-      description: "yolov8m Ultralytics ONNX model"
-      input: "${model_dir}/yolo/yolov8m.onnx"
-      square: yes
-      height: 640
-      width: 640
-
 
     - name: dlib face
       description: "dlib face model"
@@ -185,8 +170,8 @@ models:
       train_max_size: 500
       unknown_face_name: "Unknown"
       unknown_faces_leeway_pixels: 10
-      unknown_faces_dir: "${data_dir}/unknown_faces"
-      known_faces_dir: "${data_dir}/known_faces"
+      unknown_faces_dir: "${DATA_DIR}/unknown_faces"
+      known_faces_dir: "${DATA_DIR}/known_faces"
 
       detection_options:
         confidence: 0.5

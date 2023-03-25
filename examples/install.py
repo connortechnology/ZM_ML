@@ -14,20 +14,15 @@ from pathlib import Path
 DEFAULT_DATA_DIR = "/opt/zm_ml/var/lib/zm_ml"
 DEFAULT_CONFIG_DIR = "/opt/zm_ml/etc/zm_ml"
 DEFAULT_LOG_DIR = "/opt/zm_ml/var/logs/zm_ml"
-DEFAULT_SYSTEM_CREATE_PERMISSONS = 0o640
+DEFAULT_SYSTEM_CREATE_PERMISSIONS = 0o640
 # config files will have their permissions adjusted to this
-DEFAULT_CONFIG_CREATE_PERMISSONS = 0o755
+DEFAULT_CONFIG_CREATE_PERMISSIONS = 0o755
 # default ML models to install (SEE: available_models{})
 DEFAULT_MODELS = ["yolov4", "yolov4_tiny", "yolov7", "yolov7_tiny"]
 
 
 # Do not change these unless you know what you are doing
 available_models = {
-    "yolov8m": {
-        "folder": "yolo",
-        "model": ["https://github.com/baudneo/ZM_ML/releases/download/v0.0.1-alpha1/yolov8m.onnx"],
-        "config": [],
-    },
     "yolov4": {
         "folder": "yolo",
         "model": [
@@ -126,7 +121,7 @@ def parse_env_file(env_file: Path) -> None:
     try:
         import dotenv
     except ImportError:
-        logger.warning()
+        logger.warning(f"python-dotenv not installed, skipping {env_file}")
     else:
         dotenv.load_dotenv(env_file)
 
@@ -240,7 +235,7 @@ def parse_cli():
         "-U",
         help="User to install as [leave empty to auto-detect what user runs the web server] (Change if installing server on a remote host)",
         type=str,
-        dest="web_user",
+        dest="ml_user",
         default="",
     )
     parser.add_argument(
@@ -248,7 +243,7 @@ def parse_cli():
         "-G",
         help="Group member to install as [leave empty to auto-detect what group member runs the web server] (Change if installing server on a remote host)",
         type=str,
-        dest="web_group",
+        dest="ml_group",
         default="",
     )
 
@@ -277,15 +272,15 @@ def parse_cli():
 
     parser.add_argument(
         "--system-create-permissions",
-        help=f"ZM ML system octal [0o] file permissions [Default: {oct(DEFAULT_SYSTEM_CREATE_PERMISSONS)}]",
+        help=f"ZM ML system octal [0o] file permissions [Default: {oct(DEFAULT_SYSTEM_CREATE_PERMISSIONS)}]",
         type=lambda x: int(x, 8),
-        default=DEFAULT_SYSTEM_CREATE_PERMISSONS,
+        default=DEFAULT_SYSTEM_CREATE_PERMISSIONS,
     )
     parser.add_argument(
         "--config-create-permissions",
-        help=f"Config files (server.yml, client.yml, secrets.yml) octal [0o] file permissions [Default: {oct(DEFAULT_CONFIG_CREATE_PERMISSONS)}]",
+        help=f"Config files (server.yml, client.yml, secrets.yml) octal [0o] file permissions [Default: {oct(DEFAULT_CONFIG_CREATE_PERMISSIONS)}]",
         type=lambda x: int(x, 8),
-        default=DEFAULT_CONFIG_CREATE_PERMISSONS,
+        default=DEFAULT_CONFIG_CREATE_PERMISSIONS,
     )
     parser.add_argument(
         "--add-model",
@@ -368,35 +363,35 @@ def show_config(cli_args: argparse.Namespace):
 
 
 def do_web_user():
-    global web_user, web_group
-    web_user, web_group = args.web_user, args.web_group
-    if not web_user or not web_group:
-        if not web_user:
+    global ml_user, ml_group
+    ml_user, ml_group = args.web_user, args.web_group
+    if not ml_user or not ml_group:
+        if not ml_user:
             if interactive:
-                web_user = input("Web server username [Leave blank to try auto-find]: ")
-                if not web_user:
-                    logger.info(f"Web server user auto-find: {web_user}")
-                    web_user = get_web_user()
+                ml_user = input("Web server username [Leave blank to try auto-find]: ")
+                if not ml_user:
+                    ml_user, _ = get_web_user()
+                    logger.info(f"Web server user auto-find: {ml_user}")
             else:
-                web_user, _ = get_web_user()
-                logger.info(f"Web server user auto-find: {web_user}")
+                ml_user, _ = get_web_user()
+                logger.info(f"Web server user auto-find: {ml_user}")
 
-        if not web_group:
+        if not ml_group:
             if interactive:
-                web_group = input("Web server group [Leave blank to try auto-find]: ")
-                if not web_group:
-                    _, web_group = get_web_user()
-                    logger.info(f"Web server group auto-find: {web_group}")
+                ml_group = input("Web server group [Leave blank to try auto-find]: ")
+                if not ml_group:
+                    _, ml_group = get_web_user()
+                    logger.info(f"Web server group auto-find: {ml_group}")
 
             else:
-                _, web_group = get_web_user()
-                logger.info(f"Web server group auto-find: {web_group}")
+                _, ml_group = get_web_user()
+                logger.info(f"Web server group auto-find: {ml_group}")
 
-    if not web_user or not web_group:
+    if not ml_user or not ml_group:
         _missing = ""
-        if not web_user and web_group:
+        if not ml_user and ml_group:
             _missing = "user"
-        elif web_user and not web_group:
+        elif ml_user and not ml_group:
             _missing = "group"
         else:
             _missing = "user and group"
@@ -444,15 +439,15 @@ def install_dirs(
             if x.strip().casefold() == "n":
                 logger.error(f"{dir_type} directory does not exist, exiting...")
                 sys.exit(1)
-            create_dir(dest_dir, web_user, web_group, system_create_mode)
+            create_dir(dest_dir, ml_user, ml_group, system_create_mode)
         else:
             logger.info(f"Creating {dir_type} directory...")
-            create_dir(dest_dir, web_user, web_group, system_create_mode)
+            create_dir(dest_dir, ml_user, ml_group, system_create_mode)
         # create sub-folders
         if sub_dirs:
             for _sub in sub_dirs:
                 _path = dest_dir / _sub
-                create_dir(_path, web_user, web_group, system_create_mode)
+                create_dir(_path, ml_user, ml_group, system_create_mode)
 
 
 def download_file(url: str, dest: Path, user: str, group: str, mode: int):
@@ -733,7 +728,27 @@ def main():
         logger.debug("Debug logging enabled!")
     if testing:
         logger.warning("Running in test mode")
-    do_web_user()
+    install_server = False
+    install_client = False
+    _install_type = args.install_type.strip().casefold()
+    if _install_type:
+        if _install_type == "server":
+            install_server = True
+        elif _install_type == "client":
+            install_client = True
+        elif _install_type == "both":
+            install_server = True
+            install_client = True
+    else:
+        logger.info("No install type specified, using 'client' as default...")
+        install_client = True
+    if install_client:
+        do_web_user()
+    elif not install_client and install_server:
+        if not ml_user:
+            logger.error("zm_ml user not specified, exiting...")
+
+
     if not check_imports():
         msg = f"Missing dependencies, exiting..."
         if not args.test:
@@ -744,7 +759,7 @@ def main():
     else:
         logger.info("All dependencies found")
     install_dirs(
-        data_dir, DEFAULT_DATA_DIR, "Data", sub_dirs=["models", "push", "scripts"]
+        data_dir, DEFAULT_DATA_DIR, "Data", sub_dirs=["models", "push", "scripts", "images", "locks", "unknown_faces", "known_faces"]
     )
     global model_dir
     model_dir = data_dir / "models"
@@ -775,7 +790,7 @@ def main():
                 logger.info(f"Downloading model data: {model}")
                 model_data = available_models[model]
                 model_folder = model_dir / model_data["folder"]
-                create_dir(model_folder, web_user, web_group, system_create_mode)
+                create_dir(model_folder, ml_user, ml_group, system_create_mode)
                 _model = model_data["model"]
                 _config = model_data["config"]
                 if _model:
@@ -794,8 +809,8 @@ def main():
                         download_file(
                             model_url,
                             model_file,
-                            web_user,
-                            web_group,
+                            ml_user,
+                            ml_group,
                             system_create_mode,
                         )
                 if _config:
@@ -814,143 +829,101 @@ def main():
                         download_file(
                             config_url,
                             config_file,
-                            web_user,
-                            web_group,
+                            ml_user,
+                            ml_group,
                             system_create_mode,
                         )
-
-    def do_install(_inst_type: str, search_dir: Path):
-        existing_secrets = False
-        path_glob_out = search_dir.glob(f"{_inst_type}.*")
-        for iter_item in path_glob_out:
-            logger.debug(
-                f"{_inst_type} cfg generator iterated in a for loop: {iter_item = }"
-            )
-        path_glob_out = sorted(path_glob_out, reverse=True)
-        if path_glob_out:
-            backup_num = 1
-            if path_glob_out[0].suffix == ".bak":
-                backup_num = int(path_glob_out[0].stem.split(".")[-1]) + 1
-            file_backup = cfg_dir / f"{_inst_type}.{backup_num}.bak"
-            for _file in path_glob_out:
-                if _file.name == f"{_inst_type}.yml":
-                    if _inst_type == "secrets":
-                        existing_secrets = True
-                        if args.install_secrets:
-                            existing_secrets = False
-                            logger.info(
-                                "--overwrite-secrets was passed on CLI, overwriting existing secrets file..."
-                            )
-                        if not existing_secrets:
-                            # copy example config
-                            copy_file(
-                                install_file_dir.parent / "configs/example_secrets.yml",
-                                cfg_dir / "secrets.yml",
-                                web_user,
-                                web_group,
-                                cfg_create_mode,
-                            )
-                    else:
-                        copy_file(
-                            _file, file_backup, web_user, web_group, cfg_create_mode
-                        )
-                    break
-            if _inst_type != "secrets":
-                copy_file(
-                    install_file_dir.parent / f"configs/example_{_inst_type}.yml",
-                    cfg_dir / f"{_inst_type}.yml",
-                    web_user,
-                    web_group,
-                    cfg_create_mode,
-                )
-        if _inst_type != "secrets":
-            install_host_dependencies(_inst_type)
-            _src = f"{install_file_dir.parent.as_posix()}[{_inst_type}]"
-            _pip_prefix = "pip3"
-            import subprocess
-
-            if not args.test:
-                logger.info(f"Installing {_inst_type} pip dependencies...")
-                ran = subprocess.run(
-                    [
-                        _pip_prefix,
-                        "install",
-                        "--report",
-                        f"./pip_install_report.json",
-                        _src,
-                    ],
-                    capture_output=True,
-                    text=True,
-                )
-
-            else:
-                _pip_inst_cmd=[
-                        _pip_prefix,
-                        "install",
-                        "--report",
-                        f"./pip_install_report.json",
-                        "--dry-run",
-                        _src,
-                    ]
-                logger.info(
-                    f"Installing {_inst_type} pip dependencies (USING --dry-run) :: {_pip_inst_cmd}..."
-                )
-                ran = subprocess.run(
-                    _pip_inst_cmd,
-                    capture_output=True,
-                    text=True,
-                )
-            if ran.stdout:
-                logger.debug(f"\n{ran.stdout}")
-            if ran.stderr:
-                logger.error(f"\n{ran.stderr}")
-
-    install_server = False
-    install_client = False
-    _install_type = args.install_type.strip().casefold()
-    if _install_type:
-        if _install_type == "server":
-            install_server = True
-        elif _install_type == "client":
-            install_client = True
-        elif _install_type == "both":
-            install_server = True
-            install_client = True
-    else:
-        logger.info("No install type specified, using 'client' as default...")
-        install_client = True
     do_install("secrets", cfg_dir)
     if install_server:
         do_install("server", cfg_dir)
     if install_client:
         do_install("client", cfg_dir)
 
-def create_profile(_type: str):
-    _env_vars = {}
-    if _type == "server":
-        _env_vars = {
-            "ZM_ML_SERVER_CONF_FILE": f"{cfg_dir}/server.yml",
-            "ZM_ML_SERVER_SECRETS": f"{cfg_dir}/secrets.yml",
-        }
-
-    # create an /etc/profile.d/ file to set some default ZM ML env vars
-    profile_file = Path("/etc/profile.d/zm_ml.sh")
-    if profile_file.exists():
-        logger.warning(f"Profile file '{profile_file}' already exists, skipping...")
-    else:
-        logger.info(f"Creating profile file '{profile_file}'...")
-        return
-        profile_file.write_text(
-            f"""#!/bin/bash
-            
-                export ZM_ML_CONFIG_DIR={cfg_dir.as_posix()}
-                export ZM_ML_DATA_DIR={data_dir.as_posix()}
-                export ZM_ML_LOG_DIR={log_dir.as_posix()}
-                export ZM_ML_MODEL_DIR={model_dir.as_posix()}
-                export ZM_ML_WEB_USER={web_user}
-                export ZM_ML_WEB_GROUP={web_group}
-                """
+def do_install(_inst_type: str, search_dir: Path):
+    existing_secrets = False
+    path_glob_out = search_dir.glob(f"{_inst_type}.*")
+    for iter_item in path_glob_out:
+        logger.debug(
+            f"{_inst_type} cfg generator iterated in a for loop: {iter_item = }"
         )
+    path_glob_out = sorted(path_glob_out, reverse=True)
+    if path_glob_out:
+        backup_num = 1
+        if path_glob_out[0].suffix == ".bak":
+            backup_num = int(path_glob_out[0].stem.split(".")[-1]) + 1
+        file_backup = cfg_dir / f"{_inst_type}.{backup_num}.bak"
+        for _file in path_glob_out:
+            if _file.name == f"{_inst_type}.yml":
+                if _inst_type == "secrets":
+                    existing_secrets = True
+                    if args.install_secrets:
+                        existing_secrets = False
+                        logger.info(
+                            "--overwrite-secrets was passed on CLI, overwriting existing secrets file..."
+                        )
+                    if not existing_secrets:
+                        # copy example config
+                        copy_file(
+                            install_file_dir.parent / "configs/example_secrets.yml",
+                            cfg_dir / "secrets.yml",
+                            ml_user,
+                            ml_group,
+                            cfg_create_mode,
+                        )
+                else:
+                    copy_file(
+                        _file, file_backup, ml_user, ml_group, cfg_create_mode
+                    )
+                break
+        if _inst_type != "secrets":
+            copy_file(
+                install_file_dir.parent / f"configs/example_{_inst_type}.yml",
+                cfg_dir / f"{_inst_type}.yml",
+                ml_user,
+                ml_group,
+                cfg_create_mode,
+            )
+    if _inst_type != "secrets":
+        install_host_dependencies(_inst_type)
+        _src = f"{install_file_dir.parent.as_posix()}[{_inst_type}]"
+        _pip_prefix = "pip3"
+        import subprocess
+
+        if not testing:
+            logger.info(f"Installing {_inst_type} pip dependencies...")
+            ran = subprocess.run(
+                [
+                    _pip_prefix,
+                    "install",
+                    "--report",
+                    f"./pip_install_report.json",
+                    _src,
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+        else:
+            _pip_inst_cmd=[
+                    _pip_prefix,
+                    "install",
+                    "--report",
+                    f"./pip_install_report.json",
+                    "--dry-run",
+                    _src,
+                ]
+            logger.info(
+                f"Installing {_inst_type} pip dependencies (USING --dry-run) :: {_pip_inst_cmd}..."
+            )
+            ran = subprocess.run(
+                _pip_inst_cmd,
+                capture_output=True,
+                text=True,
+            )
+        if ran.stdout:
+            logger.debug(f"\n{ran.stdout}")
+        if ran.stderr:
+            logger.error(f"\n{ran.stderr}")
 
 if __name__ == "__main__":
     install_file_dir = Path(__file__).parent
@@ -976,6 +949,5 @@ if __name__ == "__main__":
         models = [str(x) for x in available_models.keys()]
         logger.info(f"Using all available models: {models}")
     model_dir: Optional[Path] = None
-    web_user, web_group = "", ""
+    ml_user, ml_group = "", ""
     main()
-    create_profile()

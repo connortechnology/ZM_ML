@@ -1,8 +1,8 @@
+#!/usr/bin/python3
 """A Script to start the MLAPI server."""
 from zm_ml.Server.app import create_logs, MLAPI
 
 logger = create_logs()
-
 
 def _parse_cli():
     from argparse import ArgumentParser
@@ -22,6 +22,7 @@ if __name__ == "__main__":
     logger.info(f"{lp} Starting MLAPI server...")
     args = _parse_cli()
     config_file = args.get("config")
+    secrets_file = args.get("secrets")
     if not config_file:
         # check ENV
         logger.info(f"{lp} No config file specified, checking ENV 'ML_SERVER_CONF_FILE'")

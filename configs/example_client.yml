@@ -379,6 +379,7 @@ detection_settings:
   # Import the zones defined in ZM
   import_zones: no
   # object must be in one of the zones that triggered the motion event
+  # REQUIRES import_zones
   match_origin_zone: no
 
   images:
@@ -464,7 +465,7 @@ matching:
       min_conf: 0.5
 
 monitors:
-
+# Override settings based on which monitor an event was triggered by
   1:
     models:
       # Models to run. Name must match the name of the model obtained from its configuration or the API request
