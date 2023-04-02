@@ -6,7 +6,7 @@ This script gets data about an event from ZoneMinder and uploads the video file 
 
 Before first usage:
 - enter login credentials in this script or use ENV variables: ZM_API_USER, ZM_API_PASS, ZM_API_URL, ZM_EID
-- Add pi-user to the www-group and run `sudo chown -R pi:www-data .` in this repo.
+- Add user of script  to the www-group and run `sudo chown -R <user name>:www-data .` in this repo.
 - Make sure www-data group has WRITE permissions to the folder where this script is located.
 - install and configure rclone.
 - Add the rclone remote name to the rclone_remote variable below.

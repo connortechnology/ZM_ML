@@ -35,4 +35,4 @@ if __name__ == "__main__":
     logger.info(f"{lp} Creating MLAPI server with config file '{config_file}'")
     server: MLAPI = MLAPI(config_file)
     logger.info(f"{lp} Starting MLAPI server NOW!")
-    server.start_server()
+    server.start()

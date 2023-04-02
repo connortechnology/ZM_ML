@@ -25,6 +25,7 @@ logger = getLogger(SERVER_LOGGER_NAME)
 
 class AlprBase:
     def __init__(self, model_config: ALPRModelConfig):
+        self.lp = f"Alpr:Base:"
         if not model_config:
             raise ValueError(f"{self.lp} no config passed!")
         # Model init params
@@ -84,8 +85,8 @@ class PlateRecognizer(AlprBase):
     #    'xmax': 770, 'ymax': 418}}}], 'filename': '0517_HpKIJ_94bReShZAkFqUXRs-alpr.jpg', 'version': 1, 'camera_id': None, 'timestamp': '2021-09-12T05:17:16.788039Z'}]
     def __init__(self, model_config: ALPRModelConfig):
         """Wrapper class for platerecognizer.com API"""
-        self.lp = f"Plate Recognizer:"
         super().__init__(model_config)
+        self.lp = f"Plate Recognizer:"
         if not self.config.api_url:
             self.url = "https://api.platerecognizer.com/v1"
         self.options: PlateRecognizerModelOptions = self.config.detection_options
@@ -147,6 +148,7 @@ class PlateRecognizer(AlprBase):
                 if self.options.config:
                     logger.debug(f"{self.lp} found API config, using it")
                     platerec_payload["config"] = self.options.config
+
                 response = requests.post(
                     platerec_url,
                     timeout=15,
@@ -291,8 +293,8 @@ class OpenAlprCmdLine(AlprBase):
         """
         self.lp = f"OpenAlpr:CmdLine:"
         super().__init__(model_config)
-        cmd = self.options.openalpr_binary
-        self.cmd = f"{cmd} {self.options.openalpr_binary_params}"
+        cmd = self.options.alpr_binary
+        self.cmd = f"{cmd} {self.options.alpr_binary_params}"
         if self.cmd.lower().find("-j") == -1:
             logger.debug(f"{self.lp} Adding -j to force JSON output")
             self.cmd = f"{self.cmd} -j"

@@ -19,6 +19,7 @@ DEFAULT_SYSTEM_CREATE_PERMISSIONS = 0o640
 DEFAULT_CONFIG_CREATE_PERMISSIONS = 0o755
 # default ML models to install (SEE: available_models{})
 DEFAULT_MODELS = ["yolov4", "yolov4_tiny", "yolov7", "yolov7_tiny"]
+FINAL_ENVS = {}
 
 
 # Do not change these unless you know what you are doing
@@ -110,6 +111,7 @@ __doc__ = """Install ZM-ML Server / Client"""
 # Logic
 tst_msg_wrap = "[testing!!]", "[will not actually execute]"
 
+
 # parse .env file using pyenv
 def parse_env_file(env_file: Path) -> None:
     """Parse .env file using python-dotenv.
@@ -124,6 +126,7 @@ def parse_env_file(env_file: Path) -> None:
         logger.warning(f"python-dotenv not installed, skipping {env_file}")
     else:
         dotenv.load_dotenv(env_file)
+
 
 def test_msg(msg):
     """Print test message. Changes stacklevel to 2 to show caller of test_msg."""
@@ -150,7 +153,7 @@ def check_imports():
             )
             ret = False
         else:
-            logger.debug(f"Found dependency: {imp_name}")
+            logger.debug(f"Found python module dependency: {imp_name}")
     return ret
 
 
@@ -166,11 +169,12 @@ def get_web_user() -> Tuple[Optional[str], Optional[str]]:
 
     # get group name from gid
 
-    www_daemon_names = ("httpd", "hiawatha", "apache", "apache2", "nginx")
+    www_daemon_names = ("httpd", "hiawatha", "apache", "mlapi", "nginx", "lighttpd")
     hits = []
     proc_names = []
     for proc in psutil.process_iter():
-        if proc.name() in www_daemon_names and proc.name() not in proc_names:
+        if (proc.name()) in www_daemon_names and proc.name() not in proc_names:
+            logger.debug(f"Found web server process: {proc.name()}")
             hits.append((proc.username(), grp.getgrgid(proc.gids().real).gr_name))
             proc_names.append(proc.name())
     ret_ = False
@@ -246,7 +250,6 @@ def parse_cli():
         dest="ml_group",
         default="",
     )
-
 
     parser.add_argument(
         "--debug", "-D", help="Enable debug logging", action="store_true", dest="debug"
@@ -364,37 +367,46 @@ def show_config(cli_args: argparse.Namespace):
 
 def do_web_user():
     global ml_user, ml_group
-    ml_user, ml_group = args.web_user, args.web_group
+    ml_user, ml_group = args.ml_user, args.ml_group
+    _group = None
     if not ml_user or not ml_group:
         if not ml_user:
             if interactive:
                 ml_user = input("Web server username [Leave blank to try auto-find]: ")
                 if not ml_user:
-                    ml_user, _ = get_web_user()
+                    ml_user, _group = get_web_user()
                     logger.info(f"Web server user auto-find: {ml_user}")
             else:
-                ml_user, _ = get_web_user()
+                ml_user, _group = get_web_user()
                 logger.info(f"Web server user auto-find: {ml_user}")
 
         if not ml_group:
             if interactive:
                 ml_group = input("Web server group [Leave blank to try auto-find]: ")
                 if not ml_group:
-                    _, ml_group = get_web_user()
+                    if _group:
+                        ml_group = _group
+                    else:
+                        _, ml_group = get_web_user()
                     logger.info(f"Web server group auto-find: {ml_group}")
 
             else:
-                _, ml_group = get_web_user()
+                if _group:
+                    ml_group = _group
+                else:
+                    _, ml_group = get_web_user()
                 logger.info(f"Web server group auto-find: {ml_group}")
 
     if not ml_user or not ml_group:
         _missing = ""
+        _u = "user [--user]"
+        _g = "group [--group]"
         if not ml_user and ml_group:
-            _missing = "user"
+            _missing = _u
         elif ml_user and not ml_group:
-            _missing = "group"
+            _missing = _g
         else:
-            _missing = "user and group"
+            _missing = f"{_u} and {_g}"
 
         msg = f"Unable to determine web server {_missing}"
         if not args.test:
@@ -409,7 +421,9 @@ def install_dirs(
     default_dir: str,
     dir_type: str,
     sub_dirs: Optional[List[str]] = None,
+    perms: int = 0o750,
 ):
+    """Install directories"""
     if sub_dirs is None:
         sub_dirs = []
     if not dest_dir:
@@ -439,31 +453,45 @@ def install_dirs(
             if x.strip().casefold() == "n":
                 logger.error(f"{dir_type} directory does not exist, exiting...")
                 sys.exit(1)
-            create_dir(dest_dir, ml_user, ml_group, system_create_mode)
+            create_dir(dest_dir, ml_user, ml_group, perms)
         else:
             logger.info(f"Creating {dir_type} directory...")
-            create_dir(dest_dir, ml_user, ml_group, system_create_mode)
+            create_dir(dest_dir, ml_user, ml_group, perms)
         # create sub-folders
         if sub_dirs:
+            logger.debug(
+                f"Creating {dir_type} sub-folders: {', '.join(sub_dirs).lstrip(',')}"
+            )
             for _sub in sub_dirs:
                 _path = dest_dir / _sub
-                create_dir(_path, ml_user, ml_group, system_create_mode)
+                create_dir(_path, ml_user, ml_group, perms)
 
 
 def download_file(url: str, dest: Path, user: str, group: str, mode: int):
-    msg = f"Downloading {url}..." if not testing else f"TESTING if file exists at {url}..."
+    msg = (
+        f"Downloading {url}..."
+        if not testing
+        else f"TESTING if file exists at {url}..."
+    )
     logger.info(msg)
     import requests
 
-    r = requests.get(url, allow_redirects=True)
-    if r.status_code == 200:
-        if not args.test:
-            dest.write_bytes(r.content)
-            chown_mod(dest, user, group, mode)
-        else:
-            logger.info(f"TESTING: File exists at {url}")
+    try:
+        r = requests.get(url, allow_redirects=True)
+    except requests.exceptions.ConnectionError:
+        logger.error(f"Failed to download {url}!")
+        return
+    except Exception as e:
+        logger.error(f"Failed to download {url}! {e}")
     else:
-        logger.error(f"Failed to download [code: {r.status_code}] {url}!")
+        if r.status_code == 200:
+            if not args.test:
+                dest.write_bytes(r.content)
+                chown_mod(dest, user, group, mode)
+            else:
+                logger.info(f"TESTING: File exists for {url.split('/')[-1]}")
+        else:
+            logger.error(f"Failed to download [code: {r.status_code}] {url}!")
 
 
 def copy_file(src: Path, dest: Path, user: str, group: str, mode: int):
@@ -529,70 +557,74 @@ def install_host_dependencies(_type: str):
         dependencies = {
             "apt": {
                 "client": {
-                    "binary_names": ["gifsicle", "geos-config"],
-                    "binary_flags": ["-v", "--version"],
-                    "pkg_names": ["gifsicle", "libgeos-dev"],
+                    "binary_names": ["gifsicle", "geos-config", "envsubst"],
+                    "binary_flags": ["-v", "--version", "--version"],
+                    "pkg_names": ["gifsicle", "libgeos-dev", "gettext-base"],
                 },
-                "server": [],
+                "server": {
+                    "binary_names": ["envsubst"],
+                    "binary_flags": ["--version"],
+                    "pkg_names": ["gettext-base"],
+                },
             },
             "yum": {
                 "client": {
-                    "binary_names": ["gifsicle", "geos-config"],
-                    "binary_flags": ["-v", "--version"],
-                    "pkg_names": ["gifsicle", "geos-devel"],
+                    "binary_names": ["gifsicle", "geos-config", "envsubst"],
+                    "binary_flags": ["-v", "--version", "--version"],
+                    "pkg_names": ["gifsicle", "geos-devel", "gettext"],
                 },
                 "server": {
-                    "binary_names": [],
-                    "binary_flags": [],
-                    "pkg_names": [],
+                    "binary_names": ["envsubst"],
+                    "binary_flags": ["--version"],
+                    "pkg_names": ["gettext"],
                 },
             },
             "pacman": {
                 "client": {
-                    "binary_names": ["gifsicle", "geos-config"],
-                    "binary_flags": ["-v", "--version"],
-                    "pkg_names": ["gifsicle", "geos"],
+                    "binary_names": ["gifsicle", "geos-config", "envsubst"],
+                    "binary_flags": ["-v", "--version", "--version"],
+                    "pkg_names": ["gifsicle", "geos", "gettext"],
                 },
                 "server": {
-                    "binary_names": [],
-                    "binary_flags": [],
-                    "pkg_names": [],
+                    "binary_names": ["envsubst"],
+                    "binary_flags": ["--version"],
+                    "pkg_names": ["gettext"],
                 },
             },
             "zypper": {
                 "client": {
-                    "binary_names": ["gifsicle", "geos-config"],
-                    "binary_flags": ["-v", "--version"],
-                    "pkg_names": ["gifsicle", "geos"],
+                    "binary_names": ["gifsicle", "geos-config", "envsubst"],
+                    "binary_flags": ["-v", "--version", "--version"],
+                    "pkg_names": ["gifsicle", "geos", "gettext"],
                 },
                 "server": {
-                    "binary_names": [],
-                    "binary_flags": [],
-                    "pkg_names": [],
+                    "binary_names": ["envsubst"],
+                    "binary_flags": ["--version"],
+                    "pkg_names": ["gettext"],
                 },
             },
             "dnf": {
                 "client": {
-                    "binary_names": ["gifsicle", "geos-config"],
-                    "binary_flags": ["-v", "--version"],
-                    "pkg_names": ["gifsicle", "geos-devel"],
+                    "binary_names": ["gifsicle", "geos-config", "envsubst"],
+                    "binary_flags": ["-v", "--version", "--version"],
+                    "pkg_names": ["gifsicle", "geos-devel", "gettext"],
                 },
                 "server": {
-                    "binary_names": [],
-                    "binary_flags": [],
-                    "pkg_names": [],
+                    "binary_names": ["envsubst"],
+                    "binary_flags": ["--version"],
+                    "pkg_names": ["gettext"],
                 },
             },
             "apk": {
                 "client": {
-                    "binary_names": ["gifsicle", "geos-config"],
-                    "binary_flags": ["-v", "--version"],
-                    "pkg_names": ["gifsicle", "geos-devel"],
+                    "binary_names": ["gifsicle", "geos-config", "envsubst"],
+                    "binary_flags": ["-v", "--version", "--version"],
+                    "pkg_names": ["gifsicle", "geos-devel", "gettext"],
                 },
                 "server": {
-                    "binary_names": [],
-                    "binary_flags": [],
-                    "pkg_names": [],
+                    "binary_names": ["envsubst"],
+                    "binary_flags": ["--version"],
+                    "pkg_names": ["gettext"],
                 },
             },
         }
@@ -601,36 +633,40 @@ def install_host_dependencies(_type: str):
 
         import subprocess
 
+        deps = []
         if _type == "server":
             _msg = "Installing server HOST dependencies..."
             logger.info(_msg) if not testing else test_msg(_msg)
-            deps = dependencies[inst_binary]["server"]["pkg_names"]
-            for idx, _dep in enumerate(deps):
-                deps_cmd.append(
-                    [
-                        dependencies[inst_binary]["server"]["binary_names"][idx],
-                        dependencies[inst_binary]["server"]["binary_flags"][idx],
-                    ]
-                )
-        else:
+            full_deps = zip(
+                dependencies[inst_binary]["server"]["pkg_names"],
+                dependencies[inst_binary]["server"]["binary_names"],
+                dependencies[inst_binary]["server"]["binary_flags"],
+            )
+            for _dep, _bin, _flag in full_deps:
+                deps_cmd.append([_bin, _flag])
+                deps.append(_dep)
+        elif _type == "client":
             _msg = "Installing client HOST dependencies..."
             logger.info(_msg) if not testing else test_msg(_msg)
-            deps = dependencies[inst_binary]["client"]["pkg_names"]
-            for idx, _dep in enumerate(deps):
-                deps_cmd.append(
-                    [
-                        dependencies[inst_binary]["client"]["binary_names"][idx],
-                        dependencies[inst_binary]["client"]["binary_flags"][idx],
-                    ]
-                )
+            full_deps = zip(
+                dependencies[inst_binary]["client"]["pkg_names"],
+                dependencies[inst_binary]["client"]["binary_names"],
+                dependencies[inst_binary]["client"]["binary_flags"],
+            )
+            for _dep, _bin, _flag in full_deps:
+                deps_cmd.append([_bin, _flag])
+                deps.append(_dep)
+        else:
+            logger.error(f"Invalid type '{_type}'")
+            return
 
         def test_cmd(cmd_array: List[str], dep_name: str):
             logger.debug(
-                f"Testing if dependency {dep} is installed by running: {' '.join(cmd_array)}"
+                f"Testing if dependency {_dep_name} is installed by running: {' '.join(cmd_array)}"
             )
 
             try:
-                x = subprocess.run(cmd_array, check=True)
+                x = subprocess.run(cmd_array, check=True, capture_output=True)
             except subprocess.CalledProcessError:
                 logger.error(f"Error while running {cmd_array}")
             except FileNotFoundError:
@@ -644,17 +680,16 @@ def install_host_dependencies(_type: str):
                 raise e
             else:
                 logger.info(
-                    f"Output of command [{' '.join(x.args)}] RET CODE: {x.returncode} -- {x.stdout}"
+                    f"Output of command [{' '.join(x.args)}] RET CODE: {x.returncode}"
                 )
 
         if deps:
-            for idx, dep in enumerate(deps):
+            full_deps = zip(deps_cmd, deps)
+            for _cmd_array, _dep_name in full_deps:
                 try:
-                    test_cmd(deps_cmd[idx], dep)
+                    test_cmd(_cmd_array, _dep_name)
                 except FileNotFoundError:
-                    msg = (
-                        f"package '{dep}' is not installed, please install it manually!"
-                    )
+                    msg = f"package '{_dep_name}' is not installed, please install it manually!"
                     if os.geteuid() != 0 and not testing:
                         logger.warning(
                             f"You must be root to install host dependencies! {msg}"
@@ -664,7 +699,7 @@ def install_host_dependencies(_type: str):
                             logger.warning(
                                 f"Running as non-root user but this is test mode! continuing to test... "
                             )
-                        install_cmd = [inst_binary, inst_prefix, dep]
+                        install_cmd = [inst_binary, inst_prefix, _dep_name]
                         msg = f"Running HOST package manager installation command: {install_cmd}"
                         if not interactive:
                             if not testing:
@@ -743,28 +778,45 @@ def main():
         logger.info("No install type specified, using 'client' as default...")
         install_client = True
     if install_client:
+        logger.debug(f"Inside main(): install_client: {install_client}")
         do_web_user()
-    elif not install_client and install_server:
+    if install_server:
+        logger.debug(f"Inside main(): install_server: {install_server}")
+        do_web_user()
         if not ml_user:
             logger.error("zm_ml user not specified, exiting...")
-
+            sys.exit(1)
 
     if not check_imports():
-        msg = f"Missing dependencies, exiting..."
+        msg = f"Missing python dependencies, exiting..."
         if not args.test:
             logger.error(msg)
             sys.exit(1)
         else:
             test_msg(msg)
     else:
-        logger.info("All dependencies found")
+        logger.info("All python dependencies found")
     install_dirs(
-        data_dir, DEFAULT_DATA_DIR, "Data", sub_dirs=["models", "push", "scripts", "images", "locks", "unknown_faces", "known_faces"]
+        data_dir,
+        DEFAULT_DATA_DIR,
+        "Data",
+        sub_dirs=[
+            "models",
+            "push",
+            "scripts",
+            "images",
+            "locks",
+            "unknown_faces",
+            "known_faces",
+            "bin",
+        ],
     )
     global model_dir
     model_dir = data_dir / "models"
-    install_dirs(cfg_dir, DEFAULT_CONFIG_DIR, "Config", sub_dirs=[])
-    install_dirs(log_dir, DEFAULT_LOG_DIR, "Log", sub_dirs=[])
+    install_dirs(
+        cfg_dir, DEFAULT_CONFIG_DIR, "Config", sub_dirs=[], perms=cfg_create_mode
+    )
+    install_dirs(log_dir, DEFAULT_LOG_DIR, "Log", sub_dirs=[], perms=0o777)
     # check models
     models = args.models
     if not models:
@@ -811,7 +863,7 @@ def main():
                             model_file,
                             ml_user,
                             ml_group,
-                            system_create_mode,
+                            cfg_create_mode,
                         )
                 if _config:
                     for config_url in model_data["config"]:
@@ -831,16 +883,19 @@ def main():
                             config_file,
                             ml_user,
                             ml_group,
-                            system_create_mode,
+                            cfg_create_mode,
                         )
     do_install("secrets", cfg_dir)
     if install_server:
         do_install("server", cfg_dir)
+
     if install_client:
         do_install("client", cfg_dir)
 
+
 def do_install(_inst_type: str, search_dir: Path):
     existing_secrets = False
+    logger.debug(f"Inside do_install(): {_inst_type = } -- {search_dir = }")
     path_glob_out = search_dir.glob(f"{_inst_type}.*")
     for iter_item in path_glob_out:
         logger.debug(
@@ -871,9 +926,7 @@ def do_install(_inst_type: str, search_dir: Path):
                             cfg_create_mode,
                         )
                 else:
-                    copy_file(
-                        _file, file_backup, ml_user, ml_group, cfg_create_mode
-                    )
+                    copy_file(_file, file_backup, ml_user, ml_group, cfg_create_mode)
                 break
         if _inst_type != "secrets":
             copy_file(
@@ -883,13 +936,93 @@ def do_install(_inst_type: str, search_dir: Path):
                 ml_group,
                 cfg_create_mode,
             )
+    else:
+        logger.debug(f"No existing {_inst_type} config files found!")
+        if cfg_dir.is_dir() or testing:
+            logger.debug(f"Creating {_inst_type} config file from example...")
+            copy_file(
+                install_file_dir.parent / f"configs/example_{_inst_type}.yml",
+                cfg_dir / f"{_inst_type}.yml",
+                ml_user,
+                ml_group,
+                cfg_create_mode,
+            )
+        else:
+            logger.warning(
+                f"Config directory '{cfg_dir}' does not exist, skipping creation of {_inst_type} config file..."
+            )
+
     if _inst_type != "secrets":
+        env_names = ""
+        envs = {
+            "${ML_INSTALL_DATA_DIR}": data_dir.as_posix(),
+            "${ML_INSTALL_CFG_DIR}": cfg_dir.as_posix(),
+            "${ML_INSTALL_LOGGING_DIR}": log_dir.as_posix(),
+            "${ML_INSTALL_LOGGING_LEVEL}": "debug",
+            "${ML_INSTALL_LOGGING_CONSOLE_ENABLED}": "yes",
+            "${ML_INSTALL_LOGGING_FILE_ENABLED}": "no",
+            "${ML_INSTALL_LOGGING_SYSLOG_ENABLED}": "no",
+            "${ML_INSTALL_LOGGING_SYSLOG_ADDRESS}": "/dev/log",
+            "${ML_INSTALL_TMP_DIR}": "/tmp/zm_ml",
+            "${ML_INSTALL_MODEL_DIR}": model_dir.as_posix(),
+        }
+        if _inst_type == "server":
+            copy_file(
+                install_file_dir / "mlapi.py",
+                data_dir / "bin/mlapi.py",
+                ml_user,
+                ml_group,
+                system_create_mode,
+            )
+            # SERVER INSTALL ENVS FOR envsubst CMD
+            envs["${ML_INSTALL_SERVER_ADDRESS}"] = "0.0.0.0"
+            envs["${ML_INSTALL_SERVER_PORT}"] = "5000"
+
+            env_names = " ".join(list(envs.keys()))
+
+        elif _inst_type == "client":
+            copy_file(
+                install_file_dir / "EventStartCommand.sh",
+                data_dir / "bin/EventStartCommand.sh",
+                ml_user,
+                ml_group,
+                cfg_create_mode,
+            )
+            copy_file(
+                install_file_dir / "eventstart.py",
+                data_dir / "bin/eventstart.py",
+                ml_user,
+                ml_group,
+                cfg_create_mode,
+            )
+            # Client install envs for envsubst cmd
+            envs["${ML_INSTALL_ROUTE_NAME}"] = "mlapi_default"
+            envs["${ML_INSTALL_ROUTE_HOST}"] = "127.0.0.1"
+            envs["${ML_INSTALL_ROUTE_PORT}"] = "5000"
+            env_names = " ".join(list(envs.keys()))
+
         install_host_dependencies(_inst_type)
         _src = f"{install_file_dir.parent.as_posix()}[{_inst_type}]"
         _pip_prefix = "pip3"
         import subprocess
 
         if not testing:
+            logger.debug(
+                f"Running envsubst on {_inst_type} config file... at {cfg_dir}/{_inst_type}.yml"
+            )
+            ran = subprocess.run(
+                f"envsubst '{env_names}' < {cfg_dir}/{_inst_type}.yml > {cfg_dir}/{_inst_type}.yml",
+                env=envs,
+                text=True,
+                capture_output=True,
+            )
+            logger.debug(f"{ran.returncode = }")
+            if ran.stdout:
+                logger.debug(f"\n{ran.stdout}")
+            if ran.stderr:
+                logger.error(f"\n{ran.stderr}")
+            del ran
+
             logger.info(f"Installing {_inst_type} pip dependencies...")
             ran = subprocess.run(
                 [
@@ -904,16 +1037,18 @@ def do_install(_inst_type: str, search_dir: Path):
             )
 
         else:
-            _pip_inst_cmd=[
-                    _pip_prefix,
-                    "install",
-                    "--report",
-                    f"./pip_install_report.json",
-                    "--dry-run",
-                    _src,
-                ]
+            _pip_inst_cmd = [
+                _pip_prefix,
+                "install",
+                "--report",
+                f"./pip_install_report.json",
+                "--dry-run",
+                _src,
+            ]
+            test_msg(f"envsubst '{env_names}' < {cfg_dir}/{_inst_type}.yml > {cfg_dir}/{_inst_type}.yml")
+
             logger.info(
-                f"Installing {_inst_type} pip dependencies (USING --dry-run) :: {_pip_inst_cmd}..."
+                f"Installing {_inst_type} pip dependencies (USING --dry-run) :: {' '.join(_pip_inst_cmd)}..."
             )
             ran = subprocess.run(
                 _pip_inst_cmd,
@@ -924,6 +1059,7 @@ def do_install(_inst_type: str, search_dir: Path):
             logger.debug(f"\n{ran.stdout}")
         if ran.stderr:
             logger.error(f"\n{ran.stderr}")
+
 
 if __name__ == "__main__":
     install_file_dir = Path(__file__).parent
@@ -944,6 +1080,7 @@ if __name__ == "__main__":
     data_dir = args.data_dir
     cfg_dir = args.config_dir
     log_dir = args.log_dir
+
     models: List[str] = args.models
     if args.all_models:
         models = [str(x) for x in available_models.keys()]

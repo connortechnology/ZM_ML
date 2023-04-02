@@ -1,0 +1,46 @@
+version: '3.6'
+
+services:
+  mlapi:
+    build:
+      context: ..
+      dockerfile: ./Dockerfile
+#    image: ghcr.io/baudneo/zm_ml-server:latest
+#    image: mlapi_new:testing
+    container_name: mlapi
+    restart: always
+    # Need privileged for USB TPU access, comment out if not using TPU
+    privileged: true
+    ports:
+      - "5000:5000"
+    networks:
+      - zoneminder
+#    extra_hosts:
+#      - "zm.example.com:10.0.0.30"
+    volumes:
+      - ./mlapi/conf:/zm_ml/conf
+      - ./mlapi/models:/zm_ml/data/models
+      - ./mlapi/images:/zm_ml/data/images
+      - ./mlapi/scripts:/zm_ml/data/scripts
+      - ./mlapi/faces/unknown:/zm_ml/data/unknown_faces
+      - ./mlapi/faces/known:/zm_ml/data/known_faces
+      - ./mlapi/log:/log
+
+      # TPU access (mount the whole USB system)
+      - /dev/bus/usb:/dev/bus/usb
+#    env_file:
+#      - ./.env
+    # NVIDIA GPU Example - https://docs.docker.com/compose/gpu-support/
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+#              count: 3
+#              device_ids: ["2", "3"]
+              capabilities: [ gpu, compute, utility ]
+
+
+
+networks:
+  zoneminder:

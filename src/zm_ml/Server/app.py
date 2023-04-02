@@ -297,7 +297,7 @@ class MLAPI:
             raise TypeError(f"'{self.cfg_file.as_posix()}' is not a file")
         self.read_settings()
         if run_server:
-            self.start_server()
+            self.start()
 
     def read_settings(self):
         logger.info(
@@ -332,11 +332,11 @@ f"should be loading models"
 
         return self.cached_settings
 
-    def restart_server(self):
+    def restart(self):
         self.read_settings()
-        self.start_server()
+        self.start()
 
-    def start_server(self):
+    def start(self):
         logger.info("running server")
         _avail = {}
         for model in get_global_config().available_models:
@@ -391,9 +391,13 @@ f"should be loading models"
             log_config=uvicorn.config.LOGGING_CONFIG,
             log_level="debug",
             proxy_headers=True,
+            reload_dirs=[
+                str(self.cfg_file.parent.parent / "src/zm_ml/Server"),
+                str(self.cfg_file.parent.parent / "src/zm_ml/Shared")
+                         ],
         )
-        lifetime = time.perf_counter()
+        start = time.perf_counter()
         self.server = uvicorn.Server(config)
         self.server.run()
-        lifetime = time.perf_counter() - lifetime
+        lifetime = time.perf_counter() - start
         logger.debug(f"server running for {lifetime:.2f} seconds")

@@ -4,15 +4,15 @@ cleanup() {
   exit 1
 }
 
-METHOD="${ML_CLIENT_EVENT_START_MODE:-parallel}"  # consecutive, new, legacy
+METHOD="${ML_CLIENT_EVENT_START_MODE:-new}"  # consecutive, new, legacy
 echo "Starting ML Client in $METHOD mode"
 LEGACY_OUT=""
 NEW_OUT=""
 MID=$2
 EID=$1
 # NEW
-config="${ML_CLIENT_CONF_FILE:-/etc/zm/ml/client.yml}"
-detect_script="${ML_CLIENT_EVENT_START:-/home/zmadmin/zm_ml/examples/eventstart.py}"
+config="${ML_CLIENT_CONF_FILE:-/opt/zm_ml/etc/zm/ml/client.yml}"
+detect_script="${ML_CLIENT_EVENT_START:-/opt/zm_ml/var/lib/bin/eventstart.py}"
 # LEGACY
 ZMES_HOOK_CONFIG_FILE='/etc/zm/objectconfig.yml'
 ZMES_DIR="/var/lib/zmeventnotification"

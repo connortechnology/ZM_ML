@@ -1,0 +1,19 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+# ==============================================================================
+# MLAPI
+# Runs MLAPI
+# ==============================================================================
+exec 2>&1
+echo "Starting ZM_ML Server (ML API)..."
+
+MLAPI_FLAGS=(--config /zm_ml/conf/server.yml)
+
+if [ "${MLAPI_DEBUG_ENABLED}" -eq 1 ]; then
+  echo "Enabling MLAPI Debug!"
+  MLAPI_FLAGS+=("--debug")
+fi
+
+echo "Starting ZM_ML Server (ML API) with FLAGS: ${MLAPI_FLAGS[*]}"
+
+s6-setuidgid www-data python3 /zm_ml/bin/mlapi.py "${MLAPI_FLAGS[@]}"

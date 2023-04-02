@@ -1,23 +1,21 @@
-# ANY SUBSTITUTION VARIABLE STARTING WITH "ML_INSTALL_" ARE 'envsubst' DURING INSTALL
+# ML_INSTALL_ prepended variables are replaced during install
 substitutions:
   # Order matters!
   DATA_DIR: ${ML_INSTALL_DATA_DIR}
   TMP_DIR: ${ML_INSTALL_TMP_DIR}
   CFG_DIR: ${ML_INSTALL_CFG_DIR}
   LOGGING_DIR: ${ML_INSTALL_LOGGING_DIR}
+  model_dir: "${ML_INSTALL_MODEL_DIR}"
 
-  # These will be imported from the file to be used as variables (secrets)
+  # These file contains variables that will be imported to be used as variables (secrets)
+  # NOTE: The 'IncludeFile' directive must be contained in the 'substitutions' section
   IncludeFile: "${CFG_DIR}/secrets.yml"
-
-  ROUTE_NAME: ${ML_INSTALL_ROUTE_NAME}
-  ROUTE_HOST: ${ML_INSTALL_ROUTE_HOST}
-  ROUTE_PORT: ${ML_INSTALL_ROUTE_PORT}
 
   # --------- Example
   EXAMPLE: "World!"
 
 THIS IS AN EXAMPLE:
-  of substitution variables: "Hello, ${EXAMPLE}"
+  of substitution variables!: "Hello, ${EXAMPLE}"
 
 system:
   config_path: ${ML_INSTALL_CFG_DIR}
@@ -129,6 +127,7 @@ models:
         nms: 0.4  # Optional. Defaults to 0.4.
 
     - name: YOLOv4-P6
+      enabled: false
       input: "${model_dir}/yolo/yolov4-p6.weights"
       config: "${model_dir}/yolo/yolov4-p6.cfg"
       description: "Scaled YOLO v4-P6 pretrained DarkNet 1280x1280"
@@ -160,97 +159,97 @@ models:
       width: 640
 
 
-    - name: dlib face
-      description: "dlib face model"
-      model_type: face
-      framework: face_recognition
+#    - name: dlib face
+#      description: "dlib face model"
+#      model_type: face
+#      framework: face_recognition
+#
+#      detection_model: cnn
+#      training_model: cnn
+#      train_max_size: 500
+#      unknown_face_name: "Unknown"
+#      unknown_faces_leeway_pixels: 10
+#      unknown_faces_dir: "${DATA_DIR}/unknown_faces"
+#      known_faces_dir: "${DATA_DIR}/known_faces"
+#
+#      detection_options:
+#        confidence: 0.5
+#        upsample_times: 1
+#        num_jitters: 1
+#        max_size: 600
+#        recognition_threshold: 0.6
 
-      detection_model: cnn
-      training_model: cnn
-      train_max_size: 500
-      unknown_face_name: "Unknown"
-      unknown_faces_leeway_pixels: 10
-      unknown_faces_dir: "${DATA_DIR}/unknown_faces"
-      known_faces_dir: "${DATA_DIR}/known_faces"
-
-      detection_options:
-        confidence: 0.5
-        upsample_times: 1
-        num_jitters: 1
-        max_size: 600
-        recognition_threshold: 0.6
-
-    - name: "openalpr local cpu"
-      description: "openalpr local SDK (binary) model"
-      model_type: alpr
-      framework: alpr
+#    - name: "openalpr local cpu"
+#      description: "openalpr local SDK (binary) model"
+#      model_type: alpr
+#      framework: alpr
+##      processor: cpu
+#
+#      service: openalpr
+#      api_type: local
+##      api_url: "http://localhost:8080"
+##      api_key: "sk_1234567890"
+#
+#      detection_options:
+#        alpr_binary: alpr
+##        alpr_binary_params:
+#        confidence: 0.5
+#        max_size: 600
+#
+#    - name: "openalpr local gpu"
+#      description: "openalpr local SDK (binary) GPU CUDA model"
+#      model_type: alpr
+#      framework: alpr
+#      processor: gpu
+#
+#      service: openalpr
+#      api_type: local
+##      api_url: "http://localhost:8080"
+##      api_key: "sk_1234567890"
+#
+#      detection_options:
+#        alpr_binary: alpr
+#        alpr_binary_params: -GPU
+#        confidence: 0.5
+#        max_size: 600
+#
+#    - name: "openalpr cloud"
+#      description: "openalpr cloud API model"
+#      model_type: alpr
+#      framework: alpr
 #      processor: cpu
-
-      service: openalpr
-      api_type: local
-#      api_url: "http://localhost:8080"
+#
+#      service: openalpr
+#      api_type: cloud
+##        api_url: "https://api.openalpr.com/v2/recognize_bytes"
 #      api_key: "sk_1234567890"
-
-      detection_options:
-        alpr_binary: alpr
-#        alpr_binary_params:
-        confidence: 0.5
-        max_size: 600
-
-    - name: "openalpr local gpu"
-      description: "openalpr local SDK (binary) GPU CUDA model"
-      model_type: alpr
-      framework: alpr
-      processor: gpu
-
-      service: openalpr
-      api_type: local
-#      api_url: "http://localhost:8080"
-#      api_key: "sk_1234567890"
-
-      detection_options:
-        alpr_binary: alpr
-        alpr_binary_params: -GPU
-        confidence: 0.5
-        max_size: 600
-
-    - name: "openalpr cloud"
-      description: "openalpr cloud API model"
-      model_type: alpr
-      framework: alpr
-      processor: cpu
-
-      service: openalpr
-      api_type: cloud
-#        api_url: "https://api.openalpr.com/v2/recognize_bytes"
-      api_key: "sk_1234567890"
-
-      detection_options:
-          confidence: 0.5
-          max_size: 600
-#          recognize_vehicle: yes
-#          country: us
-#          state: ca
-
-    - name: 'Platerecognizer cloud'
-#      enabled: no
-      model_type: alpr
-      framework: alpr
-      service: plate_recognizer
-      api_type: cloud
-#      api_url: "https://api.platerecognizer.com/v1/plate-reader/"
-      api_key: someAPIkeyHERE123
-      detection_options:
-#        regions:
-        stats: no
-        min_dscore: 0.5
-        min_score: 0.5
-        max_size: 1600
-
-        payload:
-          regions: ['us']
-          camera_id: 12
-
-        config:
-          region: 'strict'
-          mode:  'fast'
+#
+#      detection_options:
+#          confidence: 0.5
+#          max_size: 600
+##          recognize_vehicle: yes
+##          country: us
+##          state: ca
+#
+#    - name: 'Platerecognizer cloud'
+##      enabled: no
+#      model_type: alpr
+#      framework: alpr
+#      service: plate_recognizer
+#      api_type: cloud
+##      api_url: "https://api.platerecognizer.com/v1/plate-reader/"
+#      api_key: someAPIkeyHERE123
+#      detection_options:
+##        regions:
+#        stats: no
+#        min_dscore: 0.5
+#        min_score: 0.5
+#        max_size: 1600
+#
+#        payload:
+#          regions: ['us']
+#          camera_id: 12
+#
+#        config:
+#          region: 'strict'
+#          mode:  'fast'

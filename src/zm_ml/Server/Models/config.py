@@ -146,8 +146,8 @@ class ALPRModelOptions(BaseModelOptions):
     )
 
 class OpenALPRLocalModelOptions(ALPRModelOptions):
-    openalpr_binary: str = Field("alpr", description="OpenALPR binary name")
-    openalpr_binary_params: str = Field(
+    alpr_binary: str = Field("alpr", description="OpenALPR binary name or absolute path")
+    alpr_binary_params: str = Field(
         "-d",
         description="OpenALPR binary parameters (-j is ALWAYS passed)",
         example="-p ca -c US",
@@ -190,12 +190,12 @@ class PlateRecognizerModelOptions(BaseModelOptions):
         description="List of regions to search for plates in. If not specified, "
                     "all regions are searched. See http://docs.platerecognizer.com/#regions-supported",
     )
-    # minimal confidence for actually detecting a plate (Just a license plate, not the actual license plate text)
+    # minimal confidence for actually detecting a plate (the presence of a license plate, not the actual plate text)
     min_dscore: float = Field(
         0.1,
         ge=0,
         le=1.0,
-        description="Minimal confidence for actually detecting a plate",
+        description="Minimal confidence for detecting a license plate in the image",
     )
     # minimal confidence for the translated text (plate number)
     min_score: float = Field(
@@ -212,6 +212,7 @@ class PlateRecognizerModelOptions(BaseModelOptions):
         except TypeError:
             raise ValueError("Must be JSON serializable")
         return v
+
 
 
 class DeepFaceModelOptions(BaseModelOptions):
@@ -628,8 +629,6 @@ class Settings(BaseModel):
     @validator("available_models", always=True)
     def validate_available_models(cls, v, values):
         models = values.get("models")
-        logger.info(f"Settings._validate_available_models: {models is None = }")
-        logger.info(f"{models = }")
         if models:
             v = []
             for model in models:
@@ -641,7 +640,7 @@ class Settings(BaseModel):
                     _options = model.get("detection_options", {})
                     _type = model.get("model_type", "object")
                     logger.debug(
-                        f"DBG<<< {_framework} FRAMEWORK RAW options are {_options}"
+                        f"DBG<<< {_framework} FRAMEWORK RAW options are :: {_options}"
                     )
                     if _framework == ModelFrameWork.REKOGNITION:
                         model["model_type"] = ModelType.OBJECT

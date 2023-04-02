@@ -5,14 +5,16 @@ files=''
 config="'${ML_CLIENT_CONF_FILE:-/home/zmadmin/zm_ml/configs/client.yml}"
 detect_script="${ML_CLIENT_EVENT_START:-/home/zmadmin/zm_ml/examples/eventstart.py}"
 
+# pliablepixels
 _WEB_OWNER_FROM_PS=$(ps xao user,group,comm | grep -E '(httpd|hiawatha|apache|apache2|nginx)' | grep -v whoami | grep -v root | head -n1 | awk '{print $1}')
 #_WEB_OWNER='www-data' # uncomment this if the above mechanism fails
 
-#_WEB_GROUP_FROM_PS=$(ps xao user,group,comm | grep -E '(httpd|hiawatha|apache|apache2|nginx)' | grep -v whoami | grep -v root | head -n1 | awk '{print $2}')
+#_WEB_GROUP_FROM_PS=$(ps xao user,group,comm | grep -E '(httpd|hiawatha|apache|mlapi|nginx)' | grep -v whoami | grep -v root | head -n1 | awk '{print $2}')
 ##_WEB_GROUP='www-data' # uncomment if above line fails
 
 WEB_OWNER=${WEB_OWNER:-${_WEB_OWNER_FROM_PS}}
 #WEB_GROUP=${WEB_GROUP:-${_WEB_GROUP_FROM_PS}}
+# Personal project for dynamic bat theming
 bat_="$(which bat)"
 bat_themes=(
   "1337"
