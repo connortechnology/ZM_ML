@@ -1015,7 +1015,7 @@ def do_install(_inst_type: str, search_dir: Path):
                 f"Running envsubst on {_inst_type} config file... at {cfg_dir}/{_inst_type}.yml"
             )
             ran = subprocess.run(
-                f"envsubst '{env_names}' < {cfg_dir}/{_inst_type}.yml > {cfg_dir}/{_inst_type}.yml",
+                f"envsubst < {cfg_dir}/{_inst_type}.yml > {cfg_dir}/{_inst_type}.yml",
                 env=envs,
                 text=True,
                 capture_output=True,
@@ -1049,7 +1049,7 @@ def do_install(_inst_type: str, search_dir: Path):
                 "--dry-run",
                 _src,
             ]
-            test_msg(f"envsubst '{env_names}' < {cfg_dir}/{_inst_type}.yml > {cfg_dir}/{_inst_type}.yml")
+            test_msg(f"envsubst < {cfg_dir}/{_inst_type}.yml > {cfg_dir}/{_inst_type}.yml")
 
             logger.info(
                 f"Installing {_inst_type} pip dependencies (USING --dry-run) :: {' '.join(_pip_inst_cmd)}..."
