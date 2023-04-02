@@ -440,7 +440,7 @@ RUN set -x \
     && cp /etc/openalpr/openalpr.conf.gpu /etc/openalpr/openalpr.conf \
     && sed -i "s|\${CMAKE_INSTALL_PREFIX}|/usr|" /etc/openalpr/openalpr.conf
 
-
+ARG ZMML_VERSION=dockerize
 RUN set -x \
       && mkdir -p /opt/zm_ml/src \
       && git clone https://github.com/baudneo/ZM_ML.git /opt/zm_ml/src \

@@ -134,7 +134,11 @@ def test_msg(msg):
 
 
 def get_distro() -> namedtuple:
-    release_data = platform.freedesktop_os_release()
+    if hasattr(platform, 'freedesktop_os_release'):
+        release_data = platform.freedesktop_os_release()
+    else:
+        import distro
+        release_data = {'ID': distro.id() }
     nmd_tpl = namedtuple("Distro", release_data.keys())
     return nmd_tpl(**release_data)
 
