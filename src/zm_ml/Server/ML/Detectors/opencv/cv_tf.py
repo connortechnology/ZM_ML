@@ -7,7 +7,7 @@ import numpy as np
 
 from .cv_base import CV2Base
 from ....Models.config import BaseModelOptions, BaseModelConfig, CV2YOLOModelConfig, CV2TFModelConfig
-from src.zm_ml.Shared.Models.Enums import ModelProcessor
+from .....Shared.Models.Enums import ModelProcessor
 
 LP: str = "OpenCV:TF:"
 from zm_ml.Server import SERVER_LOGGER_NAME

@@ -2,11 +2,11 @@ version: '3.6'
 
 services:
   mlapi:
-    build:
-      context: ..
-      dockerfile: ./Dockerfile
+#    build:
+#      context: ..
+#      dockerfile: ./orig.Dockerfile
 #    image: ghcr.io/baudneo/zm_ml-server:latest
-#    image: mlapi_new:testing
+    image: baudneo/zm_ml:server-full
     container_name: mlapi
     restart: always
     # Need privileged for USB TPU access, comment out if not using TPU
@@ -24,21 +24,27 @@ services:
       - ./mlapi/scripts:/zm_ml/data/scripts
       - ./mlapi/faces/unknown:/zm_ml/data/unknown_faces
       - ./mlapi/faces/known:/zm_ml/data/known_faces
-      - ./mlapi/log:/log
+      - ./mlapi/log:/log/zm_mlapi
 
-      # TPU access (mount the whole USB system)
-      - /dev/bus/usb:/dev/bus/usb
-#    env_file:
-#      - ./.env
+      # TPU access (mount the whole USB system, unless you know which device it is)
+#      - /dev/bus/usb:/dev/bus/usb
+
+    env_file:
+      - ./server.env
+#    environment:
+#      DL_ALL_MODELS: true
+#      FORCE_MODELS: true
+
     # NVIDIA GPU Example - https://docs.docker.com/compose/gpu-support/
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
+    # Remember to use the nvidia container toolkit to passthrough gpu to docker
+#    deploy:
+#      resources:
+#        reservations:
+#          devices:
+#            - driver: nvidia
 #              count: 3
 #              device_ids: ["2", "3"]
-              capabilities: [ gpu, compute, utility ]
+#              capabilities: [ gpu, compute, utility ]
 
 
 

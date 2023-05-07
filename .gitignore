@@ -146,9 +146,11 @@ cython_debug/
 
 ###
 data/
-data/*
+docker/mlapi/
 configs/secrets.yml
 configs/client.yml
 configs/server.yml
-/examples/*_install*
-/examples/*.log
+examples/*_install*
+examples/*.log
+examples/kmeans_dominant_color.py
+examples/*.json

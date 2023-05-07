@@ -35,8 +35,13 @@ class CV2YOLODetector(CV2Base):
             # Allow for .weights/.cfg and .onnx YOLO architectures
             model_file: str = self.config.input.as_posix()
             config_file: Optional[str] = None
-            if self.config.config and self.config.config.exists():
-                config_file = self.config.config.as_posix()
+            if self.config.config:
+                if self.config.config.exists():
+                    config_file = self.config.config.as_posix()
+                else:
+                    raise FileNotFoundError(
+                        f"{LP} config file '{self.config.config}' not found!"
+                    )
             logger.info(f"{LP} loading -> model: {model_file} :: config: {config_file}")
             self.net = cv2.dnn.readNet(model_file, config_file)
         except Exception as model_load_exc:
@@ -44,7 +49,7 @@ class CV2YOLODetector(CV2Base):
                 f"{LP} Error while loading model file and/or config! "
                 f"(May need to re-download the model/cfg file) => {model_load_exc}"
             )
-            # raise model_load_exc
+            raise model_load_exc
         # DetectionModel allows to set params for preprocessing input image. DetectionModel creates net
         # from file with trained weights and config, sets preprocessing input, runs forward pass and return
         # result detections. For DetectionModel SSD, Faster R-CNN, YOLO topologies are supported.

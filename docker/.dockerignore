@@ -1,0 +1,11 @@
+mlapi
+../configs/server.yml
+../configs/secrets.yml
+../configs/client.yml
+../data/
+../venv/
+../.git/
+../.idea/
+../examples/kmeans_dominant_color.py
+../examples/*.log
+../examples/*.json

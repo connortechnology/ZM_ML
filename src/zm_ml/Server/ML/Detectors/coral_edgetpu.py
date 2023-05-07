@@ -7,7 +7,7 @@ import numpy as np
 
 from ..file_locks import FileLock
 from ...Models.config import TPUModelConfig
-from src.zm_ml.Shared.Models.Enums import ModelType
+from ....Shared.Models.Enums import ModelType
 
 from zm_ml.Server import SERVER_LOGGER_NAME
 logger = getLogger(SERVER_LOGGER_NAME)

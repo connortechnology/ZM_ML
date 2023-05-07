@@ -3,7 +3,11 @@
 This is a project aiming to update how [ZoneMinder](https://github.com/ZoneMinder/zoneminder) Object Detection works.
 A server and client are supplied to allow for easy integration with ZoneMinder.
 
-The server is an asynchronous [FastAPI](https://fastapi.tiangolo.com/) based REST API that runs Machine Learning models on supplied images, the server can be run on the ZoneMinder host or a remote host.
+The server is an asynchronous [FastAPI](https://fastapi.tiangolo.com/) based REST API that runs Machine Learning 
+models on supplied images, the server can be run on the ZoneMinder host or a remote host and can be hardware
+accelerated using an NVIDIA GPU or Coral.ai EdgeTPU (USB confirmed working, other variants untested). 
+The Server offers object detection, face detection, face recognition and Automatic License Plate Recognition (ALPR). 
+There are plans to add TensorRT, OpenVINO, PyTorch, [deepface](https://github.com/serengil/deepface) and TensorFlow support.
 
 The client is installed on the ZoneMinder machine, grabs and sends images to a ZM_ML server for
 inference and then processes the results to annotate images, create animations and send notifications.
@@ -20,8 +24,10 @@ This project is based on the work of [@pliablepixels](https://github.com/pliable
 - ZoneMinder 1.37.5+ (*EventStartCommand* is **REQUIRED**)
 - Python 3.8+ (3.9 recommended)
   - psutil
-  - requests
-- OpenCV (Contrib) 4.2.0+ (4.5.4+ recommended)
+  - request
+  - tqdm
+  - distro
+- OpenCV (Contrib) 4.2.0+ (4.7.+ recommended)
 - NumPy 1.19.5+ (1.21.2+ recommended)
 
 #### Notes:

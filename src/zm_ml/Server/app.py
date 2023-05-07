@@ -24,14 +24,21 @@ from fastapi.responses import RedirectResponse
 from .imports import (
     Settings,
 )
-from .Models.config import BaseModelOptions, FaceRecognitionLibModelOptions, \
-    OpenALPRLocalModelOptions, BaseModelConfig, APIDetector, GlobalConfig
+from .Models.config import (
+    BaseModelOptions,
+    FaceRecognitionLibModelOptions,
+    OpenALPRLocalModelOptions,
+    BaseModelConfig,
+    APIDetector,
+    GlobalConfig,
+)
 from ..Shared.Models.Enums import ModelType, ModelFrameWork, ModelProcessor
 
 __version__ = "0.0.1a"
 __version_type__ = "dev"
 
 from .Log import SERVER_LOGGER_NAME
+
 logger = logging.getLogger(SERVER_LOGGER_NAME)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.NullHandler())
@@ -41,14 +48,16 @@ logger.info(
     f"OpenCV: {cv2.__version__} - Numpy: {np.__version__} - FastAPI: {fastapi_version} - "
     f"Pydantic: {pydantic.VERSION}]"
 )
- 
+
 app = FastAPI(debug=True)
 g: Optional[GlobalConfig] = None
 LP: str = "mlapi:"
 
+
 def create_logs() -> logging.Logger:
     from zm_ml.Shared.Log.handlers import BufferedLogHandler
     from .Log import SERVER_LOG_FORMAT
+
     logger = logging.getLogger(SERVER_LOGGER_NAME)
     console_handler = logging.StreamHandler(stream=sys.stdout)
     console_handler.setFormatter(SERVER_LOG_FORMAT)
@@ -59,8 +68,10 @@ def create_logs() -> logging.Logger:
     logger.addHandler(buffered_log_handler)
     return logger
 
+
 def get_global_config() -> GlobalConfig:
     return g
+
 
 def create_global_config() -> GlobalConfig:
     """Create the global config object"""
@@ -300,17 +311,13 @@ class MLAPI:
             self.start()
 
     def read_settings(self):
-        logger.info(
-            f"reading settings from '{self.cfg_file.as_posix()}'"
-        )
+        logger.info(f"reading settings from '{self.cfg_file.as_posix()}'")
         from .Models.config import parse_client_config_file
 
         self.cached_settings = parse_client_config_file(self.cfg_file)
         get_global_config().config = self.cached_settings
         # logger.debug(f"{g.settings = }")
-        logger.info(
-f"should be loading models"
-        )
+        logger.info(f"should be loading models")
 
         available_models = (
             get_global_config().available_models
@@ -337,7 +344,6 @@ f"should be loading models"
         self.start()
 
     def start(self):
-        logger.info("running server")
         _avail = {}
         for model in get_global_config().available_models:
             _avail[normalize_id(model.name)] = str(model.id)
@@ -370,18 +376,18 @@ f"should be loading models"
             },
             "loggers": {
                 "uvicorn": {"handlers": ["default"], "level": "INFO"},
-                "uvicorn.error": {"level": "INFO"},
+                "uvicorn.error": {"level": "ERROR"},
                 "uvicorn.access": {"handlers": ["access"], "level": "INFO", "propagate": False},
             },
         }
         """
         uvicorn.config.LOGGING_CONFIG["formatters"]["default"][
             "fmt"
-        ] = "%(asctime)s.%(msecs)04d %(name)s[%(process)s] %(levelname)s %(module)s:%(lineno)d -> %(message)s"
+        ] = "%(asctime)s %(name)s[%(process)s] %(levelname)s %(module)s:%(lineno)d -> %(message)s"
         uvicorn.config.LOGGING_CONFIG["formatters"]["default"]["use_colors"] = True
         uvicorn.config.LOGGING_CONFIG["handlers"]["default"]["level"] = "DEBUG"
         uvicorn.config.LOGGING_CONFIG["loggers"]["uvicorn"]["level"] = "DEBUG"
-        uvicorn.config.LOGGING_CONFIG["loggers"]["uvicorn.error"]["level"] = "DEBUG"
+        uvicorn.config.LOGGING_CONFIG["loggers"]["uvicorn.error"]["level"] = "ERROR"
         server_cfg = get_global_config().config.server
         config = uvicorn.Config(
             "zm_ml.Server.app:app",
@@ -393,8 +399,8 @@ f"should be loading models"
             proxy_headers=True,
             reload_dirs=[
                 str(self.cfg_file.parent.parent / "src/zm_ml/Server"),
-                str(self.cfg_file.parent.parent / "src/zm_ml/Shared")
-                         ],
+                str(self.cfg_file.parent.parent / "src/zm_ml/Shared"),
+            ],
         )
         start = time.perf_counter()
         self.server = uvicorn.Server(config)

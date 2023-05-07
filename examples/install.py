@@ -1,37 +1,41 @@
 #!/usr/bin/env python3
-import datetime
 import platform
+import subprocess
 from collections import namedtuple
-import os
 import logging
-import sys
 import argparse
-import time
-from typing import Optional, Tuple, Union, List, Dict
+from typing import Optional, Tuple, Union, List, Dict, Pattern
 from pathlib import Path
+import re
+import os
+import sys
+
+_simple_re: Pattern = re.compile(r"(?<!\\)\$([A-Za-z0-9_]+)")
+_extended_re: Pattern = re.compile(r"(?<!\\)\$\{([A-Za-z0-9_]+)((:?-)([^}]+))?}")
 
 # Change these if you want to install to a different location
 DEFAULT_DATA_DIR = "/opt/zm_ml/var/lib/zm_ml"
 DEFAULT_CONFIG_DIR = "/opt/zm_ml/etc/zm_ml"
 DEFAULT_LOG_DIR = "/opt/zm_ml/var/logs/zm_ml"
-DEFAULT_SYSTEM_CREATE_PERMISSIONS = 0o640
+DEFAULT_SYSTEM_CREATE_PERMISSIONS = 0o755
 # config files will have their permissions adjusted to this
 DEFAULT_CONFIG_CREATE_PERMISSIONS = 0o755
 # default ML models to install (SEE: available_models{})
 DEFAULT_MODELS = ["yolov4", "yolov4_tiny", "yolov7", "yolov7_tiny"]
-FINAL_ENVS = {}
-
+REPO_BASE = Path(__file__).parent.parent
+INSTALL_TYPE = "client"
+_ENV = {}
 
 # Do not change these unless you know what you are doing
 available_models = {
     "yolov4": {
         "folder": "yolo",
         "model": [
-            "https://github.com/AlexeyAB/darknet/releases/download/yolov4/yolov4.weights",
+            # "https://github.com/AlexeyAB/darknet/releases/download/yolov4/yolov4.weights",
             "https://github.com/AlexeyAB/darknet/releases/download/yolov4/yolov4_new.weights",
         ],
         "config": [
-            "https://raw.githubusercontent.com/AlexeyAB/darknet/master/cfg/yolov4.cfg",
+            # "https://raw.githubusercontent.com/AlexeyAB/darknet/master/cfg/yolov4.cfg",
             "https://raw.githubusercontent.com/AlexeyAB/darknet/master/cfg/yolov4_new.cfg",
         ],
     },
@@ -92,20 +96,18 @@ available_models = {
         "config": None,
     },
 }
-## Logging
+# Logging
 logger = logging.getLogger("install_zm_ml")
 logger.setLevel(logging.INFO)
-formatter = logging.Formatter(
+log_formatter = logging.Formatter(
     "%(asctime)s.%(msecs)04d %(name)s[%(process)s] %(levelname)s %(module)s:%(lineno)d -> %(message)s",
     "%m/%d/%y %H:%M:%S",
 )
-console = logging.StreamHandler(stream=sys.stdout)
-console.setFormatter(formatter)
-logger.addHandler(console)
+console = logging.StreamHandler(sys.stdout)
 
-## Misc.
+# Misc.
 __version__ = "0.0.1a1"
-__dependancies__ = "psutil", "requests"
+__dependancies__ = "psutil", "requests", "tqdm", "distro"
 __doc__ = """Install ZM-ML Server / Client"""
 
 # Logic
@@ -128,17 +130,30 @@ def parse_env_file(env_file: Path) -> None:
         dotenv.load_dotenv(env_file)
 
 
-def test_msg(msg):
-    """Print test message. Changes stacklevel to 2 to show caller of test_msg."""
-    logger.warning(f"{tst_msg_wrap[0]} {msg} {tst_msg_wrap[1]}", stacklevel=2)
+def test_msg(msg, level="debug"):
+    """Print test message. Changes stack level to 2 to show caller of test_msg."""
+    if testing:
+        logger.warning(f"{tst_msg_wrap[0]} {msg} {tst_msg_wrap[1]}", stacklevel=2)
+    else:
+        if level == "debug":
+            logger.debug(msg, stacklevel=2)
+        elif level == "info":
+            logger.info(msg, stacklevel=2)
+        elif level == "warning":
+            logger.warning(msg, stacklevel=2)
+        elif level == "error":
+            logger.error(msg, stacklevel=2)
+        elif level == "critical":
+            logger.critical(msg, stacklevel=2)
 
 
 def get_distro() -> namedtuple:
-    if hasattr(platform, 'freedesktop_os_release'):
+    if hasattr(platform, "freedesktop_os_release"):
         release_data = platform.freedesktop_os_release()
     else:
         import distro
-        release_data = {'ID': distro.id() }
+
+        release_data = {"ID": distro.id()}
     nmd_tpl = namedtuple("Distro", release_data.keys())
     return nmd_tpl(**release_data)
 
@@ -155,6 +170,7 @@ def check_imports():
                 f"Missing python module dependency: {imp_name}"
                 f":: Please install the python package"
             )
+            print(f"Missing python module dependency: {imp_name}")
             ret = False
         else:
             logger.debug(f"Found python module dependency: {imp_name}")
@@ -194,12 +210,160 @@ def get_web_user() -> Tuple[Optional[str], Optional[str]]:
     return None, None
 
 
+def get_models():
+    global models, no_models
+    # check models
+    logger.debug(f"In get_models() :: {no_models = } ::  {models = }")
+    if no_models:
+        logger.info(" --no-models passed, Skipping model download...")
+        return
+    if not models:
+        logger.info(f"No models specified, using default models {DEFAULT_MODELS}")
+        if interactive:
+            x = input(f"Download default models? [Y/n]... ")
+            if x.casefold() == "n":
+                logger.info("Skipping model download...")
+                models = []
+            else:
+                models = ["all"]
+        else:
+            logger.info("Skipping download of default models...")
+
+    if models:
+        for model in models:
+            model = model.strip().casefold()
+            if model not in available_models.keys():
+                logger.error(
+                    f"Invalid model '{model}' -  Allowed models: {', '.join(available_models.keys())}"
+                )
+            else:
+                logger.info(f"Downloading model data: {model}")
+                model_data = available_models[model]
+                model_folder = model_dir / model_data["folder"]
+                create_dir(model_folder, ml_user, ml_group, system_create_mode)
+                _model = model_data["model"]
+                _config = model_data["config"]
+                if _model:
+                    for model_url in model_data["model"]:
+                        model_file = model_folder / Path(model_url).name
+                        if model_file.exists():
+                            if not force_models:
+                                logger.warning(
+                                    f"Model file '{model_file}' already exists, skipping..."
+                                )
+                                continue
+                            else:
+                                logger.info(
+                                    f"--force-model passed via CLI - Model file '{model_file}' already exists, overwriting..."
+                                )
+                        else:
+                            logger.info(
+                                f"Model file ({model_file}) does not exist, downloading..."
+                            )
+                        download_file(
+                            model_url,
+                            model_file,
+                            ml_user,
+                            ml_group,
+                            cfg_create_mode,
+                        )
+                if _config:
+                    for config_url in model_data["config"]:
+                        config_file = model_folder / Path(config_url).name
+                        if config_file.exists():
+                            if not force_models:
+                                logger.warning(
+                                    f"Config file '{config_file}' already exists, skipping..."
+                                )
+                                continue
+                            else:
+                                logger.info(
+                                    f"--force-model passed via CLI - Config file '{config_file}' already exists, overwriting..."
+                                )
+                        download_file(
+                            config_url,
+                            config_file,
+                            ml_user,
+                            ml_group,
+                            cfg_create_mode,
+                        )
+
+
 def parse_cli():
+    global args, models
+
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--config-only",
+        dest="config_only",
+        action="store_true",
+        help="Install config files only, used in conjunction with --install-type and --secret-only",
+    )
+
+    parser.add_argument(
+        "--secrets-only",
+        dest="secrets_only",
+        action="store_true",
+        help="Install secrets file only, used in conjunction with --install-type and --config-only",
+    )
+
+    parser.add_argument(
+        "--interactive",
+        "-I",
+        action="store_true",
+        dest="interactive",
+        help="Run in interactive mode",
+    )
+    parser.add_argument(
+        "--models-only",
+        "--only-models",
+        dest="models_only",
+        action="store_true",
+        help="Install models only",
+    )
+    parser.add_argument(
+        "--add-model",
+        action="append",
+        dest="models",
+        help=f"Download model files (can be used several time --add-model yolov4 --add-model yolov7_tiny) Default: {' '.join(DEFAULT_MODELS)}",
+        default=DEFAULT_MODELS,
+        choices=available_models.keys(),
+    )
+    parser.add_argument(
+        "--all-models",
+        action="store_true",
+        dest="all_models",
+        help="Download all available model files",
+    )
+    parser.add_argument(
+        "--text-models",
+        type=str,
+        dest="text_models",
+        help="Download model files designated by a comma delimited string of model names [yolov4,yolov7,etc]",
+    )
+
+    parser.add_argument(
+        "--force-models",
+        action="store_true",
+        dest="force_models",
+        help="Force model installation [Overwrite existing model files]",
+    )
+    parser.add_argument(
+        "--no-models", action="store_true", help="Do not install models"
+    )
+    parser.add_argument(
+        "--dir-model",
+        type=str,
+        help="ML model base directory",
+        default="",
+        dest="model_dir",
+    )
     parser.add_argument(
         "--install-type",
         choices=["server", "client", "both"],
         default="client",
+        required=True,
+        dest="install_type",
         help="Install candidates",
     )
     parser.add_argument(
@@ -215,7 +379,7 @@ def parse_cli():
         "--dir-config",
         help=f"Directory where config files are held Default: {DEFAULT_CONFIG_DIR}",
         default="",
-        type=str,
+        type=Path,
         dest="config_dir",
     )
     parser.add_argument(
@@ -223,14 +387,14 @@ def parse_cli():
         help=f"Directory where variable data is held Default: {DEFAULT_DATA_DIR}",
         dest="data_dir",
         default="",
-        type=str,
+        type=Path,
     )
     parser.add_argument(
         "--dir-log",
         help=f"Directory where logs will be stored Default: {DEFAULT_LOG_DIR}",
         default="",
         dest="log_dir",
-        type=str,
+        type=Path,
     )
     parser.add_argument(
         "--force-install-secrets",
@@ -269,13 +433,6 @@ def parse_cli():
     parser.add_argument(
         "--version", action="version", version=f"%(prog)s {__version__}"
     )
-    parser.add_argument(
-        "--interactive",
-        "-I",
-        action="store_true",
-        dest="interactive",
-        help="Run in interactive mode",
-    )
 
     parser.add_argument(
         "--system-create-permissions",
@@ -289,26 +446,7 @@ def parse_cli():
         type=lambda x: int(x, 8),
         default=DEFAULT_CONFIG_CREATE_PERMISSIONS,
     )
-    parser.add_argument(
-        "--add-model",
-        action="append",
-        dest="models",
-        help=f"Download model files (can be used several time --add-model yolov4 --add-model yolov7_tiny) Default: {' '.join(DEFAULT_MODELS)}",
-        default=DEFAULT_MODELS,
-        choices=available_models.keys(),
-    )
-    parser.add_argument(
-        "--all-models",
-        action="store_true",
-        dest="all_models",
-        help="Download all available model files",
-    )
-    parser.add_argument(
-        "--force-models",
-        action="store_true",
-        dest="force_models",
-        help="Force model installation [Overwrite existing model files]",
-    )
+
     return parser.parse_args()
 
 
@@ -320,17 +458,15 @@ def chown(path: Path, user: Union[str, int], group: Union[str, int]):
         user = pwd.getpwnam(user).pw_uid
     if isinstance(group, str):
         group = grp.getgrnam(group).gr_gid
+    test_msg(f"chown {user}:{group} {path}")
     if not args.test:
         os.chown(path, user, group)
-    else:
-        test_msg(f"chown {user}:{group} {path}")
 
 
 def chmod(path: Path, mode: int):
+    test_msg(f"chmod OCTAL: {mode:o} RAW: {mode} => {path}")
     if not args.test:
         os.chmod(path, mode)
-    else:
-        test_msg(f"chmod {mode:o} {path}")
 
 
 def chown_mod(path: Path, user: Union[str, int], group: Union[str, int], mode: int):
@@ -340,12 +476,10 @@ def chown_mod(path: Path, user: Union[str, int], group: Union[str, int], mode: i
 
 def create_dir(path: Path, user: Union[str, int], group: Union[str, int], mode: int):
     msg = f"Created directory: {path} with user:group:permission [{user}:{group}:{mode:o}]"
+    test_msg(msg)
     if not args.test:
         path.mkdir(parents=True, exist_ok=True, mode=mode)
         chown_mod(path, user, group, mode)
-        logger.info(msg)
-    else:
-        test_msg(msg)
 
 
 def show_config(cli_args: argparse.Namespace):
@@ -361,17 +495,16 @@ def show_config(cli_args: argparse.Namespace):
             "Press Enter to continue if all looks fine, otherwise use 'Ctrl+C' to exit and edit CLI options..."
         )
     else:
-        msg = f"This is a non-interactive{' TEST' if args.test else None} session, continuing with installation... "
+        msg = f"This is a non-interactive{' TEST' if args.test else ''} session, continuing with installation... "
         if args.test:
             logger.info(msg)
         else:
             logger.info(f"{msg} in 5 seconds, press 'Ctrl+C' to exit")
-            time.sleep(5)
+            # time.sleep(5)
 
 
 def do_web_user():
     global ml_user, ml_group
-    ml_user, ml_group = args.ml_user, args.ml_group
     _group = None
     if not ml_user or not ml_group:
         if not ml_user:
@@ -425,7 +558,7 @@ def install_dirs(
     default_dir: str,
     dir_type: str,
     sub_dirs: Optional[List[str]] = None,
-    perms: int = 0o750,
+    perms: int = 0o755,
 ):
     """Install directories"""
     if sub_dirs is None:
@@ -475,27 +608,59 @@ def download_file(url: str, dest: Path, user: str, group: str, mode: int):
     msg = (
         f"Downloading {url}..."
         if not testing
-        else f"TESTING if file exists at {url}..."
+        else f"TESTING if file exists at :: {url}..."
     )
     logger.info(msg)
     import requests
+    from tqdm.auto import tqdm
+    import shutil
+    import functools
 
     try:
-        r = requests.get(url, allow_redirects=True)
+        r = requests.get(url, stream=True, allow_redirects=True, timeout=5)
+        if r:
+            file_size = int(r.headers.get("Content-Length", 0))
+            dest = dest.expanduser().resolve()
+            dest.parent.mkdir(parents=True, exist_ok=True)
+
+            desc = (
+                "(Unknown total file size!)"
+                if file_size == 0
+                else f"Downloading {url} ..."
+            )
+            r.raw.read = functools.partial(
+                r.raw.read, decode_content=True
+            )  # Decompress if needed
+            with tqdm.wrapattr(
+                r.raw, "read", total=file_size, desc=desc, colour="green"
+            ) as r_raw:
+                do_chown = True
+                if testing:
+                    do_chown = False
+                    logger.info(
+                        f"TESTING: File exists at the url for {url.split('/')[-1]}"
+                    )
+                    # to keep the progress bar, pipe output to /dev/null
+                    dest = Path("/dev/null")
+                try:
+                    with dest.open("wb") as f:
+                        shutil.copyfileobj(r_raw, f)
+                except Exception as e:
+                    logger.error(
+                        f"Failed to open or copy data to destination file ({dest}) => {e}"
+                    )
+                    raise e
+                else:
+                    logger.info(f"Successfully downloaded {url} to {dest}")
+                    if do_chown:
+                        chown_mod(dest, user, group, mode)
+        else:
+            logger.error(f"NO RESPONSE FROM {url} :: Failed to download {url}!")
     except requests.exceptions.ConnectionError:
-        logger.error(f"Failed to download {url}!")
+        logger.error(f"REQUESTS CONNECTION ERROR :: Failed to download {url}!")
         return
     except Exception as e:
-        logger.error(f"Failed to download {url}! {e}")
-    else:
-        if r.status_code == 200:
-            if not args.test:
-                dest.write_bytes(r.content)
-                chown_mod(dest, user, group, mode)
-            else:
-                logger.info(f"TESTING: File exists for {url.split('/')[-1]}")
-        else:
-            logger.error(f"Failed to download [code: {r.status_code}] {url}!")
+        logger.error(f"Failed to download {url}! EXCEPTION :: {e}")
 
 
 def copy_file(src: Path, dest: Path, user: str, group: str, mode: int):
@@ -561,74 +726,74 @@ def install_host_dependencies(_type: str):
         dependencies = {
             "apt": {
                 "client": {
-                    "binary_names": ["gifsicle", "geos-config", "envsubst"],
-                    "binary_flags": ["-v", "--version", "--version"],
-                    "pkg_names": ["gifsicle", "libgeos-dev", "gettext-base"],
+                    "binary_names": ["gifsicle", "geos-config"],
+                    "binary_flags": ["-v", "--version"],
+                    "pkg_names": ["gifsicle", "libgeos-dev"],
                 },
                 "server": {
-                    "binary_names": ["envsubst"],
-                    "binary_flags": ["--version"],
-                    "pkg_names": ["gettext-base"],
+                    "binary_names": [],
+                    "binary_flags": [],
+                    "pkg_names": [],
                 },
             },
             "yum": {
                 "client": {
-                    "binary_names": ["gifsicle", "geos-config", "envsubst"],
-                    "binary_flags": ["-v", "--version", "--version"],
-                    "pkg_names": ["gifsicle", "geos-devel", "gettext"],
+                    "binary_names": ["gifsicle", "geos-config"],
+                    "binary_flags": ["-v", "--version"],
+                    "pkg_names": ["gifsicle", "geos-devel"],
                 },
                 "server": {
-                    "binary_names": ["envsubst"],
-                    "binary_flags": ["--version"],
-                    "pkg_names": ["gettext"],
+                    "binary_names": [],
+                    "binary_flags": [],
+                    "pkg_names": [],
                 },
             },
             "pacman": {
                 "client": {
-                    "binary_names": ["gifsicle", "geos-config", "envsubst"],
-                    "binary_flags": ["-v", "--version", "--version"],
-                    "pkg_names": ["gifsicle", "geos", "gettext"],
+                    "binary_names": ["gifsicle", "geos-config"],
+                    "binary_flags": ["-v", "--version"],
+                    "pkg_names": ["gifsicle", "geos"],
                 },
                 "server": {
-                    "binary_names": ["envsubst"],
-                    "binary_flags": ["--version"],
-                    "pkg_names": ["gettext"],
+                    "binary_names": [],
+                    "binary_flags": [],
+                    "pkg_names": [],
                 },
             },
             "zypper": {
                 "client": {
-                    "binary_names": ["gifsicle", "geos-config", "envsubst"],
-                    "binary_flags": ["-v", "--version", "--version"],
-                    "pkg_names": ["gifsicle", "geos", "gettext"],
+                    "binary_names": ["gifsicle", "geos-config"],
+                    "binary_flags": ["-v", "--version"],
+                    "pkg_names": ["gifsicle", "geos"],
                 },
                 "server": {
-                    "binary_names": ["envsubst"],
-                    "binary_flags": ["--version"],
-                    "pkg_names": ["gettext"],
+                    "binary_names": [],
+                    "binary_flags": [],
+                    "pkg_names": [],
                 },
             },
             "dnf": {
                 "client": {
-                    "binary_names": ["gifsicle", "geos-config", "envsubst"],
-                    "binary_flags": ["-v", "--version", "--version"],
-                    "pkg_names": ["gifsicle", "geos-devel", "gettext"],
+                    "binary_names": ["gifsicle", "geos-config"],
+                    "binary_flags": ["-v", "--version"],
+                    "pkg_names": ["gifsicle", "geos-devel"],
                 },
                 "server": {
-                    "binary_names": ["envsubst"],
-                    "binary_flags": ["--version"],
-                    "pkg_names": ["gettext"],
+                    "binary_names": [],
+                    "binary_flags": [],
+                    "pkg_names": [],
                 },
             },
             "apk": {
                 "client": {
-                    "binary_names": ["gifsicle", "geos-config", "envsubst"],
-                    "binary_flags": ["-v", "--version", "--version"],
-                    "pkg_names": ["gifsicle", "geos-devel", "gettext"],
+                    "binary_names": ["gifsicle", "geos-config"],
+                    "binary_flags": ["-v", "--version"],
+                    "pkg_names": ["gifsicle", "geos-devel"],
                 },
                 "server": {
-                    "binary_names": ["envsubst"],
-                    "binary_flags": ["--version"],
-                    "pkg_names": ["gettext"],
+                    "binary_names": [],
+                    "binary_flags": [],
+                    "pkg_names": [],
                 },
             },
         }
@@ -637,7 +802,6 @@ def install_host_dependencies(_type: str):
 
         import subprocess
 
-        deps = []
         if _type == "server":
             _msg = "Installing server HOST dependencies..."
             logger.info(_msg) if not testing else test_msg(_msg)
@@ -767,9 +931,31 @@ def main():
         logger.debug("Debug logging enabled!")
     if testing:
         logger.warning("Running in test mode")
+
+    if args.models_only:
+        logger.info(f"\n***Only installing models! ***\n")
+        get_models()
+        sys.exit(0)
+    if args.config_only or args.secrets_only:
+        secrets = False
+        _cfg = False
+        if args.config_only:
+            _cfg = True
+            logger.info(f"\n***Only installing config file! ***\n")
+        if args.secrets_only:
+            secrets = True
+            logger.info(f"\n***Only installing secrets file! ***\n")
+
+        if secrets:
+            create_secrets(dest=cfg_dir / "secrets.yml")
+        if _cfg:
+            create_config(dest=cfg_dir / f"{INSTALL_TYPE}.yml")
+        sys.exit(0)
+
     install_server = False
     install_client = False
     _install_type = args.install_type.strip().casefold()
+    print(f"in main() _install_type: {_install_type}")
     if _install_type:
         if _install_type == "server":
             install_server = True
@@ -781,16 +967,20 @@ def main():
     else:
         logger.info("No install type specified, using 'client' as default...")
         install_client = True
+
     if install_client:
         logger.debug(f"Inside main(): install_client: {install_client}")
         do_web_user()
     if install_server:
+        print(f"about to install server")
         logger.debug(f"Inside main(): install_server: {install_server}")
         do_web_user()
+        print(f"figured out web user)")
         if not ml_user:
             logger.error("zm_ml user not specified, exiting...")
             sys.exit(1)
 
+    print(f"checking imports")
     if not check_imports():
         msg = f"Missing python dependencies, exiting..."
         if not args.test:
@@ -800,6 +990,26 @@ def main():
             test_msg(msg)
     else:
         logger.info("All python dependencies found")
+
+    # Add TQDM logger now that we know all imports are found
+    class TqdmLoggingHandler(logging.Handler):
+        def __init__(self, level=logging.NOTSET):
+            super().__init__(level)
+
+        def emit(self, record):
+            from tqdm.auto import tqdm
+
+            try:
+                msg = self.format(record)
+                tqdm.write(msg)
+                self.flush()
+            except Exception:
+                self.handleError(record)
+
+    tqdm_handler = TqdmLoggingHandler()
+    tqdm_handler.setFormatter(log_formatter)
+    logger.addHandler(tqdm_handler)
+
     install_dirs(
         data_dir,
         DEFAULT_DATA_DIR,
@@ -815,80 +1025,11 @@ def main():
             "bin",
         ],
     )
-    global model_dir
-    model_dir = data_dir / "models"
     install_dirs(
         cfg_dir, DEFAULT_CONFIG_DIR, "Config", sub_dirs=[], perms=cfg_create_mode
     )
     install_dirs(log_dir, DEFAULT_LOG_DIR, "Log", sub_dirs=[], perms=0o777)
-    # check models
-    models = args.models
-    if not models:
-        logger.info(f"No models specified, using default models {DEFAULT_MODELS}")
-        if interactive:
-            x = input(f"Download default models? [Y/n]... ")
-            if x.casefold() == "n":
-                logger.info("Skipping model download...")
-                models = []
-            else:
-                models = ["all"]
-        else:
-            logger.info("Skipping download of default models...")
-
-    if models:
-        for model in models:
-            model = model.strip().casefold()
-            if model not in available_models.keys():
-                logger.error(
-                    f"Invalid model '{model}' -  Allowed models: {', '.join(available_models.keys())}"
-                )
-            else:
-                logger.info(f"Downloading model data: {model}")
-                model_data = available_models[model]
-                model_folder = model_dir / model_data["folder"]
-                create_dir(model_folder, ml_user, ml_group, system_create_mode)
-                _model = model_data["model"]
-                _config = model_data["config"]
-                if _model:
-                    for model_url in model_data["model"]:
-                        model_file = model_folder / Path(model_url).name
-                        if model_file.exists():
-                            if not force_models:
-                                logger.warning(
-                                    f"Model file '{model_file}' already exists, skipping..."
-                                )
-                                continue
-                            else:
-                                logger.info(
-                                    f"--force-model passed via CLI - Model file '{model_file}' already exists, overwriting..."
-                                )
-                        download_file(
-                            model_url,
-                            model_file,
-                            ml_user,
-                            ml_group,
-                            cfg_create_mode,
-                        )
-                if _config:
-                    for config_url in model_data["config"]:
-                        config_file = model_folder / Path(config_url).name
-                        if config_file.exists():
-                            if not force_models:
-                                logger.warning(
-                                    f"Config file '{config_file}' already exists, skipping..."
-                                )
-                                continue
-                            else:
-                                logger.info(
-                                    f"--force-model passed via CLI - Config file '{config_file}' already exists, overwriting..."
-                                )
-                        download_file(
-                            config_url,
-                            config_file,
-                            ml_user,
-                            ml_group,
-                            cfg_create_mode,
-                        )
+    get_models()
     do_install("secrets", cfg_dir)
     if install_server:
         do_install("server", cfg_dir)
@@ -898,6 +1039,8 @@ def main():
 
 
 def do_install(_inst_type: str, search_dir: Path):
+    global INSTALL_TYPE
+    INSTALL_TYPE = _inst_type
     existing_secrets = False
     logger.debug(f"Inside do_install(): {_inst_type = } -- {search_dir = }")
     path_glob_out = search_dir.glob(f"{_inst_type}.*")
@@ -955,21 +1098,9 @@ def do_install(_inst_type: str, search_dir: Path):
             logger.warning(
                 f"Config directory '{cfg_dir}' does not exist, skipping creation of {_inst_type} config file..."
             )
-
+    global _ENV
     if _inst_type != "secrets":
         env_names = ""
-        envs = {
-            "${ML_INSTALL_DATA_DIR}": data_dir.as_posix(),
-            "${ML_INSTALL_CFG_DIR}": cfg_dir.as_posix(),
-            "${ML_INSTALL_LOGGING_DIR}": log_dir.as_posix(),
-            "${ML_INSTALL_LOGGING_LEVEL}": "debug",
-            "${ML_INSTALL_LOGGING_CONSOLE_ENABLED}": "yes",
-            "${ML_INSTALL_LOGGING_FILE_ENABLED}": "no",
-            "${ML_INSTALL_LOGGING_SYSLOG_ENABLED}": "no",
-            "${ML_INSTALL_LOGGING_SYSLOG_ADDRESS}": "/dev/log",
-            "${ML_INSTALL_TMP_DIR}": "/tmp/zm_ml",
-            "${ML_INSTALL_MODEL_DIR}": model_dir.as_posix(),
-        }
         if _inst_type == "server":
             copy_file(
                 install_file_dir / "mlapi.py",
@@ -979,10 +1110,10 @@ def do_install(_inst_type: str, search_dir: Path):
                 system_create_mode,
             )
             # SERVER INSTALL ENVS FOR envsubst CMD
-            envs["${ML_INSTALL_SERVER_ADDRESS}"] = "0.0.0.0"
-            envs["${ML_INSTALL_SERVER_PORT}"] = "5000"
+            _ENV["ML_INSTALL_SERVER_ADDRESS"] = "0.0.0.0"
+            _ENV["ML_INSTALL_SERVER_PORT"] = "5000"
 
-            env_names = " ".join(list(envs.keys()))
+            env_names = " ".join(list(_ENV.keys()))
 
         elif _inst_type == "client":
             copy_file(
@@ -1000,40 +1131,27 @@ def do_install(_inst_type: str, search_dir: Path):
                 cfg_create_mode,
             )
             # Client install envs for envsubst cmd
-            envs["${ML_INSTALL_ROUTE_NAME}"] = "mlapi_default"
-            envs["${ML_INSTALL_ROUTE_HOST}"] = "127.0.0.1"
-            envs["${ML_INSTALL_ROUTE_PORT}"] = "5000"
-            env_names = " ".join(list(envs.keys()))
+            _ENV["ML_INSTALL_ROUTE_NAME"] = "mlapi_default"
+            _ENV["ML_INSTALL_ROUTE_HOST"] = "127.0.0.1"
+            _ENV["ML_INSTALL_ROUTE_PORT"] = "5000"
+            env_names = " ".join(list(_ENV.keys()))
 
         install_host_dependencies(_inst_type)
         _src = f"{install_file_dir.parent.as_posix()}[{_inst_type}]"
         _pip_prefix = "pip3"
-        import subprocess
+        from pathlib import Path
 
         if not testing:
-            logger.debug(
-                f"Running envsubst on {_inst_type} config file... at {cfg_dir}/{_inst_type}.yml"
-            )
-            ran = subprocess.run(
-                f"envsubst < {cfg_dir}/{_inst_type}.yml > {cfg_dir}/{_inst_type}.yml",
-                env=envs,
-                text=True,
-                capture_output=True,
-            )
-            logger.debug(f"{ran.returncode = }")
-            if ran.stdout:
-                logger.debug(f"\n{ran.stdout}")
-            if ran.stderr:
-                logger.error(f"\n{ran.stderr}")
-            del ran
-
+            create_secrets(dest=cfg_dir / "secrets.yml")
+            create_config(dest=cfg_dir / f"{INSTALL_TYPE}.yml")
             logger.info(f"Installing {_inst_type} pip dependencies...")
             ran = subprocess.run(
                 [
                     _pip_prefix,
                     "install",
+                    "--root-user-action=ignore",
                     "--report",
-                    f"./pip_install_report.json",
+                    "./pip_install_report.json",
                     _src,
                 ],
                 capture_output=True,
@@ -1045,11 +1163,11 @@ def do_install(_inst_type: str, search_dir: Path):
                 _pip_prefix,
                 "install",
                 "--report",
-                f"./pip_install_report.json",
+                "./pip_install_report.json",
+                "--root-user-action=ignore",
                 "--dry-run",
                 _src,
             ]
-            test_msg(f"envsubst < {cfg_dir}/{_inst_type}.yml > {cfg_dir}/{_inst_type}.yml")
 
             logger.info(
                 f"Installing {_inst_type} pip dependencies (USING --dry-run) :: {' '.join(_pip_inst_cmd)}..."
@@ -1065,30 +1183,194 @@ def do_install(_inst_type: str, search_dir: Path):
             logger.error(f"\n{ran.stderr}")
 
 
+
+class Envsubst:
+    # MIT License
+    #
+    # Copyright (c) 2019 Alex Shafer
+    #
+    # Permission is hereby granted, free of charge, to any person obtaining a copy
+    # of this software and associated documentation files (the "Software"), to deal
+    # in the Software without restriction, including without limitation the rights
+    # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    # copies of the Software, and to permit persons to whom the Software is
+    # furnished to do so, subject to the following conditions:
+    #
+    # The above copyright notice and this permission notice shall be included in all
+    # copies or substantial portions of the Software.
+    #
+    # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    # SOFTWARE.
+    strict: bool
+    env: Optional[Dict]
+
+    def __init__(self):
+        """
+        Substitute environment variables in a string. Instantiate and pass a string to the sub method.
+        Modified to allow custom environment mappings, and to allow for strict mode (only use the custom environment mapping).
+
+        Possibly add dotenv support?.
+        """
+        self.strict = False
+        self.env = None
+
+    def sub(self, search_string: str, env: Optional[Dict] = None, strict: bool = False):
+        """
+        Substitute environment variables in the given string, allows for passing a custom environment mapping.
+        The default behavior is to check the custom environment mapping , the system environment and finally the
+        specified default ("somestring" in the examples). If strict is True, the system environment will not be
+        checked after the custom environment mapping but, the default will still be used (if needed).
+
+        The following forms are supported:
+
+        Simple variables - will use an empty string if the variable is unset and strict is true
+          $FOO
+
+        Bracketed expressions
+          ${FOO}
+            identical to $FOO
+          ${FOO:-somestring}
+            uses "somestring" if $FOO is unset, or is set and empty
+          ${FOO-somestring}
+            uses "somestring" only if $FOO is unset
+        """
+        self.strict = strict
+        logger.debug(f"envsubst:: strict mode: {self.strict}")
+        self.env = env
+        # handle simple un-bracketed env vars like $FOO
+        a: str = _simple_re.sub(self._repl_simple_env_var, search_string)
+        # handle bracketed env vars with optional default specification
+        b: str = _extended_re.sub(self._repl_extended_env_var, a)
+        return b
+
+    def _resolve_var(self, var_name, default=None):
+        if not self.strict and default is None:
+            # Instead of returning an empty string in strict mode,
+            # return the variable name formatted for ZM_ML substitution
+            default = f"${{{var_name}}}"
+
+        if self.env:
+            if not self.strict:
+                return self.env.get(var_name, os.environ.get(var_name, default))
+            else:
+                return self.env.get(var_name, default)
+
+        return os.environ.get(var_name, default)
+
+    def _repl_simple_env_var(self, m: re.Match):
+        var_name = m.group(1)
+        return self._resolve_var(var_name, "" if self.strict else None)
+
+    def _repl_extended_env_var(self, m: re.Match):
+        if m:
+            # ('ML_INSTALL_DATA_DIR', None, None, None)
+            var_name = m.group(1)
+            default_spec = m.group(2)
+            if default_spec:
+                default = m.group(4)
+                default = _simple_re.sub(self._repl_simple_env_var, default)
+                if m.group(3) == ":-":
+                    # use default if var is unset or empty
+                    env_var = self._resolve_var(var_name)
+                    if env_var:
+                        return env_var
+                    else:
+                        return default
+                elif m.group(3) == "-":
+                    # use default if var is unset
+                    return self._resolve_var(var_name, default)
+                else:
+                    raise RuntimeError("unexpected string matched regex")
+            else:
+                return self._resolve_var(var_name, "" if self.strict else None)
+
+
+def envsubst(string: str, env: Optional[Dict] = None, strict: bool = False):
+    """Wraps Envsubst class for easier use."""
+    self = Envsubst()
+    return self.sub(string, env=env, strict=strict)
+
+
+def create_secrets(dest: Path):
+    src = REPO_BASE / "configs/example_secrets.yml"
+    cat_out = src.read_text()
+    envsubst_out = envsubst(cat_out, _ENV)
+    test_msg(f"Writing secrets file to {dest.as_posix()}")
+    if not testing:
+        dest.write_text(envsubst_out)
+
+
+def create_config(dest: Path):
+    src = REPO_BASE / f"configs/example_{INSTALL_TYPE}.yml"
+    cat_out = src.read_text()
+    envsubst_out = envsubst(cat_out, _ENV)
+
+    if not testing:
+        logger.info(f"Writing {INSTALL_TYPE} config file to {dest.as_posix()}")
+        dest.write_text(envsubst_out)
+    else:
+        test_msg(f"Writing {INSTALL_TYPE} config file to {dest.as_posix()}")
+
+
 if __name__ == "__main__":
+    print(f"PRINT::: ABOUT to run {__file__}")
+    models: List[str]
     install_file_dir = Path(__file__).parent
     args = parse_cli()
-    show_config(args)
-    if args.env_file:
-        parse_env_file(args.env_file)
+    print(f"parsed CLI args)")
+    models = args.models
     force_models: bool = args.force_models
     system_create_mode = args.system_create_permissions
     cfg_create_mode = args.config_create_permissions
     interactive = args.interactive
+    no_models = args.no_models
     install_log = args.install_log
-    file_handler = logging.FileHandler(install_log, mode="w")
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
     testing = args.test
     debug = args.debug
     data_dir = args.data_dir
     cfg_dir = args.config_dir
     log_dir = args.log_dir
+    ml_user, ml_group = args.ml_user or "", args.ml_group or ""
+    INSTALL_TYPE = args.install_type
 
-    models: List[str] = args.models
+    file_handler = logging.FileHandler(install_log, mode="w")
+    file_handler.setFormatter(log_formatter)
+    logger.addHandler(file_handler)
+    print(f"initialized install file log: {install_log}")
+
     if args.all_models:
         models = [str(x) for x in available_models.keys()]
-        logger.info(f"Using all available models: {models}")
+        logger.info(f"ALL MODELS requested:: Using all available models: {models}")
     model_dir: Optional[Path] = None
-    ml_user, ml_group = "", ""
+    if args.model_dir:
+        model_dir = Path(args.model_dir)
+        logger.info(f"Using model directory: {model_dir}")
+    else:
+        logger.info(f"No model directory specified, using default: {data_dir}/models")
+        model_dir = Path(f"{data_dir}/models")
+        print(f"about to show config")
+    show_config(args)
+
+    if args.env_file:
+        parse_env_file(args.env_file)
+    _ENV = {
+        "ML_INSTALL_DATA_DIR": data_dir.as_posix(),
+        "ML_INSTALL_CFG_DIR": cfg_dir.as_posix(),
+        "ML_INSTALL_LOGGING_DIR": log_dir.as_posix(),
+        "ML_INSTALL_LOGGING_LEVEL": "debug",
+        "ML_INSTALL_LOGGING_CONSOLE_ENABLED": "yes",
+        "ML_INSTALL_LOGGING_FILE_ENABLED": "no",
+        "ML_INSTALL_LOGGING_SYSLOG_ENABLED": "no",
+        "ML_INSTALL_LOGGING_SYSLOG_ADDRESS": "/dev/log",
+        "ML_INSTALL_TMP_DIR": "/tmp/zm_ml",
+        "ML_INSTALL_MODEL_DIR": model_dir.as_posix(),
+        "ML_INSTALL_SERVER_ADDRESS": "127.0.0.1",
+        "ML_INSTALL_SERVER_PORT": "5000",
+    }
+    print(f"about to call main()")
     main()

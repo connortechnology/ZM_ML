@@ -1,19 +1,29 @@
-#!/usr/bin/with-contenv bash
+#!/command/with-contenv bash
 # shellcheck shell=bash
 # ==============================================================================
 # MLAPI
 # Runs MLAPI
 # ==============================================================================
+program_name="mlapi_run"
 exec 2>&1
-echo "Starting ZM_ML Server (ML API)..."
 
-MLAPI_FLAGS=(--config /zm_ml/conf/server.yml)
-
-if [ "${MLAPI_DEBUG_ENABLED}" -eq 1 ]; then
-  echo "Enabling MLAPI Debug!"
-  MLAPI_FLAGS+=("--debug")
+[[ ${FORCE_MODELS} == 'true' || "${FORCE_MODELS}" -eq 1 ]] && force_models='--force-models' || force_models=''
+if [[ ! -d /zm_ml/data/models/yolo ]]; then
+  echo "[${program_name}] No yolo model directory found, downloading ALL available models..."
+  DL_ALL_MODELS='true'
 fi
 
-echo "Starting ZM_ML Server (ML API) with FLAGS: ${MLAPI_FLAGS[*]}"
+if [[ "${DL_ALL_MODELS}" == 'true' || "${DL_ALL_MODELS}" -eq 1 ]]; then
+    echo "[${program_name}] DL_ALL_MODELS=true :: Downloading ALL ML models..."
+    eval python3 /opt/zm_ml/src/examples/install.py --dir-config /zm_ml/conf --dir-data /zm_ml/data --all-models --only-models ${force_models} --install-type server --debug --user www-data --group www-data
+    # Directory structure
+    chown -R www-data:www-data /zm_ml
+    chmod -R 755 /zm_ml
+fi
 
-s6-setuidgid www-data python3 /zm_ml/bin/mlapi.py "${MLAPI_FLAGS[@]}"
+[[ -z "${ML_SERVER_CONF_FILE}" ]] && ML_SERVER_CONF_FILE='/zm_ml/conf/server.yml'
+MLAPI_FLAGS=(--config "${ML_SERVER_CONF_FILE}")
+
+echo "[${program_name}] Starting ZM_ML Server (ML API) with FLAGS: ${MLAPI_FLAGS[*]}"
+
+s6-setuidgid www-data python3 /zm_ml/data/bin/mlapi.py "${MLAPI_FLAGS[@]}"

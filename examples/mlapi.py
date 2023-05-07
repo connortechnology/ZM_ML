@@ -14,12 +14,10 @@ def _parse_cli():
 
 
 if __name__ == "__main__":
-    # get script name
     import sys
 
     script_name = sys.argv[0].split("/")[-1]
     lp = f"{script_name}::"
-    logger.info(f"{lp} Starting MLAPI server...")
     args = _parse_cli()
     config_file = args.get("config")
     secrets_file = args.get("secrets")
@@ -32,7 +30,6 @@ if __name__ == "__main__":
             logger.info(f"{lp} Found ENV ML_SERVER_CONF_FILE={config_file}")
         else:
             raise FileNotFoundError("No config file specified")
-    logger.info(f"{lp} Creating MLAPI server with config file '{config_file}'")
+    logger.info(f"{lp} Initializing MLAPI server with config file '{config_file}'")
     server: MLAPI = MLAPI(config_file)
-    logger.info(f"{lp} Starting MLAPI server NOW!")
     server.start()

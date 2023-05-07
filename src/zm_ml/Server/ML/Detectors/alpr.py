@@ -16,7 +16,7 @@ from requests import Response
 
 from ...Models.config import OpenALPRLocalModelOptions, \
     OpenALPRCloudModelOptions, PlateRecognizerModelOptions, ALPRModelConfig
-from src.zm_ml.Shared.Models.Enums import ModelProcessor, ALPRAPIType, ALPRService
+from ....Shared.Models.Enums import ModelProcessor, ALPRAPIType, ALPRService
 from ...utils import resize_cv2_image
 
 from zm_ml.Server import SERVER_LOGGER_NAME

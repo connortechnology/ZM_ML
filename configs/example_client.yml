@@ -1,21 +1,24 @@
-#This is an example of the config that the actual ZM detection script will use
-#Keys are case-sensitive!
 
+########################################################################
+# ${ML_INSTALL_ prepended variables are replaced during installation   #
+########################################################################
 substitutions:
+  # Substitutions can be used like BASH variables
+  # THEY MUST BE WRAPPED IN ${} - $THIS_WONT_WORK but ${THIS_WILL}
   # Order matters!
   DATA_DIR: ${ML_INSTALL_DATA_DIR}
-  TMP_DIR: ""
+  TMP_DIR: ${ML_INSTALL_TMP_DIR}
   CFG_DIR: ${ML_INSTALL_CFG_DIR}
   LOGGING_DIR: ${ML_INSTALL_LOGGING_DIR}
+  MODEL_DIR: ${ML_INSTALL_MODEL_DIR}
 
-  # These will be imported from the file to be used as variables (secrets)
-  IncludeFile: "${CFG_DIR}/secrets.yml"
+  # This file contains substitutions that will be imported into this file (secrets)
+  # NOTE: The 'IncludeFile' directive must be contained in the 'substitutions' section
+  IncludeFile: ${ML_INSTALL_CFG_DIR}/secrets.yml
 
-  ROUTE_NAME: ${ML_INSTALL_ROUTE_NAME}
-  ROUTE_HOST: ${ML_INSTALL_ROUTE_HOST}
-  ROUTE_PORT: ${ML_INSTALL_ROUTE_PORT}
   # --------- Example
   EXAMPLE: "World!"
+
 
 THIS IS AN EXAMPLE:
   of substitution variables: "Hello, ${EXAMPLE}"
@@ -44,7 +47,7 @@ zoneminder:
 
 logging:
 #  root logging level
-  level: ${ML_INSTALL_LOGGING_LEVEL
+  level: ${ML_INSTALL_LOGGING_LEVEL}
 
   sanitize:
     # Try to sanitize tokens, keys, passwords, usernames, host and ip addresses from logs
@@ -68,9 +71,11 @@ logging:
     #    level: debug
     # directory where log files will be stored
     path: ${LOGGING_DIR}
-    # name prepended to monitor id for log file
-    # i.e. mID 2 will be logged to zmmlclient_m2.log
-    filename: zmmlclient
+    # prefix logname with this string, 'zmml' will become zmml_m1.log for monitor 1
+    filename_prefix: zmmlclient
+    # Do not suffix logs with monitor id, log everything to a single file (Leave blank to disable)
+    # If this has a value, filename_prefix is ignored.
+    file_name:
     # override log file permissions
     # user:
     # group:
@@ -90,6 +95,7 @@ mlapi:
 
 animations:
   # If you are on a low memory system, write frame buffer to disk instead of holding it in memory
+  # Slower but takes less memory.
   low_memory: no
   # If an animation file already exists, overwrite it
   overwrite: no

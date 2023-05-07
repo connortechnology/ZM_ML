@@ -1,22 +1,16 @@
 import logging
-import tempfile
 from pathlib import Path
 from typing import Dict, Optional
 
 from pydantic import BaseModel, Field, validator
 
 from .validators import validate_log_level, str_to_path
+from ...Server.Models.DEFAULTS import *
 
 
 class Testing(BaseModel):
     enabled: bool = Field(False)
     substitutions: Dict[str, str] = Field(default_factory=dict)
-
-
-class SystemSettings(BaseModel):
-    variable_data_path: Optional[Path] = Field(Path("/var/lib/zm_ml"))
-    tmp_path: Optional[Path] = Field(Path(tempfile.gettempdir()) / "zm_ml")
-    thread_workers: Optional[int] = Field(4)
 
 
 class DefaultEnabled(BaseModel):

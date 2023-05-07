@@ -8,11 +8,19 @@ from pydantic import BaseModel, Field, AnyUrl, validator, IPvAnyAddress, SecretS
 
 from .validators import validate_percentage_or_pixels
 from ...Shared.Models.validators import validate_no_scheme_url
-from ...Shared.Models.config import Testing, SystemSettings, DefaultEnabled, DefaultNotEnabled, LoggingSettings
+from ...Shared.Models.config import Testing, DefaultEnabled, DefaultNotEnabled, LoggingSettings
 from ..Log import CLIENT_LOGGER_NAME
+from ..Models.DEFAULTS import *
 
 logger = logging.getLogger(CLIENT_LOGGER_NAME)
 
+
+class SystemSettings(BaseModel):
+    image_dir: Optional[Path] = Field(Path(DEF_CLNT_SYS_IMAGEDIR))
+    config_path: Optional[Path] = Field(Path(DEF_CLNT_SYS_CONFDIR))
+    variable_data_path: Optional[Path] = Field(DEF_CLNT_SYS_DATADIR)
+    tmp_path: Optional[Path] = Field(Path(DEF_CLNT_SYS_TMPDIR))
+    thread_workers: Optional[int] = Field(DEF_CLNT_SYS_THREAD_WORKERS)
 
 class ZMAPISettings(BaseModel):
     class ZMMisc(BaseModel):

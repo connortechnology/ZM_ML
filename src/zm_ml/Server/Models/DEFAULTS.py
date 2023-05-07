@@ -1,0 +1,12 @@
+DEF_SRV_SYS_CONFDIR = "/opt/zm_ml/etc/zm_ml"
+DEF_SRV_SYS_DATADIR = "/opt/zm_ml/var/lib/zm_ml"
+DEF_SRV_SYS_TMPDIR = "/opt/zm_ml/var/tmp/zm_ml"
+DEF_SRV_SYS_IMAGEDIR = "/opt/zm_ml/var/lib/zm_ml/images"
+DEF_SRV_SYS_MODELDIR = "/opt/zm_ml/var/lib/zm_ml/models"
+DEF_SRV_SYS_THREAD_WORKERS = 4
+DEF_SRV_LOGGING_LEVEL = 20
+DEF_SRV_LOGGING_CONSOLE_ENABLED = True
+DEF_SRV_LOGGING_SYSLOG_ENABLED = False
+DEF_SRV_LOGGING_FILE_ENABLED = True
+DEF_SRV_LOGGING_FILE_PATH = "/opt/zm_ml/var/log/zm"
+DEF_SRV_LOGGING_FILE_FILENAME_PREFIX = "zmml"

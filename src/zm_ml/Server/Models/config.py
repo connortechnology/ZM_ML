@@ -14,8 +14,10 @@ from pydantic.fields import ModelField
 from ..ML.coco17_cv2 import COCO17
 from ...Shared.Models.Enums import ModelType, ModelFrameWork, ModelProcessor, FaceRecognitionLibModelTypes, ALPRAPIType, \
     ALPRService
-from ...Shared.Models.config import Testing, SystemSettings, LoggingSettings
+from ...Shared.Models.config import Testing, LoggingSettings
 from ..Log import SERVER_LOGGER_NAME
+from ...Server.Models.DEFAULTS import *
+
 
 
 logger = logging.getLogger(SERVER_LOGGER_NAME)
@@ -602,6 +604,15 @@ def _replace_vars(search_str: str, var_pool: Dict) -> Dict:
     return yaml.safe_load(search_str)
 
 
+class SystemSettings(BaseModel):
+    model_dir: Optional[Path] = Field(Path(DEF_SRV_SYS_MODELDIR))
+    image_dir: Optional[Path] = Field(Path(DEF_SRV_SYS_IMAGEDIR))
+    config_path: Optional[Path] = Field(Path(DEF_SRV_SYS_CONFDIR))
+    variable_data_path: Optional[Path] = Field(DEF_SRV_SYS_DATADIR)
+    tmp_path: Optional[Path] = Field(Path(DEF_SRV_SYS_TMPDIR))
+    thread_workers: Optional[int] = Field(DEF_SRV_SYS_THREAD_WORKERS)
+
+
 class Settings(BaseModel):
 
     testing: Testing = Field(default_factory=Testing)
@@ -1025,5 +1036,5 @@ class ServerEnvVars(BaseSettings):
         # env_file_encoding = "utf-8"
         case_sensitive = True
         # extra = "forbid"
-        env_prefix = "ZM_ML_SERVER_"
+        env_prefix = "ML_SERVER_"
 

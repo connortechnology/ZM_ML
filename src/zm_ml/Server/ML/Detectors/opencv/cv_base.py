@@ -3,7 +3,7 @@ from typing import Optional, Union
 
 from ....Models.config import BaseModelOptions, CV2YOLOModelOptions, CV2TFModelOptions, BaseModelConfig, \
     CV2YOLOModelConfig, CV2HOGModelConfig, CV2TFModelConfig
-from src.zm_ml.Shared.Models.Enums import ModelProcessor
+from .....Shared.Models.Enums import ModelProcessor
 
 import cv2
 import numpy as np

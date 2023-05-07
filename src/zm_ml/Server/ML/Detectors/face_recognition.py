@@ -9,7 +9,7 @@ from logging import getLogger
 import numpy as np
 
 from ...Models.config import FaceRecognitionLibModelOptions, BaseModelConfig, FaceRecognitionLibModelConfig, ALPRModelConfig
-from src.zm_ml.Shared.Models.Enums import ModelFrameWork, ModelProcessor, FaceRecognitionLibModelTypes
+from ....Shared.Models.Enums import ModelFrameWork, ModelProcessor, FaceRecognitionLibModelTypes
 
 import cv2
 from sklearn import neighbors
