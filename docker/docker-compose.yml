@@ -22,8 +22,8 @@ services:
       - ./mlapi/models:/zm_ml/data/models
       - ./mlapi/images:/zm_ml/data/images
       - ./mlapi/scripts:/zm_ml/data/scripts
-      - ./mlapi/faces/unknown:/zm_ml/data/unknown_faces
-      - ./mlapi/faces/known:/zm_ml/data/known_faces
+      - ./mlapi/unknown_faces:/zm_ml/data/unknown_faces
+      - ./mlapi/known_faces:/zm_ml/data/known_faces
       - ./mlapi/log:/log/zm_mlapi
 
       # TPU access (mount the whole USB system, unless you know which device it is)

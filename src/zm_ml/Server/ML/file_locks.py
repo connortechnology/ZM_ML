@@ -8,7 +8,7 @@ from portalocker import BoundedSemaphore, AlreadyLocked
 
 from ..app import locks_enabled, get_global_config
 
-from zm_ml.Server import SERVER_LOGGER_NAME
+from zm_ml.Server.Log import SERVER_LOGGER_NAME
 logger = getLogger(SERVER_LOGGER_NAME)
 LP: str = 'Lock:'
 
@@ -48,6 +48,7 @@ class FileLock:
                 )
 
     def acquire_lock(self):
+        logger.debug(f"{get_global_config().config.locks = }")
         if locks_enabled():
             if self.is_locked:
                 logger.debug(f"{LP} '{self.name}' lock for '{self.lock.name}' already acquired")

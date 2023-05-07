@@ -7,14 +7,20 @@
 program_name="mlapi_run"
 exec 2>&1
 
-[[ ${FORCE_MODELS} == 'true' || "${FORCE_MODELS}" -eq 1 ]] && force_models='--force-models' || force_models=''
-if [[ ! -d /zm_ml/data/models/yolo ]]; then
-  echo "[${program_name}] No yolo model directory found, downloading ALL available models..."
+if [[ ${FORCE_MODELS} == 'true' || "${FORCE_MODELS}" -eq 1 || "${FORCE_MODELS}" == "1" ]]; then
+  echo "[${program_name}] FORCE_MODELS=true :: existing models will be overwritten if downloaded..."
+  force_models='--force-models'
+  else
+    force_models=''
+fi
+
+if [[ ! -d /zm_ml/data/models/yolo && ! -d /zm_ml/data/models/coral_tpu ]]; then
+  echo "[${program_name}] No yolo and coral_tpu model directory found, downloading ALL available models..."
   DL_ALL_MODELS='true'
 fi
 
-if [[ "${DL_ALL_MODELS}" == 'true' || "${DL_ALL_MODELS}" -eq 1 ]]; then
-    echo "[${program_name}] DL_ALL_MODELS=true :: Downloading ALL ML models..."
+if [[ "${DL_ALL_MODELS}" == 'true' || "${DL_ALL_MODELS}" -eq 1 || "${DL_ALL_MODELS}" == "1" ]]; then
+    echo "[${program_name}] DL_ALL_MODELS=${DL_ALL_MODELS} :: Downloading ALL ML models..."
     eval python3 /opt/zm_ml/src/examples/install.py --dir-config /zm_ml/conf --dir-data /zm_ml/data --all-models --only-models ${force_models} --install-type server --debug --user www-data --group www-data
     # Directory structure
     chown -R www-data:www-data /zm_ml

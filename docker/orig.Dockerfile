@@ -445,6 +445,7 @@ RUN set -x \
 # ZM ML Server Install
 ARG ZMML_VERSION=dockerize
 RUN set -x \
+      && echo "ZMML_VERSION: ${ZMML_VERSION}" \
       && mkdir -p /opt/zm_ml/src \
       && cd /opt/zm_ml/src \
       && git clone https://github.com/baudneo/ZM_ML.git /opt/zm_ml/src \

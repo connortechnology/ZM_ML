@@ -463,7 +463,6 @@ class ZMClient:
                 lambda: loop.create_task(self.signal_handler(sig_name)),
             )
 
-        logger.debug(f"{lp} Preparing client...")
         if global_config:
             logger.debug(f"{lp} Using supplied global config")
             set_global_config(global_config)
@@ -477,6 +476,7 @@ class ZMClient:
         self.config = get_global_config().config
         futures: List[concurrent.futures.Future] = []
         _hash: concurrent.futures.Future
+
         _hash_input = CFGHash(config_file=g.config_file)
         # loop = asyncio.get_event_loop()
         # loop.create_task(self._sort_routes())
@@ -698,9 +698,13 @@ class ZMClient:
         models_str = ",".join(model_names)
         _start_detections = perf_counter()
         base_filters = g.config.matching.filters
-        monitor_filters = g.config.monitors.get(g.mid).filters
-        # logger.debug(f"{lp} Combining GLOBAL filters with Monitor {g.mid} filters")
-        combined_filters = self.combine_filters(base_filters, monitor_filters)
+        if g.mid in g.config.monitors:
+            monitor_filters = g.config.monitors.get(g.mid).filters
+            # logger.debug(f"{lp} Combining GLOBAL filters with Monitor {g.mid} filters")
+            combined_filters = self.combine_filters(base_filters, monitor_filters)
+        else:
+            combined_filters = base_filters
+
         if not self.zones:
             logger.debug(f"{lp} No zones found, adding full image with base filters")
             self.zones["!ZM-ML!_full_image"] = MonitorZones.construct(
@@ -710,7 +714,7 @@ class ZMClient:
                     (g.mon_width, g.mon_height),
                     (0, g.mon_height),
                 ],
-                resolution=f"{g.mon_width}x{g.mon_height}",
+                resolution=(int(g.mon_width), int(g.mon_height)),
                 object_confirm=False,
                 static_objects=OverRideStaticObjects(),
                 filters=OverRideMatchFilters(),
@@ -735,6 +739,7 @@ class ZMClient:
                     f" which is different from the monitor resolution of {mon_res}! "
                     f"Attempting to adjust zone points to match monitor resolution..."
                 )
+                print(f"{mon_res = } -- {zone_resolution = }")
                 xfact: float = mon_res[1] / zone_resolution[1] or 1.0
                 yfact: float = mon_res[0] / zone_resolution[0] or 1.0
                 logger.debug(

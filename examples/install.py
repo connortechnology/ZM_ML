@@ -170,7 +170,7 @@ def check_imports():
                 f"Missing python module dependency: {imp_name}"
                 f":: Please install the python package"
             )
-            print(f"Missing python module dependency: {imp_name}")
+
             ret = False
         else:
             logger.debug(f"Found python module dependency: {imp_name}")
@@ -349,7 +349,7 @@ def parse_cli():
         help="Force model installation [Overwrite existing model files]",
     )
     parser.add_argument(
-        "--no-models", action="store_true", help="Do not install models"
+        "--no-models", dest="no_models", action="store_true", help="Do not install models"
     )
     parser.add_argument(
         "--dir-model",
@@ -955,7 +955,7 @@ def main():
     install_server = False
     install_client = False
     _install_type = args.install_type.strip().casefold()
-    print(f"in main() _install_type: {_install_type}")
+
     if _install_type:
         if _install_type == "server":
             install_server = True
@@ -972,15 +972,15 @@ def main():
         logger.debug(f"Inside main(): install_client: {install_client}")
         do_web_user()
     if install_server:
-        print(f"about to install server")
+
         logger.debug(f"Inside main(): install_server: {install_server}")
         do_web_user()
-        print(f"figured out web user)")
+
         if not ml_user:
             logger.error("zm_ml user not specified, exiting...")
             sys.exit(1)
 
-    print(f"checking imports")
+
     if not check_imports():
         msg = f"Missing python dependencies, exiting..."
         if not args.test:
@@ -1318,11 +1318,11 @@ def create_config(dest: Path):
 
 
 if __name__ == "__main__":
-    print(f"PRINT::: ABOUT to run {__file__}")
+
     models: List[str]
     install_file_dir = Path(__file__).parent
     args = parse_cli()
-    print(f"parsed CLI args)")
+
     models = args.models
     force_models: bool = args.force_models
     system_create_mode = args.system_create_permissions
@@ -1341,7 +1341,7 @@ if __name__ == "__main__":
     file_handler = logging.FileHandler(install_log, mode="w")
     file_handler.setFormatter(log_formatter)
     logger.addHandler(file_handler)
-    print(f"initialized install file log: {install_log}")
+
 
     if args.all_models:
         models = [str(x) for x in available_models.keys()]
@@ -1353,7 +1353,7 @@ if __name__ == "__main__":
     else:
         logger.info(f"No model directory specified, using default: {data_dir}/models")
         model_dir = Path(f"{data_dir}/models")
-        print(f"about to show config")
+
     show_config(args)
 
     if args.env_file:
@@ -1369,8 +1369,7 @@ if __name__ == "__main__":
         "ML_INSTALL_LOGGING_SYSLOG_ADDRESS": "/dev/log",
         "ML_INSTALL_TMP_DIR": "/tmp/zm_ml",
         "ML_INSTALL_MODEL_DIR": model_dir.as_posix(),
-        "ML_INSTALL_SERVER_ADDRESS": "127.0.0.1",
+        "ML_INSTALL_SERVER_ADDRESS": "0.0.0.0",
         "ML_INSTALL_SERVER_PORT": "5000",
     }
-    print(f"about to call main()")
     main()

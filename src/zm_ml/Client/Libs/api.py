@@ -188,6 +188,9 @@ class ZMApi:
             )
             disable_warnings(category=InsecureRequestWarning)
 
+        if self.config.cf_0trust_header and self.config.cf_0trust_secret:
+            logger.info(f"{lp} adding CloudFlare Zero Trust Access (ZTA) Client Secret and Id headers")
+
         if self.token_file:
             _ = self.cached_tokens
             self._refresh_tokens_if_needed()
@@ -639,26 +642,34 @@ class ZMApi:
                     logger.debug(
                         f"{lp} NOT 200|401|404 SOOOOOOOOOOOOOOOO HTTP [{resp_status}] error: {err}"
                     )
-
+# <CIMultiDictProxy('Date': 'Sun, 07 May 2023 03:14:15 GMT', 'Content-Type': 'image/jpeg', 'Transfer-Encoding': 'chunked', 'Connection': 'keep-alive', 'Cache-Control': 'max-age=86400', 'Content-Disposition': 'inline; filename="5_204147_151.jpg"', 'Content-Security-Policy': "object-src 'self'; script-src 'self' 'nonce-e1df8d9a818367507632b5e24baffd8a' ; report-uri zmjs-violations@baudneo.com", 'Expires': 'Sun, 07 May 2023 04:14:15 GMT', 'Pragma': 'cache', 'Set-Cookie': 'ZMSESSID=ur39191kvs2j86trhp3freg3hu; expires=Sun, 07-May-2023 04:14:15 GMT; Max-Age=3600; path=/; HttpOnly; SameSite=Strict', 'Set-Cookie': 'zmSkin=classic; expires=Tue, 15-Mar-2033 03:14:15 GMT; Max-Age=311040000; SameSite=Strict', 'Set-Cookie': 'zmCSS=dark; expires=Tue, 15-Mar-2033 03:14:15 GMT; Max-Age=311040000; SameSite=Strict', 'CF-Cache-Status': 'DYNAMIC', 'Report-To': '{"endpoints":[{"url":"https:\\/\\/a.nel.cloudflare.com\\/report\\/v3?s=38b4lSINFjNgB0CxPpupCo2f38rZQUfHehKHjOlrHgMdt2wglemU5soL%2FIKK6afG6d9vZVEceBkdPsKXQP4eaCfnWw7kKYO%2FzsrM%2FYT%2FlgdfK8WvoumqrYEwLLxbWIIQiA%3D%3D"}],"group":"cf-nel","max_age":604800}', 'NEL': '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}', 'Server': 'cloudflare', 'CF-RAY': '7c364aaf2c40f4aa-YVR', 'alt-svc': 'h3=":443"; ma=86400, h3-29=":443"; ma=86400')>
             else:
                 content_type = resp.headers.get("content-type")
                 content_length = resp.headers.get("content-length")
+                cloudflare = resp.headers.get("Server", "").startswith("cloudflare")
                 logger.debug(
-                    f"{lp} RESPONSE RECEIVED>>> {content_type=}, "
-                    f"{content_length=} \n{resp.headers=}\n"
+                    f"{lp} RESPONSE RECEIVED>>> {content_type=} | {content_length=}"
+                    # f"\n\n HEADERS = {resp.headers}\n\n"
+                    f" | CloudFlare={cloudflare}"
                 )
                 if content_type.startswith("application/json"):
-                    return await resp.json()
+                    # JSON data
+                    _resp = await resp.json()
+                    logger.debug(f"JSON response detected! >>> {str(_resp)[:20]}")
                 elif content_type.startswith("image/"):
-                    # return raw image data
-                    return await resp.read()
+                    # RAW image data
+                    _resp = await resp.read()
+                    logger.debug(f"Image response detected! {_resp[:20]}")
                 else:
-                    resp_text = await resp.text()
-                    logger.debug(f"{lp}  >>> {resp_text=}")
+                    # TEXT data
+                    _resp = await resp.text()
+                    logger.debug(f"Text response?????  >>> {_resp}")
+
                     # A non 0 byte response will usually mean it's an image eid request that needs re-login
+                    # Be aware that if you are behind cloudflare, content-length is always None
                     if content_length:
                         if content_length != "0":
-                            if resp_text.casefold().startswith("no frame found"):
+                            if _resp.casefold().startswith("no frame found"):
                                 #  r.text = 'No Frame found for event(69129) and frame id(280)']
                                 logger.warning(
                                     f"{lp} Frame was not found by API! >>> {resp.text}"
@@ -673,7 +684,7 @@ class ZMApi:
                             logger.debug(
                                 f"{lp} WAS THIS AN IMAGE REQUEST? cant find frame ID?"
                             )
-
+                return _resp
         if payload is None:
             payload = {}
         if query is None:
@@ -683,7 +694,7 @@ class ZMApi:
 
         type_action = type_action.casefold()
         if self.config.cf_0trust_header and self.config.cf_0trust_secret:
-            logger.debug(f"{lp} adding cloudflare 0-trust secret and client ID header")
+            # logger.debug(f"{lp} adding cloudflare 0-trust Client Secret and Id headers")
             headers["CF-Access-Client-Secret"] = self.config.cf_0trust_secret.get_secret_value()
             headers["CF-Access-Client-Id"] = self.config.cf_0trust_header.get_secret_value()
         if self.access_token:
@@ -693,20 +704,41 @@ class ZMApi:
             if self.sanitize
             else url
         )
-        show_tkn: str = (
-            f"{self.access_token[:20]}...{self.sanitize_str}"
-            if self.sanitize
-            else self.access_token
-        )
-        show_payload: str = ""
-        show_query: Union[str, Dict] = f"token: '{show_tkn}'"
-        if not self.access_token:
-            show_query = query
+        show_payload: Union[Dict, str] = {}
+        show_query: Union[Dict, str] = {}
+        show_headers: Union[Dict, str] = {}
+        if query:
+            show_query = {
+                k: f"{v[:20]}...{self.sanitize_str}"
+                if self.sanitize and k == "token"
+                else v
+                for k, v in query.items()
+            }
+            show_query = f"query={show_query}"
         if payload:
-            show_payload = f" payload={payload}"
+            show_payload = {
+                k: f"{v[:20]}...{self.sanitize_str}"
+                if self.sanitize and k == "token"
+                else v
+                for k, v in payload.items()
+            }
+            show_payload = f" payload={show_payload}"
+
+        if headers:
+            show_headers = {
+                k: f"{v[:20]}...{self.sanitize_str}"
+                if self.sanitize and k.startswith("CF-Access-Client")
+                else v
+                for k, v in headers.items()
+            }
+            show_headers = f" headers={show_headers}"
+
         logger.debug(
-            f"{lp} {show_url}{show_payload} query={show_query} headers={headers}"
+            f"{lp} {show_url} {show_payload if show_payload else ''} "
+            f"{show_query if show_query else ''} "
+            f"{show_headers if show_headers else ''}".rstrip()
         ) if not quiet else None
+
         r: Optional[aiohttp.ClientResponse] = None
         if type_action == "get":
             async with self.async_session.get(url, params=query, ssl=ssl, headers=headers) as r:

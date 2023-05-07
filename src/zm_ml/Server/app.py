@@ -33,11 +33,10 @@ from .Models.config import (
     GlobalConfig,
 )
 from ..Shared.Models.Enums import ModelType, ModelFrameWork, ModelProcessor
+from .Log import SERVER_LOGGER_NAME
 
 __version__ = "0.0.1a"
 __version_type__ = "dev"
-
-from .Log import SERVER_LOGGER_NAME
 
 logger = logging.getLogger(SERVER_LOGGER_NAME)
 logger.setLevel(logging.DEBUG)

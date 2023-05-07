@@ -178,17 +178,17 @@ class APIImagePipeLine:
                 logger.debug(
                     f"{lp} attempt #{image_grab_attempt}/{self.max_attempts} to grab image ID: {self.current_frame}"
                 )
-                image = await g.api.make_async_request(fid_url)
-                if isinstance(image, bytes) and image.startswith(b'\xff\xd8\xff\xe0\x00\x10JFIF'):
-
+                api_response = await g.api.make_async_request(fid_url)
+                if isinstance(api_response, bytes) and api_response.startswith(b'\xff\xd8\xff'):
                     logger.debug(f"ZM API returned a JPEG formatted image!")
-                    return self._process_frame(image=image)
+                    return self._process_frame(image=api_response)
                 else:
                     resp_msg = ""
-                    if response:
-                        resp_msg = f" response code={response.status} - response={response}"
+                    if api_response:
+                        resp_msg = f" response code={api_response.status} - response={api_response}"
                     else:
                         resp_msg = f" no response received!"
+
                     logger.warning(f"{lp} image was not retrieved!{resp_msg}")
 
                     await _grab_event_data(msg="checking if event has ended...")
