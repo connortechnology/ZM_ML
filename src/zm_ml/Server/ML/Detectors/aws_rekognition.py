@@ -8,7 +8,7 @@ import numpy as np
 from ...Models.config import RekognitionModelConfig
 
 LP: str = "AWS:Rekognition:"
-from zm_ml.Server import SERVER_LOGGER_NAME
+from zm_ml.Server.Log import SERVER_LOGGER_NAME
 logger = getLogger(SERVER_LOGGER_NAME)
 boto3 = None
 

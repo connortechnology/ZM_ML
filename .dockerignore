@@ -1,0 +1,23 @@
+# Dirs
+docker/mlapi/
+docker/dlib/
+docker/opencv/
+docker/openalpr/
+docker/tpu/
+build_scripts/
+data/
+venv/
+.git/
+.idea/
+tests/
+src/zm_ml.egg-info/
+
+# Files
+## Single
+configs/server.yml
+configs/secrets.yml
+configs/client.yml
+examples/filter_rclone.py
+examples/kmeans_dominant_color.py
+pip_install_report.json
+zm-ml_install.log

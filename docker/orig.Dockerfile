@@ -441,15 +441,15 @@ RUN set -x \
     && python3.9 -m pip install git+https://github.com/ageitgey/face_recognition_models distro \
     && rm -rf /usr/local/lib/python3.9/dist-packages/dlib-"${DLIB_VERSION}".0-py3.9-linux-x86_64.egg dlib-"${DLIB_VERSION}".0-cp39-none-any.whl \
 
-
-# ZM ML Server Install
 ARG ZMML_VERSION=dockerize
+# ZM ML Server Install
+# FIXME; remove after local testing -> COPY
+COPY . /opt/zm_ml/src
 RUN set -x \
-      && echo "ZMML_VERSION: ${ZMML_VERSION}" \
-      && mkdir -p /opt/zm_ml/src \
+#      && mkdir -p /opt/zm_ml/src \
       && cd /opt/zm_ml/src \
-      && git clone https://github.com/baudneo/ZM_ML.git /opt/zm_ml/src \
-      && git checkout "${ZMML_VERSION}" \
+#      && git clone https://github.com/baudneo/ZM_ML.git /opt/zm_ml/src \
+#      && git checkout "${ZMML_VERSION}" \
       # Install without models
       && python3.9 examples/install.py \
           --install-type server \

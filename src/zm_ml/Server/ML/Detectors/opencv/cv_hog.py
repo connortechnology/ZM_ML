@@ -6,7 +6,7 @@ from ....imports import CV2HOGModelConfig
 from .cv_base import CV2Base
 
 LP: str = "OpenCV:HOG:"
-from zm_ml.Server import SERVER_LOGGER_NAME
+from zm_ml.Server.Log import SERVER_LOGGER_NAME
 logger = getLogger(SERVER_LOGGER_NAME)
 
 

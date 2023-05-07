@@ -10,7 +10,7 @@ import numpy as np
 
 from ...file_locks import FileLock
 
-from zm_ml.Server import SERVER_LOGGER_NAME
+from zm_ml.Server.Log import SERVER_LOGGER_NAME
 logger = getLogger(SERVER_LOGGER_NAME)
 LP: str = "OpenCV DNN:"
 

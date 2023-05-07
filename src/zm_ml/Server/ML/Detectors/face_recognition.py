@@ -16,7 +16,7 @@ from sklearn import neighbors
 
 from ..file_locks import FileLock
 
-from zm_ml.Server import SERVER_LOGGER_NAME
+from zm_ml.Server.Log import SERVER_LOGGER_NAME
 logger = getLogger(SERVER_LOGGER_NAME)
 
 face_recognition = None

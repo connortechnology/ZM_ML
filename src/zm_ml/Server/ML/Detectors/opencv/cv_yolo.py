@@ -10,7 +10,7 @@ from .....Shared.Models.Enums import ModelProcessor
 from .cv_base import CV2Base
 
 LP: str = "OpenCV:YOLO:"
-from zm_ml.Server import SERVER_LOGGER_NAME
+from zm_ml.Server.Log import SERVER_LOGGER_NAME
 logger = getLogger(SERVER_LOGGER_NAME)
 
 

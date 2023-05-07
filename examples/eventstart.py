@@ -136,10 +136,11 @@ async def main():
     g.config = parse_client_config_file(cfg_file)
     logger.debug(f"{lp} INITIALIZING ZMCLIENT")
     zm_client = Client.ZMClient(global_config=g)
-    zm_client.is_live_event(args.live)
     _end_init = time.perf_counter()
     __event_modes = ["event", ""]
     if _mode in __event_modes:
+        # set live or past event
+        zm_client.is_live_event(args.live)
         return await zm_client.detect(eid=eid, mid=g.mid)
     elif _mode == "shm":
         raise NotImplementedError("SHM mode is a work in progress")
