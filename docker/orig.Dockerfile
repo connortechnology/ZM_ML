@@ -1,8 +1,11 @@
 # syntax=docker/dockerfile:experimental
 ARG S6_ARCH=x86_64
 ARG ZMML_VERSION=master
+ARG OPENCV_METHOD=branch
 ARG OPENCV_VERSION=4.x
+ARG DLIB_METHOD=release
 ARG DLIB_VERSION=19.24
+ARG ALPR_METHOD=branch
 ARG ALPR_VERSION=master
 # I think a minimum of 6.1 Compute Cabability required - these are GeForce cards
 # CHECK https://developer.nvidia.com/cuda-gpus#compute
