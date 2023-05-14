@@ -65,25 +65,22 @@ class FileLock:
                 return
             try:
                 if self.lock:
-
                     logger.debug(
                         f"{LP} '{self.name}' attempting to acquire lock for '{self.lock.name}'..."
                     )
                     timer = time.perf_counter()
                     self.lock.acquire()
-                    logger.debug(
-                        f"perf:{LP} '{self.name}' lock acquired for '{self.lock.name}' in "
-                        f"{time.perf_counter() - timer:.5f} seconds"
-                    )
+                    # logger.debug(
+                    #     f"perf:{LP} '{self.name}' lock acquired for '{self.lock.name}' in "
+                    #     f"{time.perf_counter() - timer:.5f} seconds"
+                    # )
                     self.is_locked = True
                 else:
                     logger.debug(
                         f"{LP} {self.name} has no lock to acquire, creating one..."
                     )
                     self.create_lock()
-                    # logger.debug(f"{LP} {self.name} attempting to acquire {self.processor} lock after creating one ...")
                     self.acquire_lock()
-                    # self.is_locked = True
             except AlreadyLocked as already_locked_exc:
                 logger.error(
                     f"{LP} {self.name} IS LOCKED, failed to acquire {self.processor} lock: {already_locked_exc}"
@@ -115,9 +112,9 @@ class FileLock:
                         f"{LP} '{self.name}' already released '{self.lock.name}' -- {self.lock.lock = }"
                     )
                     return
-                logger.debug(
-                    f"{LP} '{self.name}' release_lock CALLED - {self.lock.name = } -- {self.is_locked = }"
-                )
+                # logger.debug(
+                #     f"{LP} '{self.name}' release_lock CALLED - {self.lock.name = } -- {self.is_locked = }"
+                # )
                 self.lock.release()
                 self.is_locked = False
                 logger.debug(
