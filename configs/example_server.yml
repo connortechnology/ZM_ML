@@ -4,7 +4,7 @@
 ########################################################################
 substitutions:
   # Substitutions can be used like BASH variables
-  # THEY MUST BE WRAPPED IN ${} - but ${THIS_WILL}
+  # THEY MUST BE WRAPPED IN ${} - ${THIS_WILL_WORK}
   # Order matters!
   DATA_DIR: ${ML_INSTALL_DATA_DIR}
   TMP_DIR: ${ML_INSTALL_TMP_DIR}
@@ -117,6 +117,7 @@ models:
       framework_subset: darknet  # An example usage is for opencv framework, darknet/onnx/caffe are subsets of opencv.
       model_type: object # REQUIRED. Defaults to object - object/face/alpr (for identification).
       processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
+      square: yes
 
       input: "${MODEL_DIR}/yolo/yolov4-tiny.weights"  # REQUIRED - Model file.
       config: "${MODEL_DIR}/yolo/yolov4-tiny.cfg"  # Optional - .weights requires .cfg, .onnx and .tflite does not.
@@ -166,7 +167,7 @@ models:
     - name: yolov7
       processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
       enabled: no
-      description: "YOLO v7 pretrained DarkNet model - Requires SiLu activation in OpenCV"
+      description: "YOLO v7 pretrained DarkNet model"
       input: "${MODEL_DIR}/yolo/yolov7.weights"
       config: "${MODEL_DIR}/yolo/yolov7.cfg"
       square: yes
@@ -176,7 +177,7 @@ models:
     - name: yolov7x
       processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
       enabled: no
-      description: "YOLO v7-X pretrained DarkNet model - Requires SiLu activation in OpenCV"
+      description: "YOLO v7-X pretrained DarkNet model"
       input: "${MODEL_DIR}/yolo/yolov7x.weights"
       config: "${MODEL_DIR}/yolo/yolov7x.cfg"
       square: yes
