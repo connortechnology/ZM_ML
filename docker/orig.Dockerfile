@@ -450,13 +450,13 @@ RUN set -x \
 
 ARG ZMML_VERSION=dockerize
 # ZM ML Server Install
-# FIXME; remove after local testing -> COPY
-COPY . /opt/zm_ml/src
+
+#COPY . /opt/zm_ml/src
 RUN set -x \
-#      && mkdir -p /opt/zm_ml/src \
+      && mkdir -p /opt/zm_ml/src \
       && cd /opt/zm_ml/src \
-#      && git clone https://github.com/baudneo/ZM_ML.git /opt/zm_ml/src \
-#      && git checkout "${ZMML_VERSION}" \
+      && git clone https://github.com/baudneo/ZM_ML.git /opt/zm_ml/src \
+      && git checkout "${ZMML_VERSION}" \
       # Install without models
       && python3.9 examples/install.py \
           --install-type server \
