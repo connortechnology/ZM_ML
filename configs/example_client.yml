@@ -409,6 +409,16 @@ detection_settings:
     # NOTE: You can override these settings per monitor
     yolov4 tiny:
     yolov7 tiny:
+  # Detect color of most dominant object by cropping its bounding box and finding top_n dominant colors
+  detect_color:
+    # GLOBAL:: This will detect color for all monitors, can be overridden per monitor and per zone.
+    enabled: yes
+    # Top X colors to detect (Default: 3)
+    top_n: 3
+    # only detect the color of these labels (label_groups supported)
+    labels:
+      # If no labels are defined, 'all' labels will be implied
+      - vehicles
 
   # GLOBAL:: Import zones that have been defined in ZM Web GUI
   # NOTE: can override per monitor
@@ -529,8 +539,9 @@ monitors:
         enabled: no
         # Try and detect the color of the most prominent object in the frame
         # Crops the bounding box and gets the dominant <top_n> colors
-        # WIP, may detect the color of each final detected object
+        # WIP
         detect_color:
+          # This will detect color for all zones defined for this monitor
           enabled: no
           # Top X colors to detect (Default: 3)
           top_n: 3
@@ -560,27 +571,38 @@ monitors:
           enabled: yes
 
           # -- Polygon points
+          # Remember that these are zones defined strictly for ML. If you imported your ZM zones,
+          # you can omit the points and they will be imported from ZM.
           points: 0,2146 3818,2146 3820,1058 2604,426 2526,534 198,466 124,632 8,648
           # -- Used to scale polygon points if the monitor resolution has changed.
+          # When you created polygon it was in 4K mode, but now you are running in 1080p mode. It will scale it properly.
           # -- Strings like "1080p" "4k" "4kuhd"("uhd") "720p" are supported or a tuple of (width, height)
           resolution: 4kuhd
 
           # Currently there are 3 types of ML model groups supported object, face, alpr
           # Zone level matching filters can be set for each type
 #          object_confirm: no
-          # per zone level filtering
           static_objects:
+            # This is on the MONITOR level, but can be overridden on a per zone basis
             enabled: no
             # -- difference in area between current and previous detection, % or pixel value
             difference: 25%
             labels:
               - vehicles
 
+          detect_color:
+            # This will NOT detect color for this zone, even if it is set GLOBALLY or for the monitor
+            enabled: no
+            # Top X colors to detect (Default: 3)
+            top_n: 3
+            # only detect the color of these labels (label_groups supported)
+            labels:
+              # If no labels are defined (all is implied)
+              - vehicles
           filters:
             object:
-              pattern: "(TEST_MON_1|person|dog|cat|chewbacca)"
+              pattern: "(TEST_MON_1_MONLEVEL|person|dog|cat|chewbacca)"
               # -- Per label filtering (label_groups supported)
-              # -- Trained faces are labeled with the name of the person
               labels:
                 person:
                   min_conf: 0.5
@@ -626,7 +648,7 @@ monitors:
         resolution: 1080p
         filters:
           object:
-            pattern: "(TEST_MON_2|person|dog|cat|car|truck|bus|bicycle)"
+            pattern: "(TEST_MON2_ZONELEVEL|person|dog|cat|car|truck|bus|bicycle)"
             # -- Per label filtering (label_groups supported)
             # -- Trained faces are labeled with the name of the person
             labels:
@@ -642,9 +664,9 @@ monitors:
 #                total_max_area: 10%
           face:
             # -- You can specify trained face names here, only pattern supported currently
-            pattern: ".*"
+            pattern: "(TEST_MON2_FACE|.*)"
             # pattern: "(James|Addison)"
           alpr:
             # -- Only pattern and min_conf supported
-            pattern: ".*"
+            pattern: "(TEST_MON2_ALPR|.*)"
             min_conf: 0.1
