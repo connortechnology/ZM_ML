@@ -1,4 +1,7 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# vim:fenc=utf-8
+
 """A Script to start the MLAPI server."""
 from zm_ml.Server.app import create_logs, MLAPI
 

@@ -6,7 +6,14 @@ from pathlib import Path
 from platform import python_version
 from typing import Union, Dict, List, Optional
 
-import cv2
+try:
+    import cv2
+except ImportError:
+    raise ImportError(
+        "OpenCV is not installed, please install it by compiling it for "
+        "CUDA/cuDNN GPU support/OpenVINO Intel CPU/iGPU/dGPU support or "
+        "quickly for only cpu support using 'opencv-contrib-python' package"
+    )
 import numpy as np
 import pydantic
 import uvicorn
@@ -33,7 +40,8 @@ from .Models.config import (
     GlobalConfig,
 )
 from ..Shared.Models.Enums import ModelType, ModelFrameWork, ModelProcessor
-from .Log import SERVER_LOGGER_NAME
+from .Log import SERVER_LOGGER_NAME, SERVER_LOG_FORMAT
+from zm_ml.Shared.Log.handlers import BufferedLogHandler
 
 __version__ = "0.0.1a"
 __version_type__ = "dev"
@@ -54,9 +62,6 @@ LP: str = "mlapi:"
 
 
 def create_logs() -> logging.Logger:
-    from zm_ml.Shared.Log.handlers import BufferedLogHandler
-    from .Log import SERVER_LOG_FORMAT
-
     logger = logging.getLogger(SERVER_LOGGER_NAME)
     console_handler = logging.StreamHandler(stream=sys.stdout)
     console_handler.setFormatter(SERVER_LOG_FORMAT)
@@ -89,10 +94,7 @@ def get_available_models() -> List[BaseModelConfig]:
 
 
 def locks_enabled():
-    ret_ = True
-    if get_settings().locks.enabled is True:
-        ret_ = False
-    return ret_
+    return get_settings().locks.enabled
 
 
 def normalize_id(_id: str) -> str:

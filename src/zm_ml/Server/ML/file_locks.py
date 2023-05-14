@@ -16,6 +16,13 @@ LP: str = 'Lock:'
 class FileLock:
     lock: Optional[BoundedSemaphore] = None
     is_locked: bool = False
+    name: str = ''
+    processor: str = ''
+    lock_timeout = None
+    lock_maximum = None
+    lock_name = None
+    lock_dir = None
+
 
     def create_lock(self):
         if locks_enabled():
@@ -29,8 +36,10 @@ class FileLock:
                     logger.warning(
                         f"{LP} '{self.name}' LOCK ALREADY EXISTS BUT IS NOT A BoundedSemaphore!!! creating new lock"
                     )
-            if locks := get_global_config().config.lock_settings:
-                self.lock_dir = locks.lock_dir
+                    del self.lock
+                    self.lock = None
+            if locks := get_global_config().config.locks:
+                self.lock_dir = locks.dir
                 lock = locks.get(self.processor.casefold())
                 self.lock_name = f"{lock.name}-{getuid()}"
                 self.lock_maximum = lock.max
@@ -39,16 +48,17 @@ class FileLock:
                     maximum=self.lock_maximum,
                     name=self.lock_name,
                     timeout=self.lock_timeout,
-                    directory=self.lock_dir,
+                    directory=self.lock_dir.expanduser().resolve().as_posix(),
                 )
                 logger.debug(
                     f"{LP} '{self.name}' CREATED LOCK!!! [directory: {self.lock.directory}] - "
                     f"[name: {self.lock.name}] - [max: {self.lock.maximum}] - "
                     f"[timeout: {self.lock.timeout}]"
                 )
+            else:
+                raise RuntimeError(f"{LP} No locks defined in config file?!?! DEFAULTS FAILED?!?!?! HELP")
 
     def acquire_lock(self):
-        logger.debug(f"{get_global_config().config.locks = }")
         if locks_enabled():
             if self.is_locked:
                 logger.debug(f"{LP} '{self.name}' lock for '{self.lock.name}' already acquired")
@@ -74,17 +84,16 @@ class FileLock:
                     # logger.debug(f"{LP} {self.name} attempting to acquire {self.processor} lock after creating one ...")
                     self.acquire_lock()
                     # self.is_locked = True
-
             except AlreadyLocked as already_locked_exc:
                 logger.error(
-                    f"{LP} {self.name} failed to acquire {self.processor} lock: {already_locked_exc}"
+                    f"{LP} {self.name} IS LOCKED, failed to acquire {self.processor} lock: {already_locked_exc}"
                 )
                 logger.error(
-                    f"{LP} timeout waiting for '{self.lock.name}'  for {self.lock.timeout}"
+                    f"{LP} might of been a timeout waiting for '{self.lock.name}'  for {self.lock.timeout}"
                     f" seconds"
                 )
-                raise ValueError(
-                    f"Timeout waiting for {self.lock.name} portalock for {self.lock.timeout} seconds"
+                raise RuntimeError(
+                    f"Timeout waiting for {self.lock.name} lock for {self.lock.timeout} seconds"
                 )
             except AssertionError as assertion_error:
                 logger.error(

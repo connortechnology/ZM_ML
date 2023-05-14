@@ -12,7 +12,7 @@ from .cv_base import CV2Base
 LP: str = "OpenCV:YOLO:"
 from zm_ml.Server.Log import SERVER_LOGGER_NAME
 logger = getLogger(SERVER_LOGGER_NAME)
-
+# TODO: Choose what models to load and keep in memory and which to load and drop for memory constraints
 
 class CV2YOLODetector(CV2Base):
     def __init__(self, model_config: CV2YOLOModelConfig):

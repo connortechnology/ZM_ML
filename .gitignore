@@ -155,3 +155,4 @@ examples/*.log
 examples/kmeans_dominant_color.py
 examples/*.json
 src/zm_ml.egg-info
+.zmml_cache/

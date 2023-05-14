@@ -13,7 +13,12 @@ from shutil import which
 from time import perf_counter, time
 from typing import Union, Dict, Optional, List, Any, Tuple
 
-import cv2
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+    raise ImportError("OpenCV is not installed!")
+
 import numpy as np
 import yaml
 from pydantic import BaseModel, Field
@@ -43,7 +48,7 @@ __version__: str = "0.0.1"
 __version_type__: str = "dev"
 ZM_INSTALLED: Optional[str] = which("zmpkg.pl")
 
-CLIENT_LOGGER_NAME: str = "ZM_ML-Client"
+CLIENT_LOGGER_NAME: str = "ZM ML:Client"
 CLIENT_LOG_FORMAT = logging.Formatter(
     "%(asctime)s.%(msecs)04d %(name)s[%(process)s] %(levelname)s %(module)s:%(lineno)d -> %(message)s",
     "%m/%d/%y %H:%M:%S",
@@ -251,7 +256,7 @@ def _replace_vars(search_str: str, var_pool: Dict) -> Dict:
                     value = "yes"
                 elif value is False:
                     value = "no"
-                search_str = search_str.replace(f"${{{var}}}", value)
+                search_str = search_str.replace(f"${{{var}}}", str(value))
             else:
                 _unknown_vars.append(var)
         if _unknown_vars:

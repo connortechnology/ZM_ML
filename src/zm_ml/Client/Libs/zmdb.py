@@ -102,21 +102,26 @@ class ZMDB:
     def _check_conn(self):
         try:
             if not self.engine:
+                logger.debug(f"{LP} creating engine with {self.connection_str = } TYPE={type(self.connection_str)}")
                 self.engine = create_engine(self.connection_str, pool_recycle=3600)
             if not self.connection:
+                logger.debug(f"{LP} creating connection")
                 self.connection = self.engine.connect()
             if not self.meta:
+                logger.debug(f"{LP} creating meta")
                 self._refresh_meta()
         except SQLAlchemyError as e:
-            logger.error(f"DB configs - {self.connection_str}")
+            logger.error(f"{self.connection_str = } :: TYPE={type(self.connection_str)}")
             logger.error(f"Could not connect to DB, message was: {e}")
+            raise e
         except Exception as e:
             logger.error(f"Exception while checking DB connection on _check_conn() -> {e}")
+            raise e
 
     def _refresh_meta(self):
         self.meta = None
-        self.meta = MetaData(self.engine)
-        self.meta.reflect(only=["Events", "Monitors", "Monitor_Status", "Storage"])
+        self.meta = MetaData()
+        self.meta.reflect(bind=self.engine, only=["Events", "Monitors", "Monitor_Status", "Storage"])
 
     def grab_all(self, eid: int) -> Tuple[int, str, int, int, Decimal, str, str]:
         #         return mid, mon_name, mon_post, mon_pre, mon_fps, reason, event_path
@@ -133,7 +138,10 @@ class ZMDB:
         start_datetime: Optional[datetime] = None
         storage_path: Optional[str] = None
         event_path: Optional[Union[Path, str]] = None
-        e_select: select = select([self.meta.tables["Events"].c.MonitorId]).where(
+        _evt_select: select = select(self.meta.tables["Events"]).where(
+            self.meta.tables["Events"].c.Id == eid
+        )
+        e_select: select = select(self.meta.tables["Events"].c.MonitorId).where(
             self.meta.tables["Events"].c.Id == eid
         )
         mid_result: CursorResult = self.connection.execute(e_select)
@@ -154,11 +162,11 @@ class ZMDB:
             )
             raise ValueError("No Monitor ID returned from DB query")
 
-        mid_name_select: select = select([self.meta.tables["Monitors"].c.Name]).where(
+        mid_name_select: select = select(self.meta.tables["Monitors"].c.Name).where(
             self.meta.tables["Monitors"].c.Id == mid
         )
         pre_event_select: select = select(
-            [self.meta.tables["Monitors"].c.PreEventCount]
+            self.meta.tables["Monitors"].c.PreEventCount
         ).where(self.meta.tables["Monitors"].c.Id == mid)
 
         # Get Monitor 'Name'
@@ -191,7 +199,7 @@ class ZMDB:
             )
         # PostEventCount
         post_event_select: select = select(
-            [self.meta.tables["Monitors"].c.PostEventCount]
+            self.meta.tables["Monitors"].c.PostEventCount
         ).where(self.meta.tables["Monitors"].c.Id == mid)
         select_result: CursorResult = self.connection.execute(post_event_select)
 
@@ -209,7 +217,7 @@ class ZMDB:
             )
         # Get Monitor capturing FPS
         ms_select: select = select(
-            [self.meta.tables["Monitor_Status"].c.CaptureFPS]
+            self.meta.tables["Monitor_Status"].c.CaptureFPS
         ).where(self.meta.tables["Monitor_Status"].c.MonitorId == mid)
         select_result: CursorResult = self.connection.execute(ms_select)
         for mons_row in select_result:
@@ -223,20 +231,20 @@ class ZMDB:
                 f"{LP} the database query did not return monitor FPS ('CaptureFPS') for monitor ID {mid}"
             )
 
-        reason_select: select = select([self.meta.tables["Events"].c.Cause]).where(
+        reason_select: select = select(self.meta.tables["Events"].c.Cause).where(
             self.meta.tables["Events"].c.Id == eid
         )
-        notes_select: select = select([self.meta.tables["Events"].c.Notes]).where(
+        notes_select: select = select(self.meta.tables["Events"].c.Notes).where(
             self.meta.tables["Events"].c.Id == eid
         )
-        scheme_select: select = select([self.meta.tables["Events"].c.Scheme]).where(
+        scheme_select: select = select(self.meta.tables["Events"].c.Scheme).where(
             self.meta.tables["Events"].c.Id == eid
         )
         storage_id_select: select = select(
-            [self.meta.tables["Events"].c.StorageId]
+            self.meta.tables["Events"].c.StorageId
         ).where(self.meta.tables["Events"].c.Id == eid)
         start_datetime_select: select = select(
-            [self.meta.tables["Events"].c.StartDateTime]
+            self.meta.tables["Events"].c.StartDateTime
         ).where(self.meta.tables["Events"].c.Id == eid)
         reason_result: CursorResult = self.connection.execute(reason_select)
         notes_result: CursorResult = self.connection.execute(notes_select)
@@ -261,9 +269,10 @@ class ZMDB:
             start_datetime = row[0]
         start_datetime_result.close()
 
-        if storage_id:
+        if storage_id is not None:
+            storage_id = 1 if storage_id == 0 else storage_id # Catch 0 and treat as 1 (zm code issue)
             storage_path_select: select = select(
-                [self.meta.tables["Storage"].c.Path]
+                self.meta.tables["Storage"].c.Path
             ).where(self.meta.tables["Storage"].c.Id == storage_id)
             storage_path_result: CursorResult = self.connection.execute(
                 storage_path_select

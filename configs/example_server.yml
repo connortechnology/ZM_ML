@@ -4,7 +4,7 @@
 ########################################################################
 substitutions:
   # Substitutions can be used like BASH variables
-  # THEY MUST BE WRAPPED IN ${} - $THIS_WONT_WORK but ${THIS_WILL}
+  # THEY MUST BE WRAPPED IN ${} - but ${THIS_WILL}
   # Order matters!
   DATA_DIR: ${ML_INSTALL_DATA_DIR}
   TMP_DIR: ${ML_INSTALL_TMP_DIR}
@@ -107,12 +107,12 @@ locks:
 # Define what models the server will offer
 models:
     # An example of an OpenCV YOLO model, name is what you will use to call the model
-    - name: YOLOv4 Tiny  # Name is converted to lowercase
+    - name: YOLOv4 Tiny  # Name is converted to lowercase; 'yolov4 tiny'
       enabled: true  # Optional. Defaults to True.
-      description: "yolov4 pretrained DarkNet model"  # Optional.
-      framework: yolo  # REQUIRED. Defaults to opencv.
+      description: "yolov4 Tiny pretrained DarkNet model"  # Optional; metadata.
+      framework: yolo  # REQUIRED. Defaults to opencv/yolo.
 #      framework: opencv
-      # framework_subset can come in handy to p[ossibly tune your model for a specific framework. opencv has different "readers" for models
+      # framework_subset can come in handy to possibly tune your model for a specific framework. opencv has different "readers" for models
       # darknet is the default, but you can also use onnx, caffe, etc. See the OpenCV docs for more info.
       framework_subset: darknet  # An example usage is for opencv framework, darknet/onnx/caffe are subsets of opencv.
       model_type: object # REQUIRED. Defaults to object - object/face/alpr (for identification).
@@ -122,7 +122,7 @@ models:
       config: "${MODEL_DIR}/yolo/yolov4-tiny.cfg"  # Optional - .weights requires .cfg, .onnx and .tflite does not.
 
     - name: YOLOv4
-      enabled: true  # Optional. Defaults to True.
+      enabled: no  # Optional. Defaults to True.
       description: "yolov4 pretrained DarkNet model"  # Optional.
       framework: yolo  # Optional. Defaults to yolo.
       model_type: object # Optional. Defaults to object - object/face/alpr (for identification).
@@ -149,6 +149,7 @@ models:
 
     - name: YOLOv4-P6
       enabled: false
+      processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
       input: "${MODEL_DIR}/yolo/yolov4-p6.weights"
       config: "${MODEL_DIR}/yolo/yolov4-p6.cfg"
       description: "Scaled YOLO v4-P6 pretrained DarkNet 1280x1280"
@@ -156,12 +157,14 @@ models:
       width: 1280
 
     - name: yolov7 tiny
+      processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
       description: "yolov7 tiny pretrained DarkNet model"
       input: "${MODEL_DIR}/yolo/yolov7-tiny.weights"
       config: "${MODEL_DIR}/yolo/yolov7-tiny.cfg"
       square: yes
 
     - name: yolov7
+      processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
       enabled: no
       description: "YOLO v7 pretrained DarkNet model - Requires SiLu activation in OpenCV"
       input: "${MODEL_DIR}/yolo/yolov7.weights"
@@ -171,6 +174,7 @@ models:
       width: 640
 
     - name: yolov7x
+      processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
       enabled: no
       description: "YOLO v7-X pretrained DarkNet model - Requires SiLu activation in OpenCV"
       input: "${MODEL_DIR}/yolo/yolov7x.weights"

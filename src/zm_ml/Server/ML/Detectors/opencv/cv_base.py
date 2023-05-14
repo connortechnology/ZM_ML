@@ -34,15 +34,14 @@ class CV2Base(FileLock):
         self.id = self.config.id
 
 
-    @staticmethod
-    def square_image(frame: np.ndarray):
+    def square_image(self, frame: np.ndarray):
         """Zero pad the matrix to make the image squared"""
         row, col, _ = frame.shape
         _max = max(col, row)
         result = np.zeros((_max, _max, 3), np.uint8)
         result[0:row, 0:col] = frame
         logger.debug(
-            f"{LP}squaring image-> before padding: {frame.shape} - after padding: {result.shape}"
+            f"{LP}squaring image-> '{self.name}' before padding: {frame.shape} - after padding: {result.shape}"
         )
         return result
 

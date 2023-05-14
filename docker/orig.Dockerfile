@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:experimental
 ARG S6_ARCH=x86_64
-ARG ZMML_VERSION=master
+ARG ZMML_VERSION=dockerize
 ARG OPENCV_METHOD=branch
 ARG OPENCV_VERSION=4.x
 ARG DLIB_METHOD=release
-ARG DLIB_VERSION=19.24
+ARG DLIB_VERSION=19.22
 ARG ALPR_METHOD=branch
 ARG ALPR_VERSION=master
 # I think a minimum of 6.1 Compute Cabability required - these are GeForce cards
@@ -14,7 +14,10 @@ ARG ALPR_VERSION=master
 # 7.5 = 1650 thru to 2080ti including TITAN RTX
 # 8.6 = 3050 thru to 3090
 #ARG CUDA_ARCH_BIN=6.1,7.5
-ARG CUDA_ARCH_BIN=6.0,6.1,7.0,7.5,8.0,8.6,8.9,9.0
+# CUDA 11 supports CC up to 8.0
+ARG CUDA_ARCH_BIN=6.0,6.1,7.0,7.5,8.0
+# Cuda 12 added 8.6 8.9 9.0
+ARG CUDA_12=8.6,8.9,9.0
 ARG MLAPI_PORT=5000
 ARG CUDA_ARCH_BIN_JETSON=6.2,7.2,8.7
 
@@ -68,12 +71,16 @@ RUN set -x \
 #                                                                   #
 #####################################################################
 
-######## CUDA 12 / cuDNN 8 ########
-FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04 as build-env
+######## CUDA 12+ ONLY WORKS WITH 4.7.0+ but opencv code is broken / cuDNN 8 ########
+FROM nvidia/cuda:11.0.3-cudnn8-devel-ubuntu20.04 as build-env
+SHELL ["/bin/bash", "-c"]
 ARG OPENCV_VERSION
+ARG OPENCV_METHOD
 ARG CUDA_ARCH_BIN
 ARG DLIB_VERSION
+ARG DLIB_METHOD
 ARG ALPR_VERSION
+ARG ALPR_METHOD
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Update, Locale, apt-utils, ca certs and Upgrade
@@ -168,19 +175,16 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && python3 -m pip install --no-cache-dir --upgrade pip \
     && python3 -m pip install numpy
 
-# grab opencv and its contrib sources
-RUN set -x \
-    && cd /opt/ \
-    && git clone https://github.com/opencv/opencv.git opencv \
-    && cd opencv \
-    && git checkout "${OPENCV_VERSION}" \
-    && git clone https://github.com/opencv/opencv_contrib.git opencv_contrib \
-    && cd /opt/opencv/opencv_contrib \
-    && git checkout "${OPENCV_VERSION}" \
-    && mkdir -p /tmp/opencv_export /tmp/opencv_python_bindings /opt/opencv/build
+# import grabber function
+ADD docker/scripts/get_opencv.sh /root/.funcs.bash
 
 RUN set -x \
-    && cd /opt/opencv/build \
+    && cd /opt || exit 1 \
+    && . /root/.funcs.bash \
+    && grab_source "${OPENCV_METHOD}" "${OPENCV_VERSION}" "https://github.com/opencv/opencv" /opt/opencv \
+    && git clone https://github.com/opencv/opencv_contrib.git opencv_contrib \
+    && mkdir -p /tmp/opencv_export /tmp/opencv_python_bindings /opt/opencv/build \
+    && cd /opt/opencv/build || exit 1 \
     && time cmake \
         -D BUILD_DOCS=OFF \
         -D BUILD_EXAMPLES=OFF \
@@ -211,7 +215,7 @@ RUN set -x \
         -D WITH_V4L=ON \
         -D WITH_WEBP=ON \
         -D WITH_XINE=ON \
-        -D OPENCV_EXTRA_MODULES_PATH=/opt/opencv/opencv_contrib/modules \
+        -D OPENCV_EXTRA_MODULES_PATH=/opt/opencv_contrib/modules \
         -D OPENCV_ENABLE_NONFREE=ON \
         -D CUDA_ARCH_BIN=${CUDA_ARCH_BIN} \
         -D WITH_CUDA=ON \
@@ -344,7 +348,7 @@ RUN set -x \
 #
 ################################################################################
 
-FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04 as final_image
+FROM nvidia/cuda:11.0.3-cudnn8-runtime-ubuntu20.04 as final_image
 # Install OpenCV, DLib, face recognition and openALPR from build-env
 # TODO: break each build into its own stage and image for easier up/down grading
 COPY --from=build-env /tmp/opencv_export /opt/opencv
@@ -441,8 +445,8 @@ RUN set -x \
     # gross little hack to get the wheel to install
     && mv "./dlib-${DLIB_VERSION}.0-py39-cp39-linux_x86_64.whl" "./dlib-${DLIB_VERSION}.0-cp39-none-any.whl" \
     && python3.9 -m pip install "./dlib-${DLIB_VERSION}.0-cp39-none-any.whl" \
-    && python3.9 -m pip install git+https://github.com/ageitgey/face_recognition_models distro \
-    && rm -rf /usr/local/lib/python3.9/dist-packages/dlib-"${DLIB_VERSION}".0-py3.9-linux-x86_64.egg dlib-"${DLIB_VERSION}".0-cp39-none-any.whl \
+    && python3.9 -m pip install git+https://github.com/ageitgey/face_recognition_models distro requests \
+    && rm -rf /usr/local/lib/python3.9/dist-packages/dlib-"${DLIB_VERSION}".0-py3.9-linux-x86_64.egg dlib-"${DLIB_VERSION}".0-cp39-none-any.whl
 
 ARG ZMML_VERSION=dockerize
 # ZM ML Server Install

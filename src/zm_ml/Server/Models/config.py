@@ -944,10 +944,17 @@ class APIDetector:
                         "OpenCV does not have CUDA enabled/compiled, cannot load any models that use the GPU processor"
                     )
                 else:
-                    if not (cuda_devices := cv2.cuda.getCudaEnabledDeviceCount()):
+                    # wrap in try block as this will throw an exception if no CUDA devices are found
+                    try:
+                        if not (cuda_devices := cv2.cuda.getCudaEnabledDeviceCount()):
+                            logger.warning(
+                                "No CUDA devices found, cannot load any models that use the GPU processor"
+                            )
+                    except Exception as cv2_cuda_exception:
                         logger.warning(
-                            "No CUDA devices found, cannot load any models that use the GPU processor"
+                            f"Error getting CUDA device count: {cv2_cuda_exception}"
                         )
+                        raise cv2_cuda_exception
                     else:
                         logger.debug(f"Found {cuda_devices} CUDA device(s)")
                         available = True

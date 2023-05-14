@@ -227,7 +227,7 @@ class ZMApi:
             logger.warning(f"{lp} no access token to evaluate, calling login()")
             _login = True
         else:
-            claims = jwt.decode(self.access_token, verify=False)
+            claims = jwt.decode(self.access_token, algorithms=["HS256"], options={"verify_signature": False})
             iss = claims.get("iss")
             if iss and iss != "ZoneMinder":
                 logger.error(
@@ -300,7 +300,7 @@ class ZMApi:
         if not grace_period:
             grace_period = GRACE
             if not _login:
-                claims = jwt.decode(tkn, verify=False)
+                claims = jwt.decode(tkn, algorithms=["HS256"], options={"verify_signature": False})
                 iss = claims.get("iss")
                 if iss and iss != "ZoneMinder":
                     logger.error(

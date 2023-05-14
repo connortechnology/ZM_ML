@@ -6,8 +6,8 @@ cleanup() {
 MID=$2
 EID=$1
 
-config="${ML_CLIENT_CONF_FILE:-/etc/zm/ml/client.yml}"
-detect_script="${ML_CLIENT_EVENT_START:-zmml-eventstart}"
+config="${ML_CLIENT_CONF_FILE:-/etc/zm/client.yml}"
+detect_script="${ML_CLIENT_EVENT_START:-zmml_eventproc}"
 
 event_start_command=(
   python3
@@ -16,6 +16,7 @@ event_start_command=(
   --eid "${EID}"
    --mid "${MID}"
    --live
+   --event-start
 )
 
 eval "${event_start_command[@]}"

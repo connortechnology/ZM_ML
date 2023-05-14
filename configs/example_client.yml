@@ -4,13 +4,17 @@
 ########################################################################
 substitutions:
   # Substitutions can be used like BASH variables
-  # THEY MUST BE WRAPPED IN ${} - $THIS_WONT_WORK but ${THIS_WILL}
+  # NOT:: THEY MUST BE WRAPPED IN ${} -> ${THIS_WILL_WORK}
   # Order matters!
   DATA_DIR: ${ML_INSTALL_DATA_DIR}
   TMP_DIR: ${ML_INSTALL_TMP_DIR}
   CFG_DIR: ${ML_INSTALL_CFG_DIR}
   LOGGING_DIR: ${ML_INSTALL_LOGGING_DIR}
   MODEL_DIR: ${ML_INSTALL_MODEL_DIR}
+
+  ROUTE_NAME: ${ML_INSTALL_CLIENT_ROUTE_NAME}
+  ROUTE_HOST: ${ML_INSTALL_CLIENT_ROUTE_HOST}
+  ROUTE_PORT: ${ML_INSTALL_CLIENT_ROUTE_PORT}
 
   # This file contains substitutions that will be imported into this file (secrets)
   # NOTE: The 'IncludeFile' directive must be contained in the 'substitutions' section
@@ -24,18 +28,21 @@ THIS IS AN EXAMPLE:
   of substitution variables: "Hello, ${EXAMPLE}"
 
 system:
-  # Override the default config path [/opt/etc/zm/ml]
+  # Override the default config path [/etc/zm]
   config_path: ${CFG_DIR}
-  # Path where the system will store variable data [/opt/var/lib/zm_ml]
+  # Path where the system will store variable data [/opt/zmml/data]
   variable_data_path: ${DATA_DIR}
   # Path where temp files will be stored, leave empty to auto-detect
   tmp_path: ${TMP_DIR}
+  # Path to where any images will be stored
   image_dir: ${DATA_DIR}/images
-  # Maximum parallel threaded processes
+  # Maximum parallel threaded processes (set to cores)
   thread_workers: 4
 
 zoneminder:
   misc:
+    # Write detection results to the 'Notes' section if the trigger is an event
+    # This will only work if the ZM user has permission to write to the notes section
     write_notes: yes
 
   api: ${ZM_API}
@@ -43,7 +50,7 @@ zoneminder:
   user: ${ZM_USER}
   password: ${ZM_PASS}
   # a value of 'no' will allow self-signed certs
-  ssl_verify: ${ZM_SSL}
+  ssl_verify: no
 
 logging:
 #  root logging level
@@ -80,7 +87,6 @@ logging:
     # user:
     # group:
 
-
 mlapi:
   routes:
     - name: ${ROUTE_NAME}
@@ -89,10 +95,17 @@ mlapi:
       host: ${ROUTE_HOST}  # Internal IP or hostname (add https:// if TLS encrypted)
       port: ${ROUTE_PORT}
       timeout: 60  # Default: 90
-      # Auth is WIP!
+      # JWT Auth is WIP!
       #username: admin
       #password: admin
 
+########################
+# ANIMATIONS ARE WIP
+# NOTE: PushOver may or may not play .gif files
+# I dont know if Gotify does (will update after testing)
+# Apple plays MP4
+# I think zmninja notifications may work and may play .gif files on android
+########################
 animations:
   # If you are on a low memory system, write frame buffer to disk instead of holding it in memory
   # Slower but takes less memory.
@@ -100,23 +113,28 @@ animations:
   # If an animation file already exists, overwrite it
   overwrite: no
   # Maximum width of the animation (Scaled properly)
+  ## NOTE: The animation can only be so big if you want it to be displayed in a push notification!
   width: 640
 
-  # When the animation is for an event, use the ZM API to get images for the animation
+  # If the API is being used for an event,
+  # set attempts andd elays between attempts at grabbing frames.
   max_attempts: 3
   attempt_delay: 3
 
   gif:
-    enabled: true
+    enabled: no
     # Make a 'sped-up' version of the animation (makes the gif show more of an event)
     fast: true
 
   mp4:
-    enabled: true
+    enabled: no
 
 
 
 notifications:
+  ########################
+  #  NOTIFICATIONS ARE WIP
+  ########################
   mqtt:
     #-- use python mqtt client to
     #-- Options to use no encryption or secure/insecure TLS/mTLS
@@ -230,10 +248,8 @@ notifications:
       # while others say it won't. YMMV.
       android_ttl: 0
 
-
-
   gotify:
-    enabled: yes
+    enabled: no
     # If you are not receiving images in gotify notifications, set this to yes to set image to a publicly available URL
     # This will tell you if your gotify android clients are not able to access your ZM server from outside the LAN
     test_image: no
@@ -306,7 +322,7 @@ notifications:
     # *** NOTE: has to be setup in your pushover account first.
     # *** Meaning you have to upload mp3s and label the sound files with the same name as the sound you want to use.
     sounds:
-      # You can override these sounds on a per-monitor basis, see the per monitor examples for how to achieve
+      # You can override these sounds on a per monitor basis, see the per monitor examples for how to achieve
       # 'person detected in the front yard' sound for the front yard notification when a person is in the detected objects
       default: motion_detected
       # per object overrides are formatted as such
@@ -351,9 +367,13 @@ notifications:
 
   shell_script:
     enabled: no
+    # Are you aware? This MUST be set exactly to: YeS i aM awaRe!
+    # You and you alone are solely responsible for the contents of the script you are running.
+    I AM AWARE OF THE DANGER OF RUNNING SHELL SCRIPTS: NO I AM NOT
     script: ${DATA_DIR}/scripts/notify.sh
 
 label_groups:
+  # These are 'groups' of labels that can be used for per monitor filtering
   animals:
     - dog
     - cat
@@ -364,68 +384,83 @@ label_groups:
     - car
     - truck
     - bus
-    - motorcycle
+    - motorbike
     - boat
   # For face detection/recognition
   friends:
-    - James
-    - Addison
+    - Bart
+    - Maggie
+    - Lisa
+  foes:
+    - Nelson
+    - Sideshow Bob
+    - Mr. Burns
 
 detection_settings:
   models:
     # Default dict of Models that will run if not specified per monitor
-    # You can override these settings per monitor
-    yolov4:
+    # NOTE: You can override these settings per monitor
+    yolov4 tiny:
+    yolov7 tiny:
 
-
-
-  # Import the zones defined in ZM
+  # GLOBAL:: Import zones that have been defined in ZM Web GUI
+  # NOTE: can override per monitor
   import_zones: no
   # object must be in one of the zones that triggered the motion event
-  # REQUIRES import_zones
+  # 1 pixel is enough to trigger this.
+  # IMPLIES: import_zones MEANING, it will import zm zones and use them
   match_origin_zone: no
 
   images:
     pull_method:
       # Precedence: 1. shm 2. api 3. zmu
+      #################
+      # SHM IS WIP, it will raise not implemented error
+      #################
       shm: no
+      # API WORKS
       api:
         enabled: yes
         # How many frames per second should be grabbed to run Object Detection on (Default: 1)
         fps: 1
         # ANY of the delay options can be set as xx or xx.yy (int/float)
         attempts: 3  # attempts to grab the requested frame
-        delay: 0.2   # delay between failed attempts
+        delay: 1.2   # delay between failed attempts
         max_frames: 10  # Only grab x frames (Default: Calculated based on event duration and monitor capturing FPS)
-        # snapshot is the highest alarmed frame ID and can change during an event
-        # This will check if the snapshot frame ID has changed and if so, grab the new snapshot frame
+        # snapshot is the highest alarmed frame ID and can change as an event is ongoing
+        # This will check if the snapshot frame ID has changed every 3 frames and if so, grab the new snapshot frame
         check_snapshots: yes
 
+      #################
+      # ZMU IS WIP, it will raise not implemented error
+      #################
       zmu: no
 
-    # Save debug images to disk (Every frame grabbed)
+    # Save debug images to disk (Every frame grabbed from the source)
     debug:
       # Shows bounding box of filtered out detections in RED
       enabled: no
-      # Where to save the debug images Default: $TMP_DIR/images/debug
+      # Where to save the debug images Default: <images_dir>/debug
       path:
 
     annotation:
+      # NOTE: Bounding box and object label are always drawn on the matching frame
+
       # Draw zone polygons on image
       zones:
         enabled: no
+        # Print the name of the zone to identify it (this is best try depending on zone size)
+        # OVERLAY is NOT IMPLEMENTED YET
+        overlay: no
         # Color of the zone polygon
         color: (255, 255, 255)
         # Thickness of the zone polygon line
         thickness: 2
-
       # Show which model detected the object
       model:
         enabled: yes
         # Show which processor the model used
-
         processor: yes
-
       # Show the confidence level of the detection
       confidence: yes
 
@@ -438,18 +473,21 @@ detection_settings:
 
 
 matching:
-  # same as zmeventnotification - first, most, most_unique, union[WIP]
+  # same as zmeventnotification for now - first, most, most_unique, union[WIP]
   # Tiebreakers will use the SUM of confidences for the model
   strategy: most
 
   # If using more than 2 Object type Models (yolov4, tiny-yolov7), try to confirm matches by checking
   #  if the object is in roughly the same place across Models.
-  object_confirm: yes   # WIP
+  # --> NOT IMPLEMENTED <--
+  object_confirm: yes
 
-  # Remove matches that seem to be 'in the same place'. Comparison is between the previous detections best match.
+  # Remove matches that seem to be 'in the same place'.
+  # Comparison is between the previous detections best
+  # match and ongoing detected objects.
   static_objects:
     enabled: no
-    # The max difference in the center of the object between previous and current detection
+    # The max difference in the center of the objects bounding box between previous and current detection
     # expressed as a percentage (0.0 - 1.0 OR 13.6%)
     max_diff: 8%
     labels:
@@ -457,31 +495,42 @@ matching:
       - vehicles
 
   filters:
-    # This is globally applied to all monitors but can be overridden on a per-monitor basis
+    # This is globally applied to all monitors but can be overridden on a per monitor basis
     object:
-      min_conf: 0.4
-      pattern: "(DEFAULT|car|truck|bus|person|dog|cat)"
+      min_conf: 0.42069
+      pattern: "(DEFAULT PATTERN|car|truck|bus|person|dog|cat)"
       total_max_area: 100%
       total_min_area: 1px
     face:
       pattern: ".*"
     alpr:
       pattern: ".*"
-      min_conf: 0.5
+      min_conf: 0.456
 
 monitors:
 # Override settings based on which monitor an event was triggered by
   999999999901:
     models:
-      # Models to run. Name must match the name of the model obtained from its configuration or the API request
+      # Models to run. Name must match the name of the model obtained from its configuration from the ZM ML server (MLAPI)
       yolov4:
-        enabled: yes
+        enabled: yes  # Default and implied. Can be omitted.
       yolov4 tiny:
 #      yolov4-p6:
       yolov7 tiny:
 #      yolov7:
       yolov7x:
         enabled: no
+        # Try and detect the color of the most prominent object in the frame
+        # Crops the bounding box and gets the dominant <top_n> colors
+        # WIP, may detect the color of each final detected object
+        detect_color:
+          enabled: no
+          # Top X colors to detect (Default: 3)
+          top_n: 3
+          # only detect the color of these labels (label_groups supported)
+          labels:
+            # If no labels are defined (all is implied)
+            - vehicles
 
     # Add matching filters for this monitor (inherits/overrides config:matching)
 #    object_confirm: no
@@ -512,7 +561,7 @@ monitors:
           # Currently there are 3 types of ML model groups supported object, face, alpr
           # Zone level matching filters can be set for each type
 #          object_confirm: no
-#
+          # per zone level filtering
           static_objects:
             enabled: no
             # -- difference in area between current and previous detection, % or pixel value
@@ -522,7 +571,7 @@ monitors:
 
           filters:
             object:
-              pattern: "(person|dog|cat|chewbacca)"
+              pattern: "(TEST_MON_1|person|dog|cat|chewbacca)"
               # -- Per label filtering (label_groups supported)
               # -- Trained faces are labeled with the name of the person
               labels:
@@ -570,7 +619,7 @@ monitors:
         resolution: 1080p
         filters:
           object:
-            pattern: "(person|dog|cat|car|truck|bus|bicycle)"
+            pattern: "(TEST_MON_2|person|dog|cat|car|truck|bus|bicycle)"
             # -- Per label filtering (label_groups supported)
             # -- Trained faces are labeled with the name of the person
             labels:

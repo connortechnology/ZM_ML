@@ -34,7 +34,20 @@ logger: logging.Logger = create_logs()
 def _parse_cli():
     from argparse import ArgumentParser
 
-    parser = ArgumentParser(prog="eventstart.py", description=__doc__)
+    parser = ArgumentParser(prog="eventproc.py", description=__doc__)
+    parser.add_argument(
+        "--event-start",
+        help="This is the start of an event",
+        action="store_true",
+        dest="event_start",
+        default=True,
+    )
+    parser.add_argument(
+        "--event-end",
+        help="This is the end of an event",
+        action="store_false",
+        dest="event_start",
+    )
     parser.add_argument(
         "--shm-mode",
         "--shm",
@@ -54,6 +67,7 @@ def _parse_cli():
         dest="event",
         help="Run in event mode (triggered by a ZM event)",
     )
+    # python3 ./zm_ml/examples/eventproc.py -E -e 1263 -m 7 -D -C /etc/zm/client.yml
     parser.add_argument(
         "--event-id",
         "--eid",
@@ -63,6 +77,7 @@ def _parse_cli():
         dest="eid",
         default=0,
     )
+
     parser.add_argument(
         "--monitor-id",
         "--mid",
@@ -90,13 +105,13 @@ def _parse_cli():
 
 async def main():
     global g
-    lp = f"eventstart::"
     _mode = ""
     _start = time.perf_counter()
     # Do all the config stuff and setup logging
-    args = _parse_cli()
+    lp = f"eventstart::" if args.event_start else f"eventend::"
     eid = args.eid
     mid = args.mid
+    event_start = args.event_start
     cfg_file: Optional[Path] = None
     if args.shm:
         _mode = "shm"
@@ -152,6 +167,7 @@ async def main():
 if __name__ == "__main__":
     # file name
     filename = Path(__file__).stem
+    args = _parse_cli()
     logger.debug(f"Starting {filename}...")
     loop = uvloop.new_event_loop()
     asyncio.set_event_loop(loop)

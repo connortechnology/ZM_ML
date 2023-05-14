@@ -26,14 +26,14 @@ class ZMAPISettings(BaseModel):
     class ZMMisc(BaseModel):
         write_notes: bool = Field(True)
     misc: ZMMisc = Field(ZMMisc())
-    portal: AnyUrl = Field(None)
-    api: AnyUrl = Field(None)
-    user: Optional[SecretStr] = Field(None)
-    password: Optional[SecretStr] = Field(None)
+    portal: AnyUrl = None
+    api: AnyUrl = None
+    user: Optional[SecretStr] = None
+    password: Optional[SecretStr] = None
     ssl_verify: bool = Field(True)
-    cf_0trust_secret: Optional[SecretStr] = Field(None)
-    cf_0trust_header: Optional[SecretStr] = Field(None)
-    cf_0trust_expires: Optional[SecretStr] = Field(None)
+    cf_0trust_secret: Optional[SecretStr] = None
+    cf_0trust_header: Optional[SecretStr] = None
+    cf_0trust_expires: Optional[SecretStr] = None
 
     # validators
     _validate_host_portal = validator("api", "portal", allow_reuse=True, pre=True)(
@@ -47,8 +47,8 @@ class ServerRoute(BaseModel):
     weight: int = Field(0)
     host: AnyUrl = Field(...)
     port: int = Field(5000)
-    username: str = Field(None)
-    password: SecretStr = Field(None)
+    username: str = None
+    password: SecretStr = None
     timeout: int = Field(90)
 
     # validators
@@ -95,12 +95,12 @@ class MLNotificationSettings(BaseModel):
                 url: Optional[AnyUrl] = None
 
             v1: FCMV1Settings = Field(default_factory=FCMV1Settings)
-            token_file: Path = Field(None)
+            token_file: Path = None
             replace_messages: bool = Field(False)
             date_fmt: str = Field("%I:%M %p, %d-%b")
             android_priority: str = Field("high")
             log_raw_message: bool = Field(False)
-            log_message_id: str = Field(None)
+            log_message_id: str = None
             android_ttl: int = Field(0)
 
         enabled: bool = Field(True)
@@ -109,13 +109,13 @@ class MLNotificationSettings(BaseModel):
     class GotifyNotificationSettings(BaseModel):
         test_image: bool = Field(False)
         enabled: bool = Field(False)
-        host: AnyUrl = Field(None)
-        token: str = Field(None)
-        portal: AnyUrl = Field(None)
+        host: AnyUrl = None
+        token: Optional[str] = None
+        portal: AnyUrl = None
         link_url: bool = Field(False)
-        link_user: Optional[SecretStr] = Field(None)
-        link_pass: Optional[SecretStr] = Field(None)
-        _push_auth: Optional[SecretStr] = Field(None)
+        link_user: Optional[SecretStr] = None
+        link_pass: Optional[SecretStr] = None
+        _push_auth: Optional[SecretStr] = None
 
         url_opts: NotificationZMURLOptions = Field(
             default_factory=NotificationZMURLOptions
@@ -129,8 +129,8 @@ class MLNotificationSettings(BaseModel):
     class PushoverNotificationSettings(BaseModel):
         class SendAnimations(BaseModel):
             enabled: bool = Field(False)
-            token: str = Field(None)
-            key: str = Field(None)
+            token: Optional[str] = None
+            key: Optional[str] = None
         class EndPoints(BaseModel):
             messages: str = Field("/messages.json")
             users: str = Field("/users/validate.json")
@@ -146,15 +146,15 @@ class MLNotificationSettings(BaseModel):
         animation: SendAnimations = Field(default_factory=SendAnimations)
         sounds: Dict[str, str] = Field(default_factory=dict)
         cooldown: float = Field(gt=0.0, default=30.00)
-        device: Optional[str] = Field(None)
+        device: Optional[str] = None
         url_opts: NotificationZMURLOptions = Field(
             default_factory=NotificationZMURLOptions
         )
         base_url: Optional[AnyUrl] = Field("https://api.pushover.net/1")
         endpoints: EndPoints = Field(default_factory=EndPoints)
         link_url: bool = Field(False)
-        link_user: Optional[SecretStr] = Field(None)
-        link_pass: Optional[SecretStr] = Field(None)
+        link_user: Optional[SecretStr] = None
+        link_pass: Optional[SecretStr] = None
         priority: int = Field(ge=-2, le=2, default=0)
 
         # validators
@@ -163,11 +163,11 @@ class MLNotificationSettings(BaseModel):
         )
 
     class ShellScriptNotificationSettings(DefaultNotEnabled):
-        script: str = Field(None)
+        script: str = None
 
     class WebHookNotificationSettings(DefaultNotEnabled):
-        host: AnyUrl = Field(None)
-        token: str = Field(None)
+        host: AnyUrl = None
+        token: str = None
         ssl_verify: bool = Field(True)
 
         # validators
@@ -185,15 +185,15 @@ class MLNotificationSettings(BaseModel):
         enabled: bool = Field(False)
         force: bool = Field(False)
         topic: str = Field("zm_ml/detection")
-        broker: Union[IPvAnyAddress, AnyUrl] = Field(None)
+        broker: Optional[Union[IPvAnyAddress, AnyUrl]] = None
         port: int = Field(1883)
-        user: str = Field(None)
+        user: str = None
         pass_: Optional[SecretStr] = Field(None, alias="pass")
         allow_self_signed: bool = Field(False)
         tls_insecure: bool = Field(False)
-        tls_ca: Optional[Path] = Field(None)
-        tls_cert: Optional[Path] = Field(None)
-        tls_key: Optional[Path] = Field(None)
+        tls_ca: Optional[Path] = None
+        tls_cert: Optional[Path] = None
+        tls_key: Optional[Path] = None
         retain: bool = Field(False)
         qos: int = Field(0)
 
@@ -297,7 +297,7 @@ class ObjectFilters(BaseObjectFilters):
     pattern: Optional[Pattern] = None
     labels: Optional[
         Dict[str, Union[BaseObjectFilters, OverRideObjectFilters]]
-    ] = Field(None)
+    ] = None
 
 
 class FaceFilters(BaseModel):
@@ -332,8 +332,8 @@ class StaticObjects(DefaultEnabled):
 class OverRideStaticObjects(BaseModel):
     enabled: bool = None
     difference: Optional[Union[float, int]] = None
-    labels: Optional[List[str]] = Field(None)
-    ignore_labels: Optional[List[str]] = Field(None)
+    labels: Optional[List[str]] = None
+    ignore_labels: Optional[List[str]] = None
 
     _validate_difference = validator(
         "difference", allow_reuse=True, pre=True, always=True
