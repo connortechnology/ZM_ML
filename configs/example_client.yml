@@ -51,6 +51,13 @@ zoneminder:
   password: ${ZM_PASS}
   # a value of 'no' will allow self-signed certs
   ssl_verify: no
+  # CloudFlare Zero Trust Access (ZTA) headers for bypassing the WAF
+  # Use these if you use CF ZTA over cloudflared (argo tunnels)
+  # and dont want these requests to be blocked/challenged/parsed by the WAF
+  # *** THIS ONLY APPLIES TO ZM API CALLS ***
+  cf_0trust_secret: ${ZM_CF_0TRUST_SECRET}
+  cf_0trust_header: ${ZM_CF_0TRUST_HEADER}
+  cf_0trust_expires: ${ZM_CF_0TRUST_EXPIRES}
 
 logging:
 #  root logging level
