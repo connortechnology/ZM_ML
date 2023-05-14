@@ -7,7 +7,7 @@ MID=$2
 EID=$1
 
 config="${ML_CLIENT_CONF_FILE:-/etc/zm/client.yml}"
-detect_script="${ML_CLIENT_EVENT_START:-/usr/local/bin/zmml_eventproc}"
+detect_script="${ML_CLIENT_EVENT_START:-$(which zmml_eventproc)}"
 
 event_start_command=(
   python3
