@@ -394,17 +394,17 @@ class MLAPI:
             "zm_ml.Server.app:app",
             host=str(server_cfg.address),
             port=server_cfg.port,
-            reload=server_cfg.reload,
+            reload=False,
             log_config=uvicorn.config.LOGGING_CONFIG,
             log_level="debug",
             proxy_headers=True,
-            reload_dirs=[
-                str(self.cfg_file.parent.parent / "src/zm_ml/Server"),
-                str(self.cfg_file.parent.parent / "src/zm_ml/Shared"),
-            ],
+            # reload_dirs=[
+            #     str(self.cfg_file.parent.parent / "src/zm_ml/Server"),
+            #     str(self.cfg_file.parent.parent / "src/zm_ml/Shared"),
+            # ],
         )
         start = time.perf_counter()
         self.server = uvicorn.Server(config)
         self.server.run()
         lifetime = time.perf_counter() - start
-        logger.debug(f"server running for {lifetime:.2f} seconds")
+        logger.debug(f"server ran for {lifetime:.2f} seconds")
