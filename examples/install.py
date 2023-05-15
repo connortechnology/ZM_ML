@@ -1200,21 +1200,29 @@ def do_install(_inst_type: str):
         if testing:
             _pip_prefix.append("--dry-run")
 
+        # Add the source dir to the pip install command
         _pip_prefix.append(_src)
         test_msg(
             f"Installing {_inst_type} pip dependencies :: {' '.join(_pip_prefix)}   ..."
         )
-        # Add the source dir to the pip install command
-        ran = subprocess.run(
-            _pip_prefix,
-            capture_output=True,
-            text=True,
-        )
-        if ran:
-            if ran.stdout:
-                logger.info(f"\n{ran.stdout}")
-            if ran.stderr:
-                logger.error(f"\n{ran.stderr}")
+        try:
+            ran = subprocess.run(
+                _pip_prefix,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Error installing {_inst_type} pip dependencies!")
+            logger.error(e)
+            logger.error(e.stderr)
+            logger.error(e.stdout)
+            raise e
+        else:
+            if ran:
+                if ran.stdout:
+                    logger.info(f"\n{ran.stdout}")
+                if ran.stderr:
+                    logger.error(f"\n{ran.stderr}")
 
 
 class Envsubst:
