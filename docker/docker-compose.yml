@@ -46,7 +46,5 @@ services:
 #              device_ids: ["2", "3"]
 #              capabilities: [ gpu, compute, utility ]
 
-
-
 networks:
   zoneminder:
