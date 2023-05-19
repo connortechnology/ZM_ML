@@ -516,7 +516,7 @@ ENV \
     ML_SERVER_CONF_FILE=/zm_ml/conf/server.yml
 
 
-MAINTAINER 'baudneo  <86508179+baudneo@users.noreply.github.com>'
+MAINTAINER 'baudneo <86508179+baudneo@users.noreply.github.com>'
 LABEL org.opencontainers.image.title="ZM_ML"
 LABEL org.opencontainers.image.description="ZM_ML is a machine learning server/client for ZoneMinder | BUILD:: SERVER - OpenCV [CUDA,cuDNN]:DLib [CUDA]:face_recognition:pycoral libedgetpu-std"
 LABEL org.opencontainers.image.url="https://github.com/baudneo/ZM_ML"
