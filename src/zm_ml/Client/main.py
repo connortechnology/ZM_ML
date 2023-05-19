@@ -197,7 +197,7 @@ def parse_client_config_file(cfg_file: Path) -> Optional[ConfigFileModel]:
             if "client" in inc_vars:
                 inc_vars = inc_vars.get("client", {})
                 logger.debug(
-                    f"Loaded {len(inc_vars)} substitution from IncludeFile {inc_file} => {inc_vars}"
+                    f"Loaded {len(inc_vars)} substitution from IncludeFile {inc_file}"
                 )
                 # check for duplicates
                 for k in inc_vars:
