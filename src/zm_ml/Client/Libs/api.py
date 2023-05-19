@@ -636,16 +636,17 @@ class ZMApi:
                         re_auth=False,
                     )
                 elif resp_status == 404:
+                    # split the URL to check if 'token=' 'user(name)=' or 'pass(word)=' are in the URL
                     logger.warning(f"{lp} Got 404 (Not Found) -> {err}")
                     # ZM returns 404 when an image cannot be decoded or the requested event does not exist
                 else:
                     logger.debug(
                         f"{lp} NOT 200|401|404 SOOOOOOOOOOOOOOOO HTTP [{resp_status}] error: {err}"
                     )
-# <CIMultiDictProxy('Date': 'Sun, 07 May 2023 03:14:15 GMT', 'Content-Type': 'image/jpeg', 'Transfer-Encoding': 'chunked', 'Connection': 'keep-alive', 'Cache-Control': 'max-age=86400', 'Content-Disposition': 'inline; filename="5_204147_151.jpg"', 'Content-Security-Policy': "object-src 'self'; script-src 'self' 'nonce-e1df8d9a818367507632b5e24baffd8a' ; report-uri zmjs-violations@baudneo.com", 'Expires': 'Sun, 07 May 2023 04:14:15 GMT', 'Pragma': 'cache', 'Set-Cookie': 'ZMSESSID=ur39191kvs2j86trhp3freg3hu; expires=Sun, 07-May-2023 04:14:15 GMT; Max-Age=3600; path=/; HttpOnly; SameSite=Strict', 'Set-Cookie': 'zmSkin=classic; expires=Tue, 15-Mar-2033 03:14:15 GMT; Max-Age=311040000; SameSite=Strict', 'Set-Cookie': 'zmCSS=dark; expires=Tue, 15-Mar-2033 03:14:15 GMT; Max-Age=311040000; SameSite=Strict', 'CF-Cache-Status': 'DYNAMIC', 'Report-To': '{"endpoints":[{"url":"https:\\/\\/a.nel.cloudflare.com\\/report\\/v3?s=38b4lSINFjNgB0CxPpupCo2f38rZQUfHehKHjOlrHgMdt2wglemU5soL%2FIKK6afG6d9vZVEceBkdPsKXQP4eaCfnWw7kKYO%2FzsrM%2FYT%2FlgdfK8WvoumqrYEwLLxbWIIQiA%3D%3D"}],"group":"cf-nel","max_age":604800}', 'NEL': '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}', 'Server': 'cloudflare', 'CF-RAY': '7c364aaf2c40f4aa-YVR', 'alt-svc': 'h3=":443"; ma=86400, h3-29=":443"; ma=86400')>
+            # <CIMultiDictProxy('Date': 'Sun, 07 May 2023 03:14:15 GMT', 'Content-Type': 'image/jpeg', 'Transfer-Encoding': 'chunked', 'Connection': 'keep-alive', 'Cache-Control': 'max-age=86400', 'Content-Disposition': 'inline; filename="5_204147_151.jpg"', 'Content-Security-Policy': "object-src 'self'; script-src 'self' 'nonce-e1df8d9a818367507632b5e24baffd8a' ; report-uri zmjs-violations@baudneo.com", 'Expires': 'Sun, 07 May 2023 04:14:15 GMT', 'Pragma': 'cache', 'Set-Cookie': 'ZMSESSID=ur39191kvs2j86trhp3freg3hu; expires=Sun, 07-May-2023 04:14:15 GMT; Max-Age=3600; path=/; HttpOnly; SameSite=Strict', 'Set-Cookie': 'zmSkin=classic; expires=Tue, 15-Mar-2033 03:14:15 GMT; Max-Age=311040000; SameSite=Strict', 'Set-Cookie': 'zmCSS=dark; expires=Tue, 15-Mar-2033 03:14:15 GMT; Max-Age=311040000; SameSite=Strict', 'CF-Cache-Status': 'DYNAMIC', 'Report-To': '{"endpoints":[{"url":"https:\\/\\/a.nel.cloudflare.com\\/report\\/v3?s=38b4lSINFjNgB0CxPpupCo2f38rZQUfHehKHjOlrHgMdt2wglemU5soL%2FIKK6afG6d9vZVEceBkdPsKXQP4eaCfnWw7kKYO%2FzsrM%2FYT%2FlgdfK8WvoumqrYEwLLxbWIIQiA%3D%3D"}],"group":"cf-nel","max_age":604800}', 'NEL': '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}', 'Server': 'cloudflare', 'CF-RAY': '7c364aaf2c40f4aa-YVR', 'alt-svc': 'h3=":443"; ma=86400, h3-29=":443"; ma=86400')>
             else:
                 content_type = resp.headers.get("content-type")
-                content_length = resp.headers.get("content-length")
+                content_length = int(resp.headers.get("content-length", 0))
                 cloudflare = resp.headers.get("Server", "").startswith("cloudflare")
                 logger.debug(
                     f"{lp} RESPONSE RECEIVED>>> {content_type=} | {content_length=}"
@@ -661,29 +662,26 @@ class ZMApi:
                     _resp = await resp.read()
                     logger.debug(f"Image response detected! {_resp[:20]}")
                 else:
-                    # TEXT data
+                    # TEXT data ?
                     _resp = await resp.text()
                     logger.debug(f"Text response?????  >>> {_resp}")
 
-                    # A non 0 byte response will usually mean it's an image eid request that needs re-login
-                    # Be aware that if you are behind cloudflare, content-length is always None
-                    if content_length:
-                        if content_length != "0":
-                            if _resp.casefold().startswith("no frame found"):
-                                #  r.text = 'No Frame found for event(69129) and frame id(280)']
-                                logger.warning(
-                                    f"{lp} Frame was not found by API! >>> {resp.text}"
-                                )
-                            else:
-                                logger.debug(
-                                    f"{lp} raising RE_LOGIN ValueError -> Non 0 byte response: {resp.text}"
-                                )
-                                raise ValueError("RE_LOGIN")
-                        elif content_length == "0":
-                            # ZM returns 0 byte body if index not found (cant find frame ID/out of bounds)
-                            logger.debug(
-                                f"{lp} WAS THIS AN IMAGE REQUEST? cant find frame ID?"
+                    if content_length > 0:
+                        if _resp.casefold().startswith("no frame found"):
+                            #  r.text = 'No Frame found for event(69129) and frame id(280)']
+                            logger.warning(
+                                f"{lp} Frame was not found by API! >>> {resp.text}"
                             )
+                        else:
+                            logger.debug(
+                                f"{lp} raising RE_LOGIN ValueError -> Non 0 byte response: {resp.text}"
+                            )
+                            raise ValueError("RE_LOGIN")
+                    elif content_length <= 0:
+                        # ZM returns 0 byte body if index not found (cant find frame ID/out of bounds)
+                        logger.debug(
+                            f"{lp} WAS THIS AN IMAGE REQUEST? cant find frame ID?"
+                        )
                 return _resp
         if payload is None:
             payload = {}
@@ -828,8 +826,8 @@ class ZMApi:
                 logger.debug(f"{http_err.response}")
                 # ZM returns 404 when an image cannot be decoded or the requested event does not exist
                 try:
-                    # If this is an event rewuest there will be json data
-                    # If it is an image request there will be no jsom data
+                    # If this is an event request there will be json data
+                    # If it is an image request there will be no json data
                     err_json: Optional[dict] = http_err.response.json()
                 except JSONDecodeError as e:
                     logger.debug(f"{lp} Error parsing response for JSON: {e}")
