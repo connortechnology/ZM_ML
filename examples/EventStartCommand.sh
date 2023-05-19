@@ -22,6 +22,7 @@ event_start_command=(
   python3
   "${detect_script}"
   --config "${config}"
+  --event-mode
   --live
   --event-start
   "${EID}"
