@@ -124,7 +124,7 @@ async def detect(
     image,
 ):
     model_hint = normalize_id(model_hint)
-    logger.info(f"{LP} detect: {model_hint}")
+    logger.info(f"{LP} detect: model hint {model_hint}")
     model: BaseModelConfig = get_model(model_hint)
     logger.info(f"{LP} found model {model.id} -> {model}")
     detector: APIDetector = get_global_config().get_detector(model)
@@ -281,8 +281,7 @@ async def single_detection(
     image: UploadFile = File(..., description="Image to run the ML model on"),
 ):
     logger.info(f"single_detection: ENDPOINT {model_hint}")
-    detections = await detect(model_hint, image)
-    return detections
+    return await detect(model_hint, image)
 
 
 class MLAPI:
