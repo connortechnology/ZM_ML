@@ -773,9 +773,9 @@ def parse_client_config_file(cfg_file: Path) -> Optional[Settings]:
     logger.debug(
         f"perf:: Config file loaded in {time.perf_counter() - _start:.5f} seconds"
     )
-    fuck_you = Settings(**cfg)
-    logger.debug(f"cfg file parsed into a class = {fuck_you}")
-    return fuck_you
+    _cfg = Settings(**cfg)
+    # logger.debug(f"cfg file parsed into a class = {_cfg}")
+    return _cfg
 
 
 class APIDetector:
