@@ -126,6 +126,7 @@ class ZMDB:
     def grab_all(self, eid: int) -> Tuple[int, str, int, int, Decimal, str, str]:
         #         return mid, mon_name, mon_post, mon_pre, mon_fps, reason, event_path
         self._check_conn()
+        event_exists: bool = False
         mid: Optional[Union[str, int]] = None
         mon_name: Optional[str] = None
         mon_post: Optional[Union[str, int]] = None
@@ -141,6 +142,13 @@ class ZMDB:
         _evt_select: select = select(self.meta.tables["Events"]).where(
             self.meta.tables["Events"].c.Id == eid
         )
+        event_exists: bool = self.connection.execute(_evt_select).fetchone() is not None
+        logger.debug(f"{LP} event_exists = {event_exists}")
+        if not event_exists:
+            raise ValueError(f"Event ID {eid} does not exist in ZoneMinder DB")
+
+
+
         e_select: select = select(self.meta.tables["Events"].c.MonitorId).where(
             self.meta.tables["Events"].c.Id == eid
         )
