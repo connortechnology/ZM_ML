@@ -147,8 +147,6 @@ class ZMDB:
         if not event_exists:
             raise ValueError(f"Event ID {eid} does not exist in ZoneMinder DB")
 
-
-
         e_select: select = select(self.meta.tables["Events"].c.MonitorId).where(
             self.meta.tables["Events"].c.Id == eid
         )
