@@ -108,7 +108,7 @@ async def init_logs(config: ConfigFileModel) -> None:
         try:
             if not abs_logfile.exists():
                 logger.info(f"Creating log file [{abs_logfile}]")
-                abs_logfile.touch(exist_ok=True)
+                abs_logfile.touch(exist_ok=True, mode=0o644)
             else:
                 with abs_logfile.open("w") as f:
                     pass
