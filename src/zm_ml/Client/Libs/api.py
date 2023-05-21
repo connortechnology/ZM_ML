@@ -772,12 +772,15 @@ class ZMApi:
             query = {}
         if headers is None:
             headers = {}
+        config_headers: Dict = self.config.headers
 
         type_action = type_action.casefold()
         if self.config.cf_0trust_header and self.config.cf_0trust_secret:
             logger.debug(f"{lp} adding cloudflare 0-trust secret and client ID header")
             headers["CF-Access-Client-Secret"] = self.config.cf_0trust_secret.get_secret_value()
             headers["CF-Access-Client-Id"] = self.config.cf_0trust_header.get_secret_value()
+        headers.update(config_headers)
+        logger.debug(f"{lp} DEBUG>>> headers: {headers}")
         if self.access_token:
             query["token"] = self.access_token
         show_url: str = (

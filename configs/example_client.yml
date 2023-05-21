@@ -53,11 +53,21 @@ zoneminder:
   ssl_verify: no
   # CloudFlare Zero Trust Access (ZTA) headers for bypassing the WAF
   # Use these if you use CF ZTA over cloudflared (argo tunnels)
-  # and dont want these requests to be blocked/challenged/parsed by the WAF
+  # and don't want these requests to be blocked/challenged/parsed by the WAF
   # *** THIS ONLY APPLIES TO ZM API CALLS ***
+  # THIS MAY BE DEPRECATED IN FAVOR OF PLACING THIS INFO IN headers: section
   cf_0trust_secret: ${ZM_CF_0TRUST_SECRET}
   cf_0trust_header: ${ZM_CF_0TRUST_HEADER}
+  # Not used yet
   cf_0trust_expires: ${ZM_CF_0TRUST_EXPIRES}
+
+  headers:
+    # Add custom headers to all requests
+    # This is useful for adding custom headers to ZM API requests
+    # You can put CloudFlare ZeroTrust Access headers here as well
+
+    CF-Access-Client-Secret: ${ZM_CF_0TRUST_SECRET}
+    CF-Access-Client-Id: ${ZM_CF_0TRUST_HEADER}
 
 logging:
 #  root logging level

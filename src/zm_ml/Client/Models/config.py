@@ -34,6 +34,7 @@ class ZMAPISettings(BaseModel):
     cf_0trust_secret: Optional[SecretStr] = None
     cf_0trust_header: Optional[SecretStr] = None
     cf_0trust_expires: Optional[SecretStr] = None
+    headers: Optional[Dict[str, str]] = Field(default_factory=dict)
 
     # validators
     _validate_host_portal = validator("api", "portal", allow_reuse=True, pre=True)(
