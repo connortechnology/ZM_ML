@@ -61,9 +61,11 @@ ENV_VARS: Optional[ClientEnvVars] = None
 g: Optional[GlobalConfig] = None
 LP: str = "Client::"
 
+
 def create_logs() -> logging.Logger:
     import sys
     from ..Shared.Log.handlers import BufferedLogHandler
+
     logger = logging.getLogger(CLIENT_LOGGER_NAME)
     console_handler = logging.StreamHandler(stream=sys.stdout)
     console_handler.setFormatter(CLIENT_LOG_FORMAT)
@@ -73,6 +75,7 @@ def create_logs() -> logging.Logger:
     logger.addHandler(console_handler)
     logger.addHandler(buffered_log_handler)
     return logger
+
 
 async def init_logs(config: ConfigFileModel) -> None:
     """Initialize the logging system."""
@@ -85,6 +88,7 @@ async def init_logs(config: ConfigFileModel) -> None:
     sys_group: str = grp.getgrgid(sys_gid).gr_name
     sys_uid: int = os.getuid()
     from ..Shared.Models.config import LoggingSettings
+
     cfg: LoggingSettings = config.logging
     root_level = cfg.level
     logger.debug(
@@ -137,7 +141,9 @@ async def init_logs(config: ConfigFileModel) -> None:
             # this will flush the buffer to the file handler
             for h in logger.handlers:
                 if isinstance(h, BufferedLogHandler):
-                    logger.debug(f"Flushing buffered log handler to file {h=} ---- {file_handler=}")
+                    logger.debug(
+                        f"Flushing buffered log handler to file {h=} ---- {file_handler=}"
+                    )
                     h.flush(file_handler=file_handler)
                     break
             logger.debug(
@@ -445,7 +451,6 @@ class ZMClient:
         await self.clean_up()
         asyncio.get_event_loop().stop()
 
-
     async def clean_up(self):
         logger.debug(f"closing api sessions and db connection")
         # self.image_pipeline.exit()
@@ -461,7 +466,9 @@ class ZMClient:
         # setup async signal catcher
         loop = asyncio.get_event_loop()
         signals = ("SIGINT", "SIGTERM")
-        logger.debug(f"{lp} registering signal handler for {' ,'.join(signals).rstrip(',')}")
+        logger.debug(
+            f"{lp} registering signal handler for {' ,'.join(signals).rstrip(',')}"
+        )
         for sig_name in signals:
             loop.add_signal_handler(
                 getattr(signal, sig_name),
@@ -487,7 +494,6 @@ class ZMClient:
         # loop.create_task(self._sort_routes())
         # loop.create_task(self._init_api())
         # loop.create_task(self._init_db())
-
         with concurrent.futures.ThreadPoolExecutor(
             thread_name_prefix="init", max_workers=g.config.system.thread_workers
         ) as executor:
@@ -507,9 +513,9 @@ class ZMClient:
             logger.debug(f"Routes: AFTER sorting >> {self.routes}")
 
     def _init_db(self):
-        logger.debug("Initializing DB")
+        logger.debug("Initializing DB...")
         self.db = ZMDB()
-        logger.debug(f"DB initialized... {self.db=}")
+        logger.debug(f"DB initialized")
 
     async def _get_db_data(self, eid: int):
         """Get data from the database"""
@@ -522,7 +528,6 @@ class ZMClient:
             g.event_cause,
             g.event_path,
         ) = self.db.grab_all(eid)
-
 
     def _init_api(self):
         g.api = self.api = ZMApi(g.config.zoneminder)
@@ -585,7 +590,8 @@ class ZMClient:
                             for k, v in filter_data.items():
                                 if (
                                     v is not None
-                                    and v != output_filters["object"]["labels"][label][k]
+                                    and v
+                                    != output_filters["object"]["labels"][label][k]
                                 ):
                                     # logger.debug(
                                     #     f"{lp} Overriding BASE filter 'object':'labels':'{label}':'{k}' with "
@@ -670,18 +676,20 @@ class ZMClient:
         logger.debug(f"{lp} Initializing Image Pipeline...")
         img_pull_method = self.config.detection_settings.images.pull_method
         if img_pull_method.shm is True:
-            logger.debug(f"{lp} Using SHM for image source")
+            raise NotImplementedError(f"SHM image pulling is not supported yet")
             # self.image_pipeline = SHMImagePipeLine()
         elif img_pull_method.api.enabled is True:
             logger.debug(f"{lp} Using ZM API for image source")
             self.image_pipeline = APIImagePipeLine(img_pull_method.api)
         elif img_pull_method.zmu is True:
-            logger.debug(f"{lp} Using CLI 'zmu' for image source")
+            raise NotImplementedError(f"ZMU image pulling is not supported yet")
             pass
             # self.image_pipeline = ZMUImagePipeLine()
 
         models: Optional[Dict] = None
         # Fixme: Need to add support for monitors with no definition at all
+        ## there will always be a monitor object, but it may not have some of its attributes
+        ## Inherit from the global config object
 
         if g.mid in self.config.monitors:
             if self.config.monitors[g.mid].zones:
@@ -763,10 +771,10 @@ class ZMClient:
                 )
                 self.zones[zone_name].points = zone_points
         del zones
-        # logger.debug(f"'DBG'>>> Zone filters: \n\n{self.zone_filters} <<<DBG\n")
         image: Union[bytes, np.ndarray, None]
         matched_l, matched_c, matched_b = [], [], []
         import aiohttp
+
         image_loop = 0
         while self.image_pipeline.is_image_stream_active():
             image_loop += 1
@@ -776,14 +784,12 @@ class ZMClient:
                 logger.warning(f"{lp} No image returned! trying again...")
                 continue
             if image is False:
-                logger.warning(
-                    f"{lp} Image stream has been exhausted!"
-                )
+                logger.warning(f"{lp} Image stream has been exhausted!")
                 break
 
             if any([g.config.animation.gif.enabled, g.config.animation.mp4.enabled]):
                 if g.config.animation.low_memory:
-                    # save to file
+                    # save image buffer to disk
                     _tmp = g.config.system.tmp_path / "animations"
                     _tmp.mkdir(parents=True, exist_ok=True)
                     cv2.imwrite(
@@ -799,7 +805,7 @@ class ZMClient:
                     f"{lp}animations:: Added image to frame buffer: {image_name} -- {type(image)=}"
                 )
             results: Optional[List[Dict[str, Any]]] = None
-            route_loop = 0
+            route_loop: int = 0
             for route in self.routes:
                 route_loop += 1
                 if route.enabled:
@@ -815,7 +821,9 @@ class ZMClient:
                         part.set_content_disposition(
                             "form-data", name="image", filename=image_name
                         )
-                        logger.debug(f"Sending image to ZM-ML API ['{route.name}' @ {url}]")
+                        logger.debug(
+                            f"Sending image to ZM-ML API ['{route.name}' @ {url}]"
+                        )
                         _perf = perf_counter()
                         r: aiohttp.ClientResponse
                         session: aiohttp.ClientSession = g.api.async_session
@@ -1086,7 +1094,7 @@ class ZMClient:
 
         #
         # Outer Loop
-        for (label, confidence, bbox) in zip(
+        for label, confidence, bbox in zip(
             result["label"],
             result["confidence"],
             result["bounding_box"],
@@ -1133,7 +1141,6 @@ class ZMClient:
                     if isinstance(final_filters, dict) and isinstance(
                         final_filters.get("object"), dict
                     ):
-
                         # logger.debug(
                         #     f"{type(final_filters)=} -- {type(object_label_filters)=}\n\n{final_filters=}\n\n"
                         # )
@@ -1389,17 +1396,19 @@ class ZMClient:
                                     logger.debug(f"{lp} no min_area set")
                                 s_o = g.config.matching.static_objects.enabled
                                 mon_filt = g.config.monitors.get(g.mid)
-                                logger.debug(f"\n\nDEBUG: finding out why a monitor with no section in config is failing>>>>> MID: {g.mid} - mon_filt: {mon_filt}\n\n")
+                                logger.debug(
+                                    f"\n\nDEBUG: finding out why a monitor with no section in config is failing>>>>> MID: {g.mid} - mon_filt: {mon_filt}\n\n"
+                                )
                                 zone_filt: Optional[MonitorZones] = None
                                 if mon_filt and zone_name in mon_filt.zones:
                                     zone_filt = mon_filt.zones[zone_name]
 
                                 # Override with monitor filters than zone filters
                                 if not s_o:
-                                    if mon_filt and mon_filt.static_objects.enabled:
+                                    if mon_filt and mon_filt.static_objects and mon_filt.static_objects.enabled:
                                         s_o = True
                                 elif s_o:
-                                    if mon_filt and not mon_filt.static_objects.enabled:
+                                    if mon_filt and mon_filt.static_objects and mon_filt.static_objects.enabled:
                                         s_o = False
                                 # zone filters override monitor filters
                                 if not s_o:
@@ -1427,7 +1436,9 @@ class ZMClient:
                                         )
 
                                     else:
-                                        logger.debug(f"{__lp} FAILED the static object check")
+                                        logger.debug(
+                                            f"{__lp} FAILED the static object check"
+                                        )
                                         # failed
                                         continue
                                 else:
@@ -1477,9 +1488,7 @@ class ZMClient:
                     )
                     break
             else:
-                logger.debug(
-                    f"{_lp} '{label}' FAILED FILTERING"
-                )
+                logger.debug(f"{_lp} '{label}' FAILED FILTERING")
                 filter_out(label, confidence, bbox)
 
             logger.debug(
@@ -1574,7 +1583,6 @@ class ZMClient:
                 for saved_label, saved_conf, saved_bbox in zip(
                     _labels, _confs, _bboxes
                 ):
-
                     # compare current detection element with saved list from file
                     found_alias_grouping = False
                     # check if it is in a label group
