@@ -566,48 +566,51 @@ class ZMClient:
             override_filters: Dict = filters_2.dict()
         elif isinstance(filters_2, dict):
             override_filters = filters_2
+        elif filters_2 is None:
+            override_filters = {}
         else:
             raise TypeError("filters_2 must be a dict or OverRideMatchFilters object")
-        _override_obj_label: Dict = override_filters["object"]["labels"]
         # logger.debug(f"{lp} OVERRIDE object.labels: {_override_obj_label}")
         # if _base_obj_label is None:
         #     _base_obj_label = {}
         if output_filters:
-            if _override_obj_label:
-                for label, filter_data in _override_obj_label.items():
-                    if output_filters["object"]["labels"] is None:
-                        output_filters["object"]["labels"] = {}
+            if override_filters:
+                _override_obj_label: Dict = override_filters["object"]["labels"]
+                if _override_obj_label:
+                    for label, filter_data in _override_obj_label.items():
+                        if output_filters["object"]["labels"] is None:
+                            output_filters["object"]["labels"] = {}
 
-                    if _base_obj_label and label in _base_obj_label:
-                        for k, v in filter_data.items():
-                            if (
-                                v is not None
-                                and v != output_filters["object"]["labels"][label][k]
-                            ):
-                                # logger.debug(
-                                #     f"{lp} Overriding BASE filter 'object':'labels':'{label}':'{k}' with "
-                                #     f"Monitor {g.mid} OVERRIDE filter VALUE '{v}'"
-                                # )
-                                output_filters["object"]["labels"][label][k] = v
-                    else:
-                        # logger.debug(
-                        #     f"{lp} Adding Monitor {g.mid} OVERRIDE filter 'object':'labels'"
-                        #     f":'{label}' with VALUE '{filter_data}'"
-                        # )
-                        output_filters["object"]["labels"][label] = filter_data
-
-            for filter_type, filter_data in override_filters.items():
-                if filter_data is not None:
-                    for k, v in filter_data.items():
-                        if k == "labels":
-                            # Handled in the first loop
-                            continue
-                        if v is not None and v != output_filters[filter_type][k]:
-                            output_filters[filter_type][k] = v
+                        if _base_obj_label and label in _base_obj_label:
+                            for k, v in filter_data.items():
+                                if (
+                                    v is not None
+                                    and v != output_filters["object"]["labels"][label][k]
+                                ):
+                                    # logger.debug(
+                                    #     f"{lp} Overriding BASE filter 'object':'labels':'{label}':'{k}' with "
+                                    #     f"Monitor {g.mid} OVERRIDE filter VALUE '{v}'"
+                                    # )
+                                    output_filters["object"]["labels"][label][k] = v
+                        else:
                             # logger.debug(
-                            #     f"{lp} Overriding BASE filter '{filter_type}':'{k}' with Monitor {g.mid} "
-                            #     f"OVERRIDE filter VALUE '{v}'"
+                            #     f"{lp} Adding Monitor {g.mid} OVERRIDE filter 'object':'labels'"
+                            #     f":'{label}' with VALUE '{filter_data}'"
                             # )
+                            output_filters["object"]["labels"][label] = filter_data
+
+                for filter_type, filter_data in override_filters.items():
+                    if filter_data is not None:
+                        for k, v in filter_data.items():
+                            if k == "labels":
+                                # Handled in the first loop
+                                continue
+                            if v is not None and v != output_filters[filter_type][k]:
+                                output_filters[filter_type][k] = v
+                                # logger.debug(
+                                #     f"{lp} Overriding BASE filter '{filter_type}':'{k}' with Monitor {g.mid} "
+                                #     f"OVERRIDE filter VALUE '{v}'"
+                                # )
             # logger.debug(f"{lp} Final combined output => {output_filters}")
         if not output_filters["object"]["labels"]:
             output_filters["object"]["labels"] = None
@@ -678,6 +681,8 @@ class ZMClient:
             # self.image_pipeline = ZMUImagePipeLine()
 
         models: Optional[Dict] = None
+        # Fixme: Need to add support for monitors with no definition at all
+
         if g.mid in self.config.monitors:
             if self.config.monitors[g.mid].zones:
                 self.zones = self.config.monitors[g.mid].zones
@@ -686,6 +691,8 @@ class ZMClient:
                     f"{lp} Monitor {g.mid} has models configured, overriding global models"
                 )
                 models = self.config.monitors[g.mid].models
+        else:
+            logger.critical(f"{lp} Monitor {g.mid} not found in global config object")
         if not models:
             if self.config.detection_settings.models:
                 logger.debug(
@@ -1382,6 +1389,7 @@ class ZMClient:
                                     logger.debug(f"{lp} no min_area set")
                                 s_o = g.config.matching.static_objects.enabled
                                 mon_filt = g.config.monitors.get(g.mid)
+                                logger.debug(f"\n\nDEBUG: finding out why a monitor with no section in config is failing>>>>> MID: {g.mid} - mon_filt: {mon_filt}\n\n")
                                 zone_filt: Optional[MonitorZones] = None
                                 if mon_filt and zone_name in mon_filt.zones:
                                     zone_filt = mon_filt.zones[zone_name]
