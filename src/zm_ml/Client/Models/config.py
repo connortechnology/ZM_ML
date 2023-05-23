@@ -31,9 +31,6 @@ class ZMAPISettings(BaseModel):
     user: Optional[SecretStr] = None
     password: Optional[SecretStr] = None
     ssl_verify: bool = Field(True)
-    cf_0trust_secret: Optional[SecretStr] = None
-    cf_0trust_header: Optional[SecretStr] = None
-    cf_0trust_expires: Optional[SecretStr] = None
     headers: Optional[Dict[str, str]] = Field(default_factory=dict)
 
     # validators
