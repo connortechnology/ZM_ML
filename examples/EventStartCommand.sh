@@ -10,7 +10,7 @@ if [[ -z "$1" ]]; then
     EID="--eid $1"
 fi
 if [[ -n "$2" ]]; then
-  MID="--mid $MID"
+  MID="--mid $2"
   else
     MID=""
 fi
