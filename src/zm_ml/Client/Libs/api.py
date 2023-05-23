@@ -14,10 +14,11 @@ import aiohttp
 from pydantic import SecretStr
 
 from ..Models.config import ZMAPISettings, MonitorsSettings
+from ..Log import CLIENT_LOGGER_NAME
 
 GRACE: int = 60 * 5  # 5 mins
 lp: str = "api::"
-from ..Log import CLIENT_LOGGER_NAME
+
 logger = logging.getLogger(CLIENT_LOGGER_NAME)
 g = None
 LP: str = "api::"
@@ -123,7 +124,7 @@ class ZMApi:
                                     )
                                 else:
                                     # logger.debug(
-                                    #     f"{lp} '{zone_name}' already exists in the monitor configuration {existing_zone}"
+                                    # f"{lp} '{zone_name}' already exists in the monitor configuration {existing_zone}"
                                     # )
                                     # only update if points are not set
                                     if not existing_zone.points:
@@ -188,9 +189,6 @@ class ZMApi:
             )
             disable_warnings(category=InsecureRequestWarning)
 
-        if self.config.cf_0trust_header and self.config.cf_0trust_secret:
-            logger.info(f"{lp} adding CloudFlare Zero Trust Access (ZTA) Client Secret and Id headers")
-
         if self.token_file:
             _ = self.cached_tokens
             self._refresh_tokens_if_needed()
@@ -227,7 +225,11 @@ class ZMApi:
             logger.warning(f"{lp} no access token to evaluate, calling login()")
             _login = True
         else:
-            claims = jwt.decode(self.access_token, algorithms=["HS256"], options={"verify_signature": False})
+            claims = jwt.decode(
+                self.access_token,
+                algorithms=["HS256"],
+                options={"verify_signature": False},
+            )
             iss = claims.get("iss")
             if iss and iss != "ZoneMinder":
                 logger.error(
@@ -235,7 +237,9 @@ class ZMApi:
                 )
                 _login = True
             elif not iss:
-                logger.error(f"{lp} no 'Issuer' ['iss'] for access token, calling login()")
+                logger.error(
+                    f"{lp} no 'Issuer' ['iss'] for access token, calling login()"
+                )
                 _login = True
             iat = claims["iat"]
             exp = claims["exp"]
@@ -300,7 +304,9 @@ class ZMApi:
         if not grace_period:
             grace_period = GRACE
             if not _login:
-                claims = jwt.decode(tkn, algorithms=["HS256"], options={"verify_signature": False})
+                claims = jwt.decode(
+                    tkn, algorithms=["HS256"], options={"verify_signature": False}
+                )
                 iss = claims.get("iss")
                 if iss and iss != "ZoneMinder":
                     logger.error(
@@ -643,7 +649,6 @@ class ZMApi:
                     logger.debug(
                         f"{lp} NOT 200|401|404 SOOOOOOOOOOOOOOOO HTTP [{resp_status}] error: {err}"
                     )
-            # <CIMultiDictProxy('Date': 'Sun, 07 May 2023 03:14:15 GMT', 'Content-Type': 'image/jpeg', 'Transfer-Encoding': 'chunked', 'Connection': 'keep-alive', 'Cache-Control': 'max-age=86400', 'Content-Disposition': 'inline; filename="5_204147_151.jpg"', 'Content-Security-Policy': "object-src 'self'; script-src 'self' 'nonce-e1df8d9a818367507632b5e24baffd8a' ; report-uri zmjs-violations@baudneo.com", 'Expires': 'Sun, 07 May 2023 04:14:15 GMT', 'Pragma': 'cache', 'Set-Cookie': 'ZMSESSID=ur39191kvs2j86trhp3freg3hu; expires=Sun, 07-May-2023 04:14:15 GMT; Max-Age=3600; path=/; HttpOnly; SameSite=Strict', 'Set-Cookie': 'zmSkin=classic; expires=Tue, 15-Mar-2033 03:14:15 GMT; Max-Age=311040000; SameSite=Strict', 'Set-Cookie': 'zmCSS=dark; expires=Tue, 15-Mar-2033 03:14:15 GMT; Max-Age=311040000; SameSite=Strict', 'CF-Cache-Status': 'DYNAMIC', 'Report-To': '{"endpoints":[{"url":"https:\\/\\/a.nel.cloudflare.com\\/report\\/v3?s=38b4lSINFjNgB0CxPpupCo2f38rZQUfHehKHjOlrHgMdt2wglemU5soL%2FIKK6afG6d9vZVEceBkdPsKXQP4eaCfnWw7kKYO%2FzsrM%2FYT%2FlgdfK8WvoumqrYEwLLxbWIIQiA%3D%3D"}],"group":"cf-nel","max_age":604800}', 'NEL': '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}', 'Server': 'cloudflare', 'CF-RAY': '7c364aaf2c40f4aa-YVR', 'alt-svc': 'h3=":443"; ma=86400, h3-29=":443"; ma=86400')>
             else:
                 content_type = resp.headers.get("content-type")
                 content_length = int(resp.headers.get("content-length", 0))
@@ -683,6 +688,7 @@ class ZMApi:
                             f"{lp} WAS THIS AN IMAGE REQUEST? cant find frame ID?"
                         )
                 return _resp
+
         if payload is None:
             payload = {}
         if query is None:
@@ -691,10 +697,6 @@ class ZMApi:
             headers = {}
 
         type_action = type_action.casefold()
-        if self.config.cf_0trust_header and self.config.cf_0trust_secret:
-            # logger.debug(f"{lp} adding cloudflare 0-trust Client Secret and Id headers")
-            headers["CF-Access-Client-Secret"] = self.config.cf_0trust_secret.get_secret_value()
-            headers["CF-Access-Client-Id"] = self.config.cf_0trust_header.get_secret_value()
         if self.access_token:
             query["token"] = self.access_token
         show_url: str = (
@@ -739,13 +741,19 @@ class ZMApi:
 
         r: Optional[aiohttp.ClientResponse] = None
         if type_action == "get":
-            async with self.async_session.get(url, params=query, ssl=ssl, headers=headers) as r:
+            async with self.async_session.get(
+                url, params=query, ssl=ssl, headers=headers
+            ) as r:
                 return await parse_response(r)
         elif type_action == "post":
-            async with self.async_session.post(url, data=payload, params=query, ssl=ssl, headers=headers) as r:
+            async with self.async_session.post(
+                url, data=payload, params=query, ssl=ssl, headers=headers
+            ) as r:
                 return await parse_response(r)
         elif type_action == "put":
-            async with self.async_session.put(url, data=payload, params=query, ssl=ssl, headers=headers) as r:
+            async with self.async_session.put(
+                url, data=payload, params=query, ssl=ssl, headers=headers
+            ) as r:
                 return await parse_response(r)
         elif type_action == "delete":
             async with self.async_session.delete(
@@ -775,10 +783,6 @@ class ZMApi:
         config_headers: Dict = self.config.headers
 
         type_action = type_action.casefold()
-        if self.config.cf_0trust_header and self.config.cf_0trust_secret:
-            logger.debug(f"{lp} adding cloudflare 0-trust secret and client ID header")
-            headers["CF-Access-Client-Secret"] = self.config.cf_0trust_secret.get_secret_value()
-            headers["CF-Access-Client-Id"] = self.config.cf_0trust_header.get_secret_value()
         headers.update(config_headers)
         logger.debug(f"{lp} DEBUG>>> headers: {headers}")
         if self.access_token:
@@ -812,7 +816,9 @@ class ZMApi:
             elif type_action == "put":
                 r = self.session.put(url, data=payload, params=query, headers=headers)
             elif type_action == "delete":
-                r = self.session.delete(url, data=payload, params=query, headers=headers)
+                r = self.session.delete(
+                    url, data=payload, params=query, headers=headers
+                )
             else:
                 logger.error(f"{lp} unsupported request type: {type_action}")
                 raise ValueError(f"Unsupported request type: {type_action}")
@@ -881,7 +887,6 @@ class ZMApi:
                 # A non 0 byte response will usually mean it's an image eid request that needs re-login
                 if content_length:
                     if content_length != "0":
-
                         if r.text.lower().startswith("no frame found"):
                             #  r.text = 'No Frame found for event(69129) and frame id(280)']
                             logger.warning(
