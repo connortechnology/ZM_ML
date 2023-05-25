@@ -125,10 +125,10 @@ async def main():
         if eid == 0:
             logger.error(f"{lp} Event ID is required for event mode")
             sys.exit(1)
-        # if mid == 0:
-        #     logger.warning(
-        #         f"{lp} When monitor ID is not supplied in event mode, ZoneMinder DB is queried for it"
-        #     )
+        if mid == 0:
+            logger.warning(
+                f"{lp} When monitor ID is not supplied in event mode, ZoneMinder DB is queried for it"
+            )
 
     if "config" in args and args.config:
         # logger.info(f"Configuration file supplied as: {args.config}")
@@ -149,6 +149,7 @@ async def main():
         f"Config File: {cfg_file}"
     )
     g.config = parse_client_config_file(cfg_file)
+    logger.debug(f"{lp} INITIALIZING ZMCLIENT")
     zm_client = Client.ZMClient(global_config=g)
     _end_init = time.perf_counter()
     __event_modes = ["event", ""]
@@ -165,9 +166,9 @@ async def main():
 
 if __name__ == "__main__":
     # file name
+    filename = Path(__file__).stem
     args = _parse_cli()
-    logger.debug(f"Event Processing...")
-    # Use uvloop for event loop
+    logger.debug(f"Starting {filename}...")
     loop = uvloop.new_event_loop()
     asyncio.set_event_loop(loop)
     _start = time.perf_counter()

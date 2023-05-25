@@ -176,13 +176,10 @@ def parse_client_config_file(cfg_file: Path) -> Optional[ConfigFileModel]:
     try:
         cfg = yaml.safe_load(raw_config)
     except yaml.YAMLError:
-        logger.error(f"Error parsing the YAML configuration file! Check YAML formatting!")
+        logger.error(f"Error parsing the YAML configuration file!")
         raise
     except PermissionError:
-        logger.error(f"Error reading the YAML configuration file! Check file permissions!")
-        raise
-    except Exception as e:
-        logger.error(f"Error reading the YAML configuration file! {e}")
+        logger.error(f"Error reading the YAML configuration file!")
         raise
 
     substitutions = cfg.get("substitutions", {})
@@ -195,16 +192,13 @@ def parse_client_config_file(cfg_file: Path) -> Optional[ConfigFileModel]:
             substitutions = testing.substitutions
 
     logger.debug(f"Replacing ${{VARS}} in config:substitutions")
-    # FIXME: this is a hack to get around the fact that the config file is not parsed recursively, so we have to
-    #  replace the vars multiple times to get all the nested vars. Gross dude.
     substitutions = _replace_vars(str(substitutions), substitutions)
     substitutions = _replace_vars(str(substitutions), substitutions)
     substitutions = _replace_vars(str(substitutions), substitutions)
-    # WALRUS OPERATOR is 3.8+ only
     if inc_file := substitutions.get("IncludeFile"):
         inc_file = Path(inc_file)
+        logger.debug(f"PARSING IncludeFile: {inc_file.as_posix()}")
         if inc_file.is_file():
-            logger.debug(f"PARSING YAML in IncludeFile: {inc_file.as_posix()}")
             inc_vars = yaml.safe_load(inc_file.read_text())
             if "client" in inc_vars:
                 inc_vars = inc_vars.get("client", {})
@@ -290,7 +284,6 @@ def get_global_config() -> GlobalConfig:
 
 
 def set_global_config(config: GlobalConfig) -> None:
-    #
     global g
     g = config
 

@@ -381,27 +381,7 @@ class MonitorZones(BaseModel):
     __validate_points = validator("points", pre=True, allow_reuse=True)(validate_points)
 
 
-class MonitorNotificationSettings(BaseModel):
-    class Skip(BaseModel):
-        gotify: Optional[bool] = None
-        pushover: Optional[bool] = None
-        mqtt: Optional[bool] = None
-        zmninja: Optional[bool] = None
-        shell: Optional[bool] = None
-
-    class RateLimit(BaseModel):
-        gotify: Optional[float] = None
-        pushover: Optional[float] = None
-        mqtt: Optional[float] = None
-        zmninja: Optional[float] = None
-        shell: Optional[float] = None
-
-    skip: Skip = Field(default_factory=Skip)
-    rate_limit: RateLimit = Field(default_factory=RateLimit)
-
-
 class MonitorsSettings(BaseModel):
-    notifications: MonitorNotificationSettings = Field(default_factory=MonitorNotificationSettings)
     models: Optional[Dict[str, Any]] = Field(default_factory=dict)
     object_confirm: Optional[bool] = None
     static_objects: Optional[OverRideStaticObjects] = Field(default_factory=OverRideStaticObjects)
