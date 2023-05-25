@@ -277,7 +277,7 @@ class BaseModelConfig(BaseModel):
         OpenALPRCloudModelOptions,
         PlateRecognizerModelOptions,
         ALPRModelOptions,
-    ] = Field(BaseModelOptions, description="Default Configuration for the model")
+    ] = Field(default_factory=BaseModelOptions, description="Default Configuration for the model")
 
     @validator("name")
     def check_name(cls, v):
@@ -830,6 +830,7 @@ class APIDetector:
         ALPRModelConfig,
         FaceRecognitionLibModelConfig,
         DeepFaceModelConfig,
+        TPUModelConfig,
     ]
     _options: Union[
         BaseModelOptions,
@@ -855,6 +856,7 @@ class APIDetector:
             ALPRModelConfig,
             FaceRecognitionLibModelConfig,
             DeepFaceModelConfig,
+            TPUModelConfig,
         ],
     ):
         from ..ML.Detectors.opencv.cv_yolo import CV2YOLODetector
@@ -966,15 +968,14 @@ class APIDetector:
         elif processor == ModelProcessor.TPU:
             if framework == ModelFrameWork.CORAL:
                 try:
-                    import pycoral
-                    import pycoral.utils
-                    import pycoral.utils.edgetpu
+                    from pycoral.utils.edgetpu import list_edge_tpus
                 except ImportError:
                     logger.warning(
                         "pycoral not installed, cannot load any models that use the TPU processor"
                     )
                 else:
-                    tpus = pycoral.utils.edgetpu.list_edge_tpus()
+                    tpus = list_edge_tpus()
+                    logger.debug(f"TPU devices found: {tpus}")
                     if tpus:
                         available = True
                     else:
