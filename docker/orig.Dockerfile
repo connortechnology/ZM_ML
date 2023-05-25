@@ -448,7 +448,7 @@ RUN set -x \
     && python3.9 -m pip install git+https://github.com/ageitgey/face_recognition_models distro requests \
     && rm -rf /usr/local/lib/python3.9/dist-packages/dlib-"${DLIB_VERSION}".0-py3.9-linux-x86_64.egg dlib-"${DLIB_VERSION}".0-cp39-none-any.whl
 
-ARG ZMML_VERSION=dockerize
+ARG ZMML_VERSION=master
 # ZM ML Server Install
 
 #COPY . /opt/zm_ml/src
