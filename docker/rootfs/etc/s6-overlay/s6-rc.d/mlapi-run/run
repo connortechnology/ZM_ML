@@ -7,6 +7,20 @@
 program_name="mlapi_run"
 exec 2>&1
 
+# Move mlapi-config logic here for now
+# Why do mmjmnj km 8juni8m,nt oneshot r6 services obey timeout configs?
+if [[ ! -f /zm_ml/conf/server.yml ]]; then
+  echo "[${program_name}] Creating default ZM ML Server CONFIGURATION file by envsubst'ing \${ML_INSTALL_XYZ} templates"
+  eval "python3.9 /opt/zm_ml/src/examples/install.py --dir-config /zm_ml/conf --dir-data /zm_ml/data --dir-log /zm_ml/logs --config-only --install-type server --debug --user www-data --group www-data"
+fi
+if [[ ! -f /zm_ml/conf/secrets.yml ]]; then
+  echo "[${program_name}] Creating default ZM ML Server SECRETS file"
+  eval "python3.9 /opt/zm_ml/src/examples/install.py --dir-config /zm_ml/conf --dir-data /zm_ml/data --dir-log /zm_ml/logs --secrets-only --install-type server --debug --user www-data --group www-data"
+fi
+
+# Original logic follows
+
+
 if [[ ${FORCE_MODELS} == 'true' || "${FORCE_MODELS}" -eq 1 || "${FORCE_MODELS}" == "1" ]]; then
   echo "[${program_name}] FORCE_MODELS=true :: existing models will be overwritten if downloaded..."
   force_models='--force-models'
