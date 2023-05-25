@@ -55,6 +55,7 @@ class TpuDetector(FileLock):
             self.model.allocate_tensors()
         except Exception as ex:
             ex = repr(ex)
+            logger.error(f"{LP} failed to load model: {ex}")
             words = ex.split(" ")
             for word in words:
                 if word.startswith("libedgetpu"):
