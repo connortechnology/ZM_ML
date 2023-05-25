@@ -262,9 +262,9 @@ class BaseModelConfig(BaseModel):
 
 
 class TPUModelConfig(BaseModelConfig):
-    input: Path = Field(None, description="model file/dir path (Optional)")
-    classes: Path = Field(default=None, description="model labels file path (Optional)")
-    config: Path = Field(default=None, description="model config file path (Optional)")
+    input: Optional[Path] = Field(None, description="model file/dir path (Optional)")
+    classes: Optional[Path] = Field(None, description="model labels file path (Optional)")
+    config: Optional[Path] = Field(None, description="model config file path (Optional)")
     height: Optional[int] = Field(
         416, ge=1, description="Model input height (resized for model)"
     )
@@ -272,7 +272,7 @@ class TPUModelConfig(BaseModelConfig):
         416, ge=1, description="Model input width (resized for model)"
     )
     square: Optional[bool] = Field(
-        False, description="Zero pad the image to be a square"
+        False, description="Zero pad the image to be a square; 1920x1080 = 1920x1920"
     )
 
     labels: List[str] = Field(
@@ -699,6 +699,12 @@ class Settings(BaseModel):
                         config.detection_options = CV2YOLOModelOptions(**_options)
                         logger.debug(
                             f"DEBUG>>> FINAL YOLO OPTIONS {config.detection_options = }"
+                        )
+                        v.append(config)
+                    elif _framework == ModelFrameWork.CORAL:
+                        config = TPUModelConfig(**model)
+                        logger.debug(
+                            f"DEBUG>>> FINAL TPU OPTIONS {config.detection_options = }"
                         )
                         v.append(config)
                     else:
