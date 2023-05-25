@@ -42,6 +42,7 @@ class TpuDetector(FileLock):
         self.model = None
         if self.config.model_type == ModelType.FACE:
             LP = f"{LP}Face:"
+        self.load_model()
 
     def load_model(self):
         from pycoral.utils.edgetpu import make_interpreter as make_interpreter
@@ -51,6 +52,7 @@ class TpuDetector(FileLock):
         t = time.perf_counter()
         try:
             self.model = make_interpreter(self.config.input.as_posix())
+            self.model.allocate_tensors()
         except Exception as ex:
             ex = repr(ex)
             words = ex.split(" ")
@@ -62,7 +64,6 @@ class TpuDetector(FileLock):
                     )
                     raise RuntimeError("TPU NO COMM")
         else:
-            self.model.allocate_tensors()
             logger.debug(f"perf:{LP} loading took: {time.perf_counter() - t:.5f}s")
 
     def detect(self, input_image: np.ndarray):
@@ -71,6 +72,7 @@ class TpuDetector(FileLock):
         h, w = input_image.shape[:2]
         _h, _w = self.config.height, self.config.width
         if not self.model:
+            logger.warning(f"{LP} model not loaded? loading now...")
             self.load_model()
         x_factor: float = 1.00
         y_factor: float = 1.00

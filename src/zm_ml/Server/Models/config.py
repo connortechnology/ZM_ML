@@ -737,7 +737,7 @@ class Settings(BaseModel):
                     elif _framework == ModelFrameWork.CORAL:
                         config = TPUModelConfig(**model)
                         logger.debug(
-                            f"DEBUG>>> FINAL TPU OPTIONS {config.detection_options = }"
+                            f"DEBUG>>> FINAL TPU OPTIONS {str(config.detection_options) = }"
                         )
                         v.append(config)
                     else:
