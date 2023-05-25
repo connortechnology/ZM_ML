@@ -263,7 +263,6 @@ class BaseModelConfig(BaseModel):
 
 class TPUModelConfig(BaseModelConfig):
     input: Optional[Path] = Field(None, description="model file/dir path (Optional)")
-    classes: Optional[Path] = Field(None, description="model labels file path (Optional)")
     config: Optional[Path] = Field(None, description="model config file path (Optional)")
     height: Optional[int] = Field(
         416, ge=1, description="Model input height (resized for model)"
@@ -927,6 +926,8 @@ class APIDetector:
             if framework == ModelFrameWork.CORAL:
                 try:
                     import pycoral
+                    import pycoral.utils
+                    import pycoral.utils.edgetpu
                 except ImportError:
                     logger.warning(
                         "pycoral not installed, cannot load any models that use the TPU processor"
