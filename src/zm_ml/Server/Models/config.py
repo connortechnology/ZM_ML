@@ -8,25 +8,45 @@ from typing import Union, Dict, List, Optional, IO, Any
 
 import yaml
 import numpy as np
-from pydantic import BaseModel, Field, validator, IPvAnyAddress, PositiveInt, SecretStr, BaseSettings
+from pydantic import (
+    BaseModel,
+    Field,
+    validator,
+    IPvAnyAddress,
+    PositiveInt,
+    SecretStr,
+    BaseSettings,
+)
 from pydantic.fields import ModelField
 
 from ..ML.coco17_cv2 import COCO17
-from ...Shared.Models.Enums import ModelType, ModelFrameWork, ModelProcessor, FaceRecognitionLibModelTypes, ALPRAPIType, \
-    ALPRService
+from ...Shared.Models.Enums import (
+    ModelType,
+    ModelFrameWork,
+    ModelProcessor,
+    FaceRecognitionLibModelTypes,
+    ALPRAPIType,
+    ALPRService,
+)
 from ...Shared.Models.config import Testing, LoggingSettings
 from ..Log import SERVER_LOGGER_NAME
 from ...Server.Models.DEFAULTS import *
 
 
-
 logger = logging.getLogger(SERVER_LOGGER_NAME)
+
 
 class LockSetting(BaseModel):
     """Default file lock options"""
-    max: int = Field(1, ge=1, le=100, description="Maximum number of parallel processes")
-    timeout: int = Field(30, ge=1, le=480, description="Timeout in seconds for acquiring a lock")
+
+    max: int = Field(
+        1, ge=1, le=100, description="Maximum number of parallel processes"
+    )
+    timeout: int = Field(
+        30, ge=1, le=480, description="Timeout in seconds for acquiring a lock"
+    )
     name: Optional[str] = Field(None, description="Name of the lock file")
+
 
 class LockSettings(BaseModel):
     enabled: bool = Field(True, description="Enable file locking")
@@ -43,7 +63,6 @@ class LockSettings(BaseModel):
     tpu: LockSetting = Field(
         default_factory=LockSetting, description="TPU Lock Settings"
     )
-
 
     @validator("gpu", "cpu", "tpu", always=True)
     def set_lock_name(cls, v, field, values):
@@ -63,6 +82,7 @@ class LockSettings(BaseModel):
             return self.tpu
         else:
             raise ValueError(f"Invalid device type: {device}")
+
     @validator("dir", pre=True, always=True)
     def validate_lock_dir(cls, v):
         if not v:
@@ -79,12 +99,14 @@ class ServerSettings(BaseModel):
         sign_key: SecretStr = Field("CHANGE ME!!!!", description="JWT Sign Key")
         algorithm: str = Field("HS256", description="JWT Algorithm")
 
-    address: IPvAnyAddress = Field('0.0.0.0', description="Server listen address")
+    address: IPvAnyAddress = Field("0.0.0.0", description="Server listen address")
     port: PositiveInt = Field(8000, description="Server listen port")
     reload: bool = Field(
         default=False, description="Uvicorn reload - For development only"
     )
-    debug: bool = Field(default=False, description="Uvicorn debug mode - For development only")
+    debug: bool = Field(
+        default=False, description="Uvicorn debug mode - For development only"
+    )
     jwt: JWTSettings = Field(default_factory=JWTSettings, description="JWT Settings")
 
 
@@ -147,8 +169,11 @@ class ALPRModelOptions(BaseModelOptions):
         description="Maximum size (Width) of image to load into memory",
     )
 
+
 class OpenALPRLocalModelOptions(ALPRModelOptions):
-    alpr_binary: str = Field("alpr", description="OpenALPR binary name or absolute path")
+    alpr_binary: str = Field(
+        "alpr", description="OpenALPR binary name or absolute path"
+    )
     alpr_binary_params: str = Field(
         "-d",
         description="OpenALPR binary parameters (-j is ALWAYS passed)",
@@ -190,7 +215,7 @@ class PlateRecognizerModelOptions(BaseModelOptions):
         None,
         example=["us", "cn", "kr", "ca"],
         description="List of regions to search for plates in. If not specified, "
-                    "all regions are searched. See http://docs.platerecognizer.com/#regions-supported",
+        "all regions are searched. See http://docs.platerecognizer.com/#regions-supported",
     )
     # minimal confidence for actually detecting a plate (the presence of a license plate, not the actual plate text)
     min_dscore: float = Field(
@@ -214,7 +239,6 @@ class PlateRecognizerModelOptions(BaseModelOptions):
         except TypeError:
             raise ValueError("Must be JSON serializable")
         return v
-
 
 
 class DeepFaceModelOptions(BaseModelOptions):
@@ -263,7 +287,12 @@ class BaseModelConfig(BaseModel):
 
 class TPUModelConfig(BaseModelConfig):
     input: Optional[Path] = Field(None, description="model file/dir path (Optional)")
-    config: Optional[Path] = Field(None, description="model config file path (Optional)")
+    config: Optional[Path] = Field(
+        None, description="model config file path (Optional)"
+    )
+    classes: Optional[Path] = Field(
+        None, description="model classes file path (Optional)"
+    )
     height: Optional[int] = Field(
         416, ge=1, description="Model input height (resized for model)"
     )
@@ -551,6 +580,7 @@ class CV2TFModelConfig(BaseModelConfig):
 class PyTorchModelConfig(BaseModelConfig):
     pass
 
+
 def _replace_vars(search_str: str, var_pool: Dict) -> Dict:
     """Replace variables in a string.
 
@@ -563,7 +593,9 @@ def _replace_vars(search_str: str, var_pool: Dict) -> Dict:
     import re
 
     if var_list := re.findall(r"\$\{(\w+)\}", search_str):
-        logger.debug(f"Found the following substitution variables: {list(set(var_list))}")
+        logger.debug(
+            f"Found the following substitution variables: {list(set(var_list))}"
+        )
         # substitute variables
         _known_vars = []
         _unknown_vars = []
@@ -613,7 +645,6 @@ class SystemSettings(BaseModel):
 
 
 class Settings(BaseModel):
-
     testing: Testing = Field(default_factory=Testing)
     substitutions: Dict[str, str] = Field(default_factory=dict)
     system: SystemSettings = Field(default_factory=SystemSettings)
@@ -622,9 +653,7 @@ class Settings(BaseModel):
     locks: LockSettings = Field(
         default_factory=LockSettings, description="Lock Settings", repr=False
     )
-    models: List = Field(
-        ..., description="Models configuration", exclude=True
-    )
+    models: List = Field(..., description="Models configuration", exclude=True)
 
     available_models: List[BaseModelConfig] = Field(
         None, description="Available models"
@@ -644,8 +673,13 @@ class Settings(BaseModel):
             for model in models:
                 if model.get("enabled", True) is True:
                     # logger.debug(f"Adding model: {type(model) = } ------ {model = }")
-                    _model: Union[RekognitionModelConfig, FaceRecognitionLibModelConfig,
-                    ALPRModelConfig, CV2YOLOModelConfig, None] = None
+                    _model: Union[
+                        RekognitionModelConfig,
+                        FaceRecognitionLibModelConfig,
+                        ALPRModelConfig,
+                        CV2YOLOModelConfig,
+                        None,
+                    ] = None
                     _framework = model.get("framework", "yolo")
                     _options = model.get("detection_options", {})
                     _type = model.get("model_type", "object")
@@ -721,6 +755,7 @@ class Settings(BaseModel):
 def parse_client_config_file(cfg_file: Path) -> Optional[Settings]:
     """Parse the YAML configuration file."""
     import yaml
+
     cfg: Dict = {}
     _start = time.perf_counter()
     raw_config = cfg_file.read_text()
@@ -1041,8 +1076,11 @@ class GlobalConfig(BaseModel):
         if not ret_:
             logger.error(f"Unable to create detector for {model.name}")
         return ret_
+
+
 class ServerEnvVars(BaseSettings):
     """Server Environment Variables"""
+
     conf_file: str = Field(None, env="CONF_FILE", description="Server YAML config file")
 
     class Config:
@@ -1051,4 +1089,3 @@ class ServerEnvVars(BaseSettings):
         case_sensitive = True
         # extra = "forbid"
         env_prefix = "ML_SERVER_"
-
