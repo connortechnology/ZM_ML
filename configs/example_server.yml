@@ -114,7 +114,7 @@ models:
       processor: tpu
       square: no
 
-      input: "${MODEL_DIR}/coral/tf2_ssd_mobilenet_v2_coco17_ptq_edgetpu.tflite"
+      input: "${MODEL_DIR}/coral_tpu/tf2_ssd_mobilenet_v2_coco17_ptq_edgetpu.tflite"
 
     # An example of an OpenCV YOLO model, name is what you will use to call the model
     - name: YOLOv4 Tiny  # Name is converted to lowercase; 'yolov4 tiny'
