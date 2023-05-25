@@ -94,8 +94,8 @@ class TpuDetector(FileLock):
         _, scale = common.set_resized_input(
             self.model,
             input_image.size,
-            # lambda size: input_image.resize(size, Image.ANTIALIAS),
-            lambda size: input_image.resize(size, Image.LANCZOS),
+            lambda size: input_image.resize(size, Image.ANTIALIAS),
+            # lambda size: input_image.resize(size, Image.LANCZOS),
         )
         try:
             self.acquire_lock()
