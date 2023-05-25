@@ -9,7 +9,7 @@ from ..file_locks import FileLock
 from ...Models.config import TPUModelConfig
 from ....Shared.Models.Enums import ModelType
 
-from zm_ml.Server import SERVER_LOGGER_NAME
+from zm_ml.Server.app import SERVER_LOGGER_NAME
 logger = getLogger(SERVER_LOGGER_NAME)
 LP: str = "Coral:"
 
@@ -44,6 +44,7 @@ class TpuDetector(FileLock):
             LP = f"{LP}Face:"
 
     def load_model(self):
+        from pycoral.utils.edgetpu import make_interpreter as make_interpreter
         logger.debug(
             f"{LP} loading model into {self.processor} processor memory: {self.name} ({self.config.id})"
         )
@@ -65,6 +66,7 @@ class TpuDetector(FileLock):
             logger.debug(f"perf:{LP} loading took: {time.perf_counter() - t:.5f}s")
 
     def detect(self, input_image: np.ndarray):
+        from pycoral.adapters import common as common, detect as detect
         b_boxes, labels, confs = [], [], []
         h, w = input_image.shape[:2]
         _h, _w = self.config.height, self.config.width
@@ -92,7 +94,8 @@ class TpuDetector(FileLock):
         _, scale = common.set_resized_input(
             self.model,
             input_image.size,
-            lambda size: input_image.resize(size, Image.ANTIALIAS),
+            # lambda size: input_image.resize(size, Image.ANTIALIAS),
+            lambda size: input_image.resize(size, Image.LANCZOS),
         )
         try:
             self.acquire_lock()

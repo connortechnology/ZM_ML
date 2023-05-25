@@ -858,11 +858,12 @@ class APIDetector:
         ],
     ):
         from ..ML.Detectors.opencv.cv_yolo import CV2YOLODetector
+        from ..ML.Detectors.coral_edgetpu import TpuDetector
 
         self.config = model_config
         self.id = self.config.id
         self.options = model_config.detection_options
-        self.model: Optional[CV2YOLODetector] = None
+        self.model: Optional[Union[TpuDetector, CV2YOLODetector]] = None
         self._load_model()
 
     @property
@@ -901,6 +902,7 @@ class APIDetector:
                 ALPRModelConfig,
                 FaceRecognitionLibModelConfig,
                 DeepFaceModelConfig,
+                TPUModelConfig,
             ]
         ] = None,
     ):
@@ -937,6 +939,10 @@ class APIDetector:
                     self.model = OpenAlprCmdLine(self.config)
                 elif self.config.api_type == ALPRAPIType.CLOUD:
                     self.model = OpenAlprCloud(self.config)
+        elif self.config.framework == ModelFrameWork.CORAL:
+            from ..ML.Detectors.coral_edgetpu import TpuDetector
+            self.model = TpuDetector(self.config)
+
         else:
             logger.warning(
                 f"CANT CREATE DETECTOR -> Framework NOT IMPLEMENTED!!! {self.config.framework}"
