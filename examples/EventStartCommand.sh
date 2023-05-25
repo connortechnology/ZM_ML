@@ -29,5 +29,5 @@ event_start_command=(
   "${MID}"
 )
 
-eval "${event_start_command[@]}"
+"${event_start_command[@]}"
 exit 0
