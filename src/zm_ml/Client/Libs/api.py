@@ -781,9 +781,11 @@ class ZMApi:
         if headers is None:
             headers = {}
         config_headers: Dict = self.config.headers
-
+        logger.debug(f"{lp} DEBUG>>> headers: {headers} --- {config_headers = }")
         type_action = type_action.casefold()
-        headers.update(config_headers)
+        if config_headers:
+            headers.update(config_headers)
+
         logger.debug(f"{lp} DEBUG>>> headers: {headers}")
         if self.access_token:
             query["token"] = self.access_token
