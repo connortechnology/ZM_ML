@@ -794,11 +794,13 @@ class ZMApi:
             if self.sanitize
             else url
         )
-        show_tkn: str = (
-            f"{self.access_token[:20]}...{self.sanitize_str}"
-            if self.sanitize
-            else self.access_token
-        )
+        show_tkn: str = ""
+        if self.access_token:
+            show_tkn = (
+                f"{self.access_token[:20]}...{self.sanitize_str}"
+                if self.sanitize
+                else self.access_token
+            )
         show_payload: str = ""
         show_query: Union[str, Dict] = f"token: '{show_tkn}'"
         if not self.access_token:
