@@ -98,7 +98,7 @@ available_models = {
             "https://github.com/google-coral/test_data/raw/master/tf2_ssd_mobilenet_v2_coco17_ptq_edgetpu.tflite",
             "https://github.com/google-coral/test_data/raw/master/efficientdet_lite3_512_ptq_edgetpu.tflite",
         ],
-        "config": None,
+        "config": "https://raw.githubusercontent.com/baudneo/ZM_ML/master/examples/coco-labels-paper.txt",
     },
 }
 # Logging
