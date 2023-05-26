@@ -304,7 +304,7 @@ class TPUModelConfig(BaseModelConfig):
     )
 
     labels: List[str] = Field(
-        default=COCO17,
+        default=None,
         description="model labels parsed into a list of strings",
         repr=False,
         exclude=True,
@@ -334,26 +334,24 @@ class TPUModelConfig(BaseModelConfig):
         # logger.debug(f"validating {field.name} - {v = } -- {type(v) = } -- {values = }")
         model_name = values.get("name", "Unknown Model")
         lp = f"Model Name: {model_name} ->"
-        if not v:
-            if not (labels_file := values["classes"]):
-                logger.debug(
-                    f"{lp} 'classes' is not defined. Using *default* COCO 2017 class labels"
-                )
-                from ..ML.coco17_cv2 import COCO17
+        if not (labels_file := values["classes"]):
+            logger.debug(
+                f"{lp} 'classes' is not defined. Using *default* COCO 2017 class labels"
+            )
+            from ..ML.coco17_cv2 import COCO17
 
-                v = COCO17
-            else:
-                logger.debug(
-                    f"'classes' is defined. Parsing '{labels_file}' into a list of strings for class identification"
-                )
-                assert isinstance(
-                    labels_file, Path
-                ), f"{field.name} is not a Path object"
-                assert labels_file.exists(), "labels_file does not exist"
-                assert labels_file.is_file(), "labels_file is not a file"
-                with labels_file.open(mode="r") as f:
-                    f: IO
-                    v = f.read().splitlines()
+            v = COCO17
+        logger.debug(
+            f"'classes' is defined. Parsing '{labels_file}' into a list of strings for class identification"
+        )
+        assert isinstance(
+            labels_file, Path
+        ), f"{field.name} is not a Path object"
+        assert labels_file.exists(), "labels_file does not exist"
+        assert labels_file.is_file(), "labels_file is not a file"
+        with labels_file.open(mode="r") as f:
+            f: IO
+            v = f.read().splitlines()
         assert isinstance(v, list), f"{field.name} is not a list"
         return v
 
