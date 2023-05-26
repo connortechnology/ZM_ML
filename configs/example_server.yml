@@ -106,15 +106,17 @@ locks:
 
 # Define what models the server will offer
 models:
-    - name: tpu test
-      description: "test model for TPU"
+    - name: TPU TF2 SSD MobileNet V2
+      description: "SSD MobileNet V2 TensorFlow2 trained"
       enabled: no
       framework: coral
       model_type: object
       processor: tpu
-      square: no
 
       input: "${MODEL_DIR}/coral_tpu/tf2_ssd_mobilenet_v2_coco17_ptq_edgetpu.tflite"
+      # All of the included TPU object detection models require the 90 label COCO dataset
+      # See https://coral.ai/models/object-detection/
+      classes: "${MODEL_DIR}/coral_tpu/coco-labels-paper.txt"
 
     # An example of an OpenCV YOLO model, name is what you will use to call the model
     - name: YOLOv4 Tiny  # Name is converted to lowercase; 'yolov4 tiny'
