@@ -114,10 +114,7 @@ class TpuDetector(FileLock):
         finally:
             self.release_lock()
         logger.debug(f"{LP} {len(objs)} objects detected")
-        logger.debug(f"{LP} {len(self.config.labels) = } total labels in the supplied labels from config (COCO17 ?)")
         for obj in objs:
-            logger.debug(f"DBG>>> {type(obj) = } || {obj = }")
-            logger.debug(f"DBG>>> {type(obj.id) = } || {obj.id = } || {len(self.config.labels) = }")
             if obj.id > len(self.config.labels):
                 logger.warning(f"{LP} {obj.id = } is out of range of the supplied labels, does obj.id start at 1 instead of 0 for calling an array?")
             b_boxes.append(
