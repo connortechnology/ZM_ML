@@ -1,61 +1,70 @@
 import time
 from logging import getLogger
+from typing import List, Optional
+import warnings
 
 from PIL import Image
-import cv2
 import numpy as np
 
 from ..file_locks import FileLock
-from ...Models.config import TPUModelConfig
-from ....Shared.Models.Enums import ModelType
+from ...Models.config import TPUModelConfig, TPUModelOptions
+from ....Shared.Models.Enums import ModelType, ModelProcessor
 
 from zm_ml.Server.app import SERVER_LOGGER_NAME
 logger = getLogger(SERVER_LOGGER_NAME)
 LP: str = "Coral:"
 
-# global placeholders for TPU lib imports
-common = None
-detect = None
-make_interpreter = None
+try:
+    import cv2
+except ImportError:
+    warnings.warn(
+        "OpenCV not installed, please install OpenCV!"
+    )
+try:
+    import pycoral
+    from pycoral.adapters import common, detect
+    from pycoral.utils.edgetpu import make_interpreter
+except ImportError:
+    warnings.warn(
+        "pycoral not installed, this is ok if you do not plan to use TPU as detection processor. "
+        "If you intend to use a TPU please install the TPU libs and pycoral!"
+    )
+try:
+    from tflite_runtime.interpreter import Interpreter
+except ImportError:
+    warnings.warn(
+        "tflite_runtime not installed, this is ok if you do not plan to use TPU as detection processor. "
+        "If you intend to use a TPU please install the TPU libs and pycoral!"
+    )
 
 
 class TpuDetector(FileLock):
     def __init__(self, model_config: TPUModelConfig):
-        global LP, common, detect, make_interpreter
-        try:
-            from pycoral.adapters import common as common, detect as detect
-            from pycoral.utils.edgetpu import make_interpreter as make_interpreter
-        except ImportError:
-            logger.warning(
-                f"{LP} pycoral libs not installed, this is ok if you do not plan to use "
-                f"TPU as detection processor. If you intend to use a TPU please install the TPU libs "
-                f"and pycoral!"
-            )
-            raise ImportError("TPU libs not installed")
-        else:
-            logger.debug(f"{LP} the pycoral library has been successfully imported, initializing...")
+        global LP
         # Model init params
-        self.config = model_config
-        self.options = self.config.detection_options
-        self.processor = self.config.processor
-        self.name = self.config.name
-        self.model = None
+        self.config: TPUModelConfig = model_config
+        self.options: TPUModelOptions = self.config.detection_options
+        self.processor: ModelProcessor = self.config.processor
+        self.name: str = self.config.name
+        self.model: Optional[Interpreter] = None
         if self.config.model_type == ModelType.FACE:
+            logger.debug(f"{LP} ModelType=Face, this is for identification purposes only")
             LP = f"{LP}Face:"
+        # Fixme: the way the TPU and its cache work, models will be pingponging each other out if there are more than 1.
+        ## Figure this out, maybe a lock on the TPU itself? Daddy, chill.
         self.load_model()
 
     def load_model(self):
-        from pycoral.utils.edgetpu import make_interpreter as make_interpreter
         logger.debug(
-            f"{LP} loading model into {self.processor} processor memory: {self.name} ({self.config.id})"
+            f"{LP} loading model into {self.processor.upper()} processor memory: {self.name} ({self.config.id})"
         )
         t = time.perf_counter()
         try:
-            self.model = make_interpreter(self.config.input.as_posix())
+            self.model: Interpreter = make_interpreter(self.config.input.as_posix())
             self.model.allocate_tensors()
         except Exception as ex:
             ex = repr(ex)
-            logger.error(f"{LP} failed to load model: {ex}")
+            logger.error(f"{LP} failed to load model at make_interpreter() and allocate_tensors(): {ex}")
             words = ex.split(" ")
             for word in words:
                 if word.startswith("libedgetpu"):
@@ -67,8 +76,8 @@ class TpuDetector(FileLock):
         else:
             logger.debug(f"perf:{LP} loading took: {time.perf_counter() - t:.5f}s")
 
-    def nms(self, objects, threshold):
-        """Returns a list of objects passing the NMS.
+    def nms(self, objects: List[detect.Object], threshold: float) -> List[detect.Object]:
+        """Returns a list of objects passing the NMS filter.
 
         Args:
           objects: result candidates.
@@ -77,46 +86,50 @@ class TpuDetector(FileLock):
         Returns:
           A list of objects that pass the NMS.
         """
+        # TODO: Make class (label) aware and only filter out same class members?
+        timer = time.perf_counter()
         if len(objects) == 1:
-            return [0]
+            logger.debug(f"{LP} only 1 object, no NMS needed")
+        elif len(objects) > 1:
+            boxes = np.array([o.bbox for o in objects])
+            logger.debug(f"{LP} numpy.array NMS boxes: {boxes}")
+            xmins = boxes[:, 0]
+            ymins = boxes[:, 1]
+            xmaxs = boxes[:, 2]
+            ymaxs = boxes[:, 3]
 
-        boxes = np.array([o.bbox for o in objects])
-        xmins = boxes[:, 0]
-        ymins = boxes[:, 1]
-        xmaxs = boxes[:, 2]
-        ymaxs = boxes[:, 3]
+            areas = (xmaxs - xmins) * (ymaxs - ymins)
+            scores = [o.score for o in objects]
+            idxs = np.argsort(scores)
 
-        areas = (xmaxs - xmins) * (ymaxs - ymins)
-        scores = [o.score for o in objects]
-        idxs = np.argsort(scores)
+            selected_idxs = []
+            while idxs.size != 0:
+                selected_idx = idxs[-1]
+                selected_idxs.append(selected_idx)
 
-        selected_idxs = []
-        while idxs.size != 0:
-            selected_idx = idxs[-1]
-            selected_idxs.append(selected_idx)
+                overlapped_xmins = np.maximum(xmins[selected_idx], xmins[idxs[:-1]])
+                overlapped_ymins = np.maximum(ymins[selected_idx], ymins[idxs[:-1]])
+                overlapped_xmaxs = np.minimum(xmaxs[selected_idx], xmaxs[idxs[:-1]])
+                overlapped_ymaxs = np.minimum(ymaxs[selected_idx], ymaxs[idxs[:-1]])
 
-            overlapped_xmins = np.maximum(xmins[selected_idx], xmins[idxs[:-1]])
-            overlapped_ymins = np.maximum(ymins[selected_idx], ymins[idxs[:-1]])
-            overlapped_xmaxs = np.minimum(xmaxs[selected_idx], xmaxs[idxs[:-1]])
-            overlapped_ymaxs = np.minimum(ymaxs[selected_idx], ymaxs[idxs[:-1]])
+                w = np.maximum(0, overlapped_xmaxs - overlapped_xmins)
+                h = np.maximum(0, overlapped_ymaxs - overlapped_ymins)
 
-            w = np.maximum(0, overlapped_xmaxs - overlapped_xmins)
-            h = np.maximum(0, overlapped_ymaxs - overlapped_ymins)
+                intersections = w * h
+                unions = areas[idxs[:-1]] + areas[selected_idx] - intersections
+                ious = intersections / unions
 
-            intersections = w * h
-            unions = areas[idxs[:-1]] + areas[selected_idx] - intersections
-            ious = intersections / unions
-
-            idxs = np.delete(
-                idxs, np.concatenate(([len(idxs) - 1], np.where(ious > threshold)[0])))
-
-        return [objects[i] for i in selected_idxs]
+                idxs = np.delete(
+                    idxs, np.concatenate(([len(idxs) - 1], np.where(ious > threshold)[0])))
+            objects = [objects[i] for i in selected_idxs]
+            logger.info(f"perf:{LP} NMS took: {time.perf_counter() - timer:.5f}s")
+        return objects
 
     def detect(self, input_image: np.ndarray):
-        from pycoral.adapters import common, detect
+        """Performs object detection on the input image."""
         b_boxes, labels, confs = [], [], []
         h, w = input_image.shape[:2]
-        nms_threshold = self.config.detection_options.nms
+        nms = self.options.nms
         conf_threshold = self.config.detection_options.confidence
         if not self.model:
             logger.warning(f"{LP} model not loaded? loading now...")
@@ -124,8 +137,9 @@ class TpuDetector(FileLock):
         t = time.perf_counter()
         input_image = cv2.cvtColor(input_image, cv2.COLOR_BGR2RGB)
         input_image = Image.fromarray(input_image)
+        nms_str = f" - nms: {nms.threshold}" if nms.enabled else ""
         logger.debug(
-            f"{LP}detect: input image {w}*{h} - confidence: {conf_threshold} - nms: {nms_threshold}"
+            f"{LP}detect: input image {w}*{h} - confidence: {conf_threshold}{nms_str}"
         )
         # scale = min(orig_width / w, orig_height / h)
         _, scale = common.set_resized_input(
@@ -133,6 +147,7 @@ class TpuDetector(FileLock):
             input_image.size,
             lambda size: input_image.resize(size, Image.ANTIALIAS),
         )
+        objs: List[detect.Object]
         try:
             self.acquire_lock()
             self.model.invoke()
@@ -144,23 +159,30 @@ class TpuDetector(FileLock):
             logger.debug(
                 f"perf:{LP} '{self.name}' detection took: {time.perf_counter() - t:.5f}s"
             )
+            _obj_len = len(objs)
+            logger.debug(f"{LP} RAW:: {_obj_len}")
         finally:
             self.release_lock()
-            _obj_len = len(objs)
-        # Non Max Suppression
-        objs = self.nms(objs, nms_threshold)
-        logger.debug(f"{LP} {len(objs)}/{_obj_len} objects after NMS filtering with threshold: {nms_threshold}")
-        for obj in objs:
-            b_boxes.append(
-                [
-                    int(round(obj.bbox.xmin)),
-                    int(round(obj.bbox.ymin)),
-                    int(round(obj.bbox.xmax)),
-                    int(round(obj.bbox.ymax)),
-                ]
-            )
-            labels.append(self.config.labels[obj.id])
-            confs.append(float(obj.score))
+        if objs:
+            # Non Max Suppression
+            if nms.enabled:
+                objs = self.nms(objs, nms.threshold)
+                logger.info(f"{LP} {len(objs)}/{_obj_len} objects after NMS filtering with threshold: {nms.threshold}")
+            else:
+                logger.info(f"{LP} NMS disabled, {_obj_len} objects detected")
+            for obj in objs:
+                b_boxes.append(
+                    [
+                        int(round(obj.bbox.xmin)),
+                        int(round(obj.bbox.ymin)),
+                        int(round(obj.bbox.xmax)),
+                        int(round(obj.bbox.ymax)),
+                    ]
+                )
+                labels.append(self.config.labels[obj.id])
+                confs.append(float(obj.score))
+        else:
+            logger.warning(f"{LP} nothing returned from invoke()... ?")
 
         return {
             "success": True if labels else False,
