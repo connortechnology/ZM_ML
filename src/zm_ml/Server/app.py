@@ -156,10 +156,8 @@ async def threaded_detect(model_hints: List[str], image) -> List[Dict]:
     image = load_image_into_numpy_array(await image.read())
     detections: List[Dict] = []
     # logger.info(f"Detectors ({len(Detectors)}) -> {Detectors}")
-    timer = time.perf_counter()
-    import concurrent.futures
-
     futures = []
+    import concurrent.futures
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         for detector in detectors:
@@ -167,18 +165,6 @@ async def threaded_detect(model_hints: List[str], image) -> List[Dict]:
             futures.append(executor.submit(detector.detect, image))
     for future in futures:
         detections.append(future.result())
-    # for detector in Detectors:
-    #     import threading
-    #     thread = threading.Thread(target=detector.detect, args=(image,))
-    #     threads.append(thread)
-    #     thread.start()
-    #     # detections.append(detector.detect(image))
-    # for thread in threads:
-    #     logger.info(f"Waiting for thread {thread}")
-    #     thread.join()
-    logger.info(
-        f"{LP} ThreadPool detections completed in {time.perf_counter() - timer:.5f}ms -> {detections}"
-    )
     return detections
 
 
@@ -265,7 +251,7 @@ async def modify_model(
 async def group_detect(
     model_hints: List[str] = Body(
         ...,
-        description="model names or ids",
+        description="comma seperated model names/UUIDs",
         example="yolov4,97acd7d4-270c-4667-9d56-910e1510e8e8,yolov7 tiny",
     ),
     image: UploadFile = File(...),
