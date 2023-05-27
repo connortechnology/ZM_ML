@@ -118,6 +118,12 @@ models:
       # See https://coral.ai/models/object-detection/
       classes: "${MODEL_DIR}/coral_tpu/coco-labels-paper.txt"
 
+      detection_options:
+        # Non Max Suppressive threshold, lower will filter more overlapping bounding boxes out.
+        nms: 0.3
+        # Only return results >=
+        confidence: 0.2
+
     # An example of an OpenCV YOLO model, name is what you will use to call the model
     - name: YOLOv4 Tiny  # Name is converted to lowercase; 'yolov4 tiny'
       enabled: true  # Optional. Defaults to True.
@@ -133,6 +139,12 @@ models:
 
       input: "${MODEL_DIR}/yolo/yolov4-tiny.weights"  # REQUIRED - Model file.
       config: "${MODEL_DIR}/yolo/yolov4-tiny.cfg"  # Optional - .weights requires .cfg, .onnx and .tflite does not.
+
+      detection_options:
+        # Non Max Suppressive threshold, lower will filter more overlapping bounding boxes out.
+        nms: 0.3
+        # Only return results >=
+        confidence: 0.2
 
     - name: YOLOv4
       enabled: no  # Optional. Defaults to True.
