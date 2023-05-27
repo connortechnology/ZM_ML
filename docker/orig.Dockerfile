@@ -450,7 +450,7 @@ RUN set -x \
 
 ARG ZMML_VERSION=master
 # ZM ML Server Install
-
+#ARG CacheBust=1
 #COPY . /opt/zm_ml/src
 RUN set -x \
       && mkdir -p /opt/zm_ml/src \
@@ -498,6 +498,8 @@ ENV \
     MAX_LOG_SIZE_BYTES=5000000 \
     # 10 rotated log files max for a total of 50MB
     MAX_LOG_NUMBER=10 \
+    # Remove ZM ML logger timestamp as s6 handles that for us
+    INSIDE_DOCKER=1 \
     \
     # For information purposes only
     ML_CAPABILITIES='face[detection/recognition],object,alpr[openalpr]' \
