@@ -1,4 +1,5 @@
 #!/command/with-contenv bash
 program_name="zm_mlapi"
 
-s6-format-filter "%1 %s" "[${program_name}]" | logutil-service /log/"${program_name}"
+#s6-format-filter "%1 %s" "[${program_name}]" | logutil-service /log/"${program_name}"
+s6-format-filter "%s" "[${program_name}]" | logutil-service /log/"${program_name}"
