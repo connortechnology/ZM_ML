@@ -17,10 +17,19 @@ substitutions:
   IncludeFile: ${ML_INSTALL_CFG_DIR}/secrets.yml
 
   # --------- Example
-  EXAMPLE: "World!"
+  EXAMPLE99: "World!"
+  # It is a good idea to quote your values,
+  # especially if they contain spaces/semicolons/exclamations/etc
+  EXAMPLE_PASSWORD99: "string!with#chars:that&may*cause^issues.if,'unquoted'"
+  # You can nest substitutions as long as they are specified in logical order
+  EXAMPLE_NESTED_SUBSTITUTION: "Hello, ${EXAMPLE99}. Here is a password: ${EXAMPLE_PASSWORD99}"
+  EXAMPLE_FAIL: "This will fail because ${EXAMPLE_FOR_SINGLE_QUOTES} is not defined yet"
+
+  EXAMPLE_FOR_DOUBLE_QUOTES: 'I would like to use "double quotes" in a string'
+  EXAMPLE_FOR_SINGLE_QUOTES: "I would like to use 'single quotes' in a string"
 
 THIS IS AN EXAMPLE:
-  of substitution variables: Hello, ${EXAMPLE}
+  of substitution variables: "Hello, ${EXAMPLE99}. Here is a password: ${EXAMPLE_PASSWORD99}"
 
 system:
   # Path where the system will store configuration files
@@ -40,8 +49,6 @@ server:
   # Set interface IP to listen on, 0.0.0.0 will listen on all IPv4 interfaces
   address: ${ML_INSTALL_SERVER_ADDRESS}
   port: ${ML_INSTALL_SERVER_PORT}
-  # uvicorn debug mode
-  debug: yes
   jwt:
     #  the secret key that will be used to sign JWT tokens. (WIP!!!)
     #  ***MAKE SURE YOU CHANGE THE DEFAULT VALUE when this is implemented***
@@ -77,7 +84,7 @@ logging:
     # directory where log files will be stored
     path: ${LOGGING_DIR}
     # prefix logname with this string, 'zmml' will become zmml_m1.log for monitor 1
-    filename_prefix: zmml
+    filename_prefix: zmmlS
     # Do not suffix logs with monitor id, log everything to a single file (Leave blank to disable)
     # If this has a value, filename_prefix is ignored.
     file_name:
