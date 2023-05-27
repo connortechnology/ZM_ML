@@ -68,14 +68,14 @@ class TpuDetector(FileLock):
             logger.debug(f"perf:{LP} loading took: {time.perf_counter() - t:.5f}s")
 
     def nms(self, objects, threshold):
-        """Returns a list of indexes of objects passing the NMS.
+        """Returns a list of objects passing the NMS.
 
         Args:
           objects: result candidates.
           threshold: the threshold of overlapping IoU to merge the boxes.
 
         Returns:
-          A list of indexes containing the objects that pass the NMS.
+          A list of objects that pass the NMS.
         """
         if len(objects) == 1:
             return [0]
@@ -110,7 +110,7 @@ class TpuDetector(FileLock):
             idxs = np.delete(
                 idxs, np.concatenate(([len(idxs) - 1], np.where(ious > threshold)[0])))
 
-        return selected_idxs
+        return [objects[i] for i in selected_idxs]
 
     def detect(self, input_image: np.ndarray):
         from pycoral.adapters import common, detect
@@ -147,8 +147,8 @@ class TpuDetector(FileLock):
         logger.debug(f"{LP} {len(objs)} objects detected, applying NMS filter...")
         # Non Max Suppression
         nms_threshold = self.config.detection_options.nms
-        objs = [objs[i] for i in self.nms(objs, nms_threshold)]
-        logger.debug(f"{LP} {len(nms_objs)} objects after NMS filtering with threshold: {nms_threshold}")
+        objs = self.nms(objs, nms_threshold)
+        logger.debug(f"{LP} {len(objs)} objects after NMS filtering with threshold: {nms_threshold}")
         for obj in objs:
             b_boxes.append(
                 [
