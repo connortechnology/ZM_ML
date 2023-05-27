@@ -133,8 +133,14 @@ class CV2YOLOModelOptions(BaseModelOptions):
     )
 
 
-class TPUModelOptions(CV2YOLOModelOptions):
-    pass
+class TPUModelOptions(BaseModelOptions):
+    class NMSOptions(BaseModel):
+        enabled: bool = Field(True, description="Enable Non-Maximum Suppression")
+        threshold: Optional[float] = Field(
+            0.4, ge=0.0, le=1.0, description="Non-Maximum Suppression Threshold"
+        )
+
+    nms: NMSOptions = Field(default_factory=NMSOptions, description="NMS Options")
 
     class Config:
         extra = "allow"
