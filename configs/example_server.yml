@@ -127,7 +127,11 @@ models:
 
       detection_options:
         # Non Max Suppressive threshold, lower will filter more overlapping bounding boxes out.
-        nms: 0.3
+        # Currently, only TPU model NMS can be enabled/disabled
+        nms:
+          # Enable Non Max Suppression
+          enabled: yes
+          threshold: .35
         # Only return results >=
         confidence: 0.2
 
