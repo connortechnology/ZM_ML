@@ -1288,7 +1288,6 @@ class Envsubst:
         a: str = _simple_re.sub(self._repl_simple_env_var, search_string)
         # handle bracketed env vars with optional default specification
         b: str = _extended_re.sub(self._repl_extended_env_var, a)
-        logger.debug(f"envsubst:: FINAL: \n\n {b}\n\n\n")
         return b
 
     def _resolve_var(self, var_name, default=None):
