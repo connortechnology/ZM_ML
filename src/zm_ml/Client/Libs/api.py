@@ -25,7 +25,7 @@ LP: str = "api::"
 
 
 class ZMApi:
-    def import_zones(self):
+    async def import_zones(self):
         """A function to import zones that are defined in the ZoneMinder web GUI instead of defining
         zones in the per-monitor section of the configuration file.
 
@@ -36,6 +36,7 @@ class ZMApi:
         lp: str = "api::import zones::"
         mid_cfg = None
         existing_zones = {}
+        logger.debug(f"{lp} called")
         if g.config.detection_settings.import_zones:
             mid_cfg = g.config.monitors.get(g.mid)
             if mid_cfg:
@@ -163,6 +164,7 @@ class ZMApi:
         from pydantic import SecretStr
 
         g = get_global_config()
+        logger.debug(f"{lp} called")
         self.token_file = g.config.system.variable_data_path / "api_access_token"
         self.access_token: Optional[str] = ""
         self.refresh_token: Optional[str] = ""

@@ -60,9 +60,10 @@ logger.addHandler(logging.NullHandler())
 ENV_VARS: Optional[ClientEnvVars] = None
 g: Optional[GlobalConfig] = None
 LP: str = "Client::"
-
+logger: Optional[logging.Logger] = None
 
 def create_logs() -> logging.Logger:
+    global logger
     import sys
     from ..Shared.Log.handlers import BufferedLogHandler
 
@@ -114,7 +115,7 @@ async def init_logs(config: ConfigFileModel) -> None:
                 logger.info(f"Creating log file [{abs_logfile}]")
                 abs_logfile.touch(exist_ok=True, mode=0o644)
             else:
-                with abs_logfile.open("w") as f:
+                with abs_logfile.open("a") as f:
                     pass
         except PermissionError:
             logger.warning(
@@ -461,10 +462,13 @@ class ZMClient:
         """
         Initialize the ZoneMinder Client
         """
+        global logger
         lp = f"{LP}init::"
 
         # setup async signal catcher
         loop = asyncio.get_event_loop()
+        if not logger:
+            logger = create_logs()
         signals = ("SIGINT", "SIGTERM")
         logger.debug(
             f"{lp} registering signal handler for {' ,'.join(signals).rstrip(',')}"
@@ -530,8 +534,11 @@ class ZMClient:
         ) = self.db.grab_all(eid)
 
     def _init_api(self):
+        logger.debug("Initializing API...")
         g.api = self.api = ZMApi(g.config.zoneminder)
+        logger.debug(f"API initialized")
         self.notifications = Notifications()
+
 
     @staticmethod
     async def convert_to_cv2(image: Union[np.ndarray, bytes]):
@@ -650,13 +657,6 @@ class ZMClient:
                 f"{lp} Running detection for event {eid}, obtaining monitor info using DB and API..."
             )
             await self._get_db_data(eid)
-            loop = asyncio.get_event_loop()
-
-            with concurrent.futures.ThreadPoolExecutor(
-                thread_name_prefix="import-zones",
-                max_workers=g.config.system.thread_workers,
-            ) as executor:
-                await loop.run_in_executor(executor, self.api.import_zones)
             g.Monitor = await self.api.get_monitor_data(g.mid)
             g.Event, _, g.Frame, _ = await self.api.get_all_event_data(eid)
             await init_logs(g.config)
