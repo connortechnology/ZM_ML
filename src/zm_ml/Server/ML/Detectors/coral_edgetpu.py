@@ -116,6 +116,8 @@ class TpuDetector(FileLock):
         from pycoral.adapters import common, detect
         b_boxes, labels, confs = [], [], []
         h, w = input_image.shape[:2]
+        nms_threshold = self.config.detection_options.nms
+        conf_threshold = self.config.detection_options.confidence
         if not self.model:
             logger.warning(f"{LP} model not loaded? loading now...")
             self.load_model()
@@ -123,7 +125,7 @@ class TpuDetector(FileLock):
         input_image = cv2.cvtColor(input_image, cv2.COLOR_BGR2RGB)
         input_image = Image.fromarray(input_image)
         logger.debug(
-            f"{LP}detect: input image {w}*{h}"
+            f"{LP}detect: input image {w}*{h} - confidence: {conf_threshold} - nms: {nms_threshold}"
         )
         # scale = min(orig_width / w, orig_height / h)
         _, scale = common.set_resized_input(
@@ -144,11 +146,10 @@ class TpuDetector(FileLock):
             )
         finally:
             self.release_lock()
-        logger.debug(f"{LP} {len(objs)} objects detected, applying NMS filter...")
+            _obj_len = len(objs)
         # Non Max Suppression
-        nms_threshold = self.config.detection_options.nms
         objs = self.nms(objs, nms_threshold)
-        logger.debug(f"{LP} {len(objs)} objects after NMS filtering with threshold: {nms_threshold}")
+        logger.debug(f"{LP} {len(objs)}/{_obj_len} objects after NMS filtering with threshold: {nms_threshold}")
         for obj in objs:
             b_boxes.append(
                 [
