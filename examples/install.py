@@ -1121,7 +1121,15 @@ def do_install(_inst_type: str):
                 f"Config directory '{cfg_dir}' does not exist, skipping creation of {_inst_type} config file..."
             )
     global _ENV
-
+    _pip_prefix: List[str] = [
+        "python3",
+        "-m",
+        "pip",
+        "install",
+        "--root-user-action=ignore",
+        "--report",
+        "./pip_install_report.json",
+    ]
     if _inst_type != "secrets":
         install_host_dependencies(_inst_type)
         logger.info(f"Installing '{_inst_type}' specific files...")
@@ -1140,6 +1148,7 @@ def do_install(_inst_type: str):
                 _ENV["ML_INSTALL_SERVER_PORT"] = "5000"
 
         elif _inst_type == "client":
+            _pip_prefix.append("-e")
             copy_file(
                 INSTALL_FILE_DIR / "EventStartCommand.sh",
                 data_dir / "bin/EventStartCommand.sh",
@@ -1186,15 +1195,7 @@ def do_install(_inst_type: str):
             f"{INSTALL_FILE_DIR.parent.expanduser().resolve().as_posix()}[{_inst_type}]"
         )
         ran: Optional[subprocess.CompletedProcess] = None
-        _pip_prefix: List[str] = [
-            "python3",
-            "-m",
-            "pip",
-            "install",
-            "--root-user-action=ignore",
-            "--report",
-            "./pip_install_report.json",
-        ]
+
         create_("secrets", cfg_dir / "secrets.yml")
         create_(_inst_type, cfg_dir / f"{_inst_type}.yml")
         if testing:
