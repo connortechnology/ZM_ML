@@ -43,16 +43,13 @@ from .Models.config import (
 )
 from ..Shared.Models.config import Testing
 from ..Shared.configs import ClientEnvVars, GlobalConfig
+from .Log import CLIENT_LOGGER_NAME, CLIENT_LOG_FORMAT
 
+_PR: str = "print():"
 __version__: str = "0.0.1"
 __version_type__: str = "dev"
 ZM_INSTALLED: Optional[str] = which("zmpkg.pl")
 
-CLIENT_LOGGER_NAME: str = "ZM ML:Client"
-CLIENT_LOG_FORMAT = logging.Formatter(
-    "%(asctime)s.%(msecs)04d %(name)s[%(process)s] %(levelname)s %(module)s:%(lineno)d -> %(message)s",
-    "%m/%d/%y %H:%M:%S",
-)
 logger = logging.getLogger(CLIENT_LOGGER_NAME)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.NullHandler())
@@ -67,12 +64,13 @@ def create_logs() -> logging.Logger:
     import sys
     from ..Shared.Log.handlers import BufferedLogHandler
 
+    del logger
     logger = logging.getLogger(CLIENT_LOGGER_NAME)
+    logger.setLevel(logging.DEBUG)
     console_handler = logging.StreamHandler(stream=sys.stdout)
     console_handler.setFormatter(CLIENT_LOG_FORMAT)
     buffered_log_handler = BufferedLogHandler()
     buffered_log_handler.setFormatter(CLIENT_LOG_FORMAT)
-    logger.setLevel(logging.DEBUG)
     logger.addHandler(console_handler)
     logger.addHandler(buffered_log_handler)
     return logger
@@ -93,8 +91,7 @@ async def init_logs(config: ConfigFileModel) -> None:
     cfg: LoggingSettings = config.logging
     root_level = cfg.level
     logger.debug(
-        f"Setting root logger level to {root_level} [Type: {type(root_level)}] [logging module "
-        f"_levelToName() = {logging._levelToName[root_level]}]"
+        f"Setting root logger level to {logging._levelToName[root_level]}"
     )
     logger.setLevel(root_level)
 
@@ -146,6 +143,8 @@ async def init_logs(config: ConfigFileModel) -> None:
                         f"Flushing buffered log handler to file {h=} ---- {file_handler=}"
                     )
                     h.flush(file_handler=file_handler)
+                    # Close the buffered handler
+                    h.close()
                     break
             logger.debug(
                 f"Logging to file '{abs_logfile}' with user: "
@@ -324,11 +323,12 @@ class StaticObjects(BaseModel):
                 f"{lp} trying to load previous detection results from file: '{filename}'"
             )
             if filename.exists():
+                _data = None
                 try:
                     with filename.open("rb") as f:
-                        self.labels = pickle.load(f)
-                        self.confidence = pickle.load(f)
-                        self.bbox = pickle.load(f)
+                        labels = pickle.load(f)
+                        confs = pickle.load(f)
+                        bboxs = pickle.load(f)
                 except FileNotFoundError:
                     logger.debug(
                         f"{lp}  no history data file found for monitor '{g.mid}'"
@@ -342,7 +342,8 @@ class StaticObjects(BaseModel):
                         logger.error(f"{lp}  could not delete: {e}")
                 except Exception as e:
                     logger.error(f"{lp} error: {e}")
-                logger.debug(f"{lp} returning results: {labels}, {confs}, {bboxs}")
+                else:
+                    logger.debug(f"{lp} returning results: {labels}, {confs}, {bboxs}")
             else:
                 logger.warning(f"{lp} no history data file found for monitor '{g.mid}'")
         else:
@@ -359,10 +360,9 @@ class StaticObjects(BaseModel):
                 logger.error(
                     f"{lp}  error writing to '{filename}' past detections not recorded, err msg -> {e}"
                 )
-            else:
-                self.labels = labels
-                self.confidence = confs
-                self.bbox = bboxs
+        self.labels = labels
+        self.confidence = confs
+        self.bbox = bboxs
         return self.labels, self.confidence, self.bbox
 
 
@@ -517,7 +517,6 @@ class ZMClient:
             logger.debug(f"Routes: AFTER sorting >> {self.routes}")
 
     def _init_db(self):
-        logger.debug("Initializing DB...")
         self.db = ZMDB()
         logger.debug(f"DB initialized")
 
@@ -534,10 +533,10 @@ class ZMClient:
         ) = self.db.grab_all(eid)
 
     def _init_api(self):
-        logger.debug("Initializing API...")
         g.api = self.api = ZMApi(g.config.zoneminder)
         logger.debug(f"API initialized")
         self.notifications = Notifications()
+
 
 
     @staticmethod
@@ -659,14 +658,15 @@ class ZMClient:
             await self._get_db_data(eid)
             g.Monitor = await self.api.get_monitor_data(g.mid)
             g.Event, _, g.Frame, _ = await self.api.get_all_event_data(eid)
-            await init_logs(g.config)
         elif not eid and mid:
             logger.info(
                 f"{lp} Running detection for monitor {mid}, image pull method should be SHM or "
                 f"ZMU: {g.config.detection_settings.images.pull_method}"
             )
             g.mid = mid
-            await init_logs(g.config)
+
+        await init_logs(g.config)
+        await self.api.import_zones()
 
         self.static_objects.filename = (
             g.config.system.variable_data_path / f"static-objects_m{g.mid}.pkl"
@@ -759,7 +759,7 @@ class ZMClient:
                     f" which is different from the monitor resolution of {mon_res}! "
                     f"Attempting to adjust zone points to match monitor resolution..."
                 )
-                print(f"{mon_res = } -- {zone_resolution = }")
+                logger.debug(f"{mon_res = } -- {zone_resolution = }")
                 xfact: float = mon_res[1] / zone_resolution[1] or 1.0
                 yfact: float = mon_res[0] / zone_resolution[0] or 1.0
                 logger.debug(
@@ -1222,8 +1222,8 @@ class ZMClient:
                                 ] = None
 
                                 # check total max area
+                                lp = f"{__lp}total max area::"
                                 if tma := type_filter.total_max_area:
-                                    lp = f"{__lp}total max area::"
                                     if isinstance(tma, float):
                                         if tma >= 1.0:
                                             tma = 1.0
@@ -1262,8 +1262,8 @@ class ZMClient:
                                     logger.debug(f"{lp} no total_max_area set")
 
                                 # check total min area
+                                lp = f"{__lp}total min area::"
                                 if tmia := type_filter.total_min_area:
-                                    lp = f"{__lp}total min area::"
                                     if isinstance(tmia, float):
                                         if tmia >= 1.0:
                                             tmia = 1.0
@@ -1303,9 +1303,9 @@ class ZMClient:
                                 else:
                                     logger.debug(f"{lp} no total_min_area set")
 
-                                # check max area
-                                if max_area := type_filter.max_area:
-                                    lp = f"{__lp}zone max area::"
+                                # check max area compared to zone
+                                lp = f"{__lp}zone max area::"
+                                if max_area := type_filter.max_area is not None:
 
                                     if isinstance(max_area, float):
                                         if max_area >= 1.0:
@@ -1349,10 +1349,9 @@ class ZMClient:
                                 else:
                                     logger.debug(f"{lp} no max_area set")
 
-                                # check min area
-                                if min_area := type_filter.min_area:
-                                    lp = f"{__lp}zone min area::"
-
+                                # check min area compared to zone
+                                lp = f"{__lp}zone min area::"
+                                if min_area := type_filter.min_area is not None:
                                     if isinstance(min_area, float):
                                         if min_area >= 1.0:
                                             min_area = 1.0
@@ -1396,9 +1395,6 @@ class ZMClient:
                                     logger.debug(f"{lp} no min_area set")
                                 s_o = g.config.matching.static_objects.enabled
                                 mon_filt = g.config.monitors.get(g.mid)
-                                logger.debug(
-                                    f"\n\nDEBUG: finding out why a monitor with no section in config is failing>>>>> MID: {g.mid} - mon_filt: {mon_filt}\n\n"
-                                )
                                 zone_filt: Optional[MonitorZones] = None
                                 if mon_filt and zone_name in mon_filt.zones:
                                     zone_filt = mon_filt.zones[zone_name]
