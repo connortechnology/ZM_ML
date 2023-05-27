@@ -135,6 +135,7 @@ class CV2YOLOModelOptions(BaseModelOptions):
 
 class TPUModelOptions(CV2YOLOModelOptions):
     pass
+
     class Config:
         extra = "allow"
 
@@ -283,8 +284,11 @@ class BaseModelConfig(BaseModel):
         OpenALPRCloudModelOptions,
         PlateRecognizerModelOptions,
         ALPRModelOptions,
-        TPUModelOptions
-    ] = Field(default_factory=BaseModelOptions, description="Default Configuration for the model")
+        TPUModelOptions,
+    ] = Field(
+        default_factory=BaseModelOptions,
+        description="Default Configuration for the model",
+    )
 
     @validator("name")
     def check_name(cls, v):
@@ -347,19 +351,19 @@ class TPUModelConfig(BaseModelConfig):
             )
             from ..ML.coco17_cv2 import COCO17
 
-            v = COCO17
+            return COCO17
         logger.debug(
-            f"'classes' is defined. Parsing '{labels_file}' into a list of strings for class identification"
+            f"{lp} 'classes' is defined. Parsing '{labels_file}' into a list of strings for class identification"
         )
-        assert isinstance(
-            labels_file, Path
-        ), f"{field.name} is not a Path object"
-        assert labels_file.exists(), "labels_file does not exist"
-        assert labels_file.is_file(), "labels_file is not a file"
+        assert isinstance(labels_file, Path), f"{lp} '{labels_file}' is not a Path object"
+        assert labels_file.exists(), f"{lp} '{labels_file}' does not exist"
+        assert labels_file.is_file(), f"{lp} '{labels_file}' is not a file"
         with labels_file.open(mode="r") as f:
             f: IO
             v = f.read().splitlines()
-        assert isinstance(v, list), f"{field.name} is not a list"
+        assert isinstance(
+            v, list
+        ), f"{lp} After parsing the file into a list of strings, {field.name} is not a list"
         return v
 
 
@@ -568,9 +572,7 @@ class CV2TFModelConfig(BaseModelConfig):
         logger.debug(
             f"'classes' is defined. Parsing '{labels_file}' into a list of strings for class identification"
         )
-        assert isinstance(
-            labels_file, Path
-        ), f"{field.name} is not a Path object"
+        assert isinstance(labels_file, Path), f"{field.name} is not a Path object"
         assert labels_file.exists(), "labels_file does not exist"
         assert labels_file.is_file(), "labels_file is not a file"
         with labels_file.open(mode="r") as f:
@@ -947,6 +949,7 @@ class APIDetector:
                     self.model = OpenAlprCloud(self.config)
         elif self.config.framework == ModelFrameWork.CORAL:
             from ..ML.Detectors.coral_edgetpu import TpuDetector
+
             self.model = TpuDetector(self.config)
 
         else:
