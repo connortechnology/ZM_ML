@@ -113,7 +113,9 @@ locks:
 
 # Define what models the server will offer
 models:
-    - name: TPU TF2 SSD MobileNet V2
+    # name is normalized to lowercase, spaces are preserved.
+    # name is used to call the model via the API
+    - name: tpu1
       description: "SSD MobileNet V2 TensorFlow2 trained"
       enabled: no
       framework: coral
