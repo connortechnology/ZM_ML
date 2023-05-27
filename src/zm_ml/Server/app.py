@@ -165,6 +165,9 @@ async def threaded_detect(model_hints: List[str], image) -> List[Dict]:
             futures.append(executor.submit(detector.detect, image))
     for future in futures:
         detections.append(future.result())
+    logger.info(
+        f"{LP} ThreadPool detections -> {detections}"
+    )
     return detections
 
 
