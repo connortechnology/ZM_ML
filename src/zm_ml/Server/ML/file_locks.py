@@ -118,5 +118,5 @@ class FileLock:
                 self.lock.release()
                 self.is_locked = False
                 logger.debug(
-                    f"{LP} '{self.name}' released '{self.lock.name}' -- {self.is_locked = }"
+                    f"{LP} '{self.name}' released '{self.lock.name}'"
                 )
