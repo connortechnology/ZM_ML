@@ -40,7 +40,7 @@ from .Models.config import (
     GlobalConfig,
 )
 from ..Shared.Models.Enums import ModelType, ModelFrameWork, ModelProcessor
-from .Log import SERVER_LOGGER_NAME, SERVER_LOG_FORMAT
+from .Log import SERVER_LOGGER_NAME, SERVER_LOG_FORMAT, SERVER_LOG_FORMAT_S6
 from zm_ml.Shared.Log.handlers import BufferedLogHandler
 
 __version__ = "0.0.1a"
@@ -62,11 +62,16 @@ LP: str = "mlapi:"
 
 
 def create_logs() -> logging.Logger:
+    import os
+
+    formatter = SERVER_LOG_FORMAT
+    if os.environ.get("INSIDE_DOCKER", 0) in ("1", 1):
+        formatter = SERVER_LOG_FORMAT_S6
     logger = logging.getLogger(SERVER_LOGGER_NAME)
     console_handler = logging.StreamHandler(stream=sys.stdout)
-    console_handler.setFormatter(SERVER_LOG_FORMAT)
+    console_handler.setFormatter(formatter)
     buffered_log_handler = BufferedLogHandler()
-    buffered_log_handler.setFormatter(SERVER_LOG_FORMAT)
+    buffered_log_handler.setFormatter(formatter)
     logger.setLevel(logging.DEBUG)
     logger.addHandler(console_handler)
     logger.addHandler(buffered_log_handler)
