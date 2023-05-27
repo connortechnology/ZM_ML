@@ -169,7 +169,7 @@ class APIImagePipeLine:
             fid_url = f"{g.api.portal_base_url}/index.php?view=image&eid={g.eid}&fid={self.current_frame}"
 
             if g.past_event:
-                logger.warning(
+                logger.debug(
                     f"{lp} this is a past event, max image grab attempts set to 1"
                 )
                 self.max_attempts = 1
