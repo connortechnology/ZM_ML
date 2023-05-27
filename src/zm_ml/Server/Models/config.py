@@ -133,6 +133,12 @@ class CV2YOLOModelOptions(BaseModelOptions):
     )
 
 
+class TPUModelOptions(CV2YOLOModelOptions):
+    pass
+    class Config:
+        extra = "allow"
+
+
 class FaceRecognitionLibModelOptions(BaseModelOptions):
     # face_recognition lib config Options
     upsample_times: int = Field(
@@ -277,6 +283,7 @@ class BaseModelConfig(BaseModel):
         OpenALPRCloudModelOptions,
         PlateRecognizerModelOptions,
         ALPRModelOptions,
+        TPUModelOptions
     ] = Field(default_factory=BaseModelOptions, description="Default Configuration for the model")
 
     @validator("name")
@@ -732,6 +739,7 @@ class Settings(BaseModel):
                         v.append(config)
                     elif _framework == ModelFrameWork.CORAL:
                         config = TPUModelConfig(**model)
+                        config.detection_options = TPUModelOptions(**_options)
                         logger.debug(
                             f"DEBUG>>> FINAL TPU OPTIONS {str(config.detection_options) = }"
                         )
