@@ -32,27 +32,18 @@ class ZMApi:
 
         :return:
         """
-        imported_zones = []
+        imported_zones: List = []
         lp: str = "api::import zones::"
-        mid_cfg = None
-        existing_zones = {}
-        logger.debug(f"{lp} called")
+        mid_cfg: Optional[MonitorsSettings] = None
+        existing_zones: Dict = {}
         if g.config.detection_settings.import_zones:
             mid_cfg = g.config.monitors.get(g.mid)
             if mid_cfg:
                 existing_zones: Dict = mid_cfg.zones
             monitor_resolution: Tuple[int, int] = (int(g.mon_width), int(g.mon_height))
-            match_reason: bool = False
-            # logger.debug(f"{lp} import_zones() called")
-
-            if match_reason := g.config.detection_settings.match_origin_zone:
-                logger.debug(
-                    f"{lp}match origin zone:: only triggering on ZM zones that are "
-                    f"listed in the event 'Cause' [{g.event_cause}]",
-                )
             url = f"{self.portal_base_url}/api/zones/forMonitor/{g.mid}.json"
-            r = self.make_request(url)
-            # Now lets look at reason to see if we need to honor ZM motion zones
+            # This should be a JSON response parsed into a dictionary
+            r: Dict = await self.make_async_request(url)
             if r:
                 # logger.debug(f"{lp} RESPONSE from zone API call => {r}")
                 zones = r.get("zones")
@@ -70,25 +61,13 @@ class ZMApi:
                                 f"{lp} skipping '{zone_name}' as it is set to 'Inactive'"
                             )
                             continue
-                        if match_reason:
-                            if not re.compile(r"\b({0})\b".format(zone_name)).search(
-                                g.event_cause
-                            ):
-                                logger.debug(
-                                    f"{lp}match origin zone:: skipping '{zone_name}' as it is not in event "
-                                    f"cause -> '{g.event_cause}' and 'match_origin_zone' is enabled"
-                                )
-                                continue
-                            logger.debug(
-                                f"{lp}match origin zone:: '{zone_name}' is in event cause -> '{g.event_cause}'"
-                            )
 
                         from ..Models.config import MonitorZones
 
                         if not mid_cfg:
                             logger.debug(
                                 f"{lp} no monitor configuration found for monitor {g.mid}, "
-                                f"creating a new one"
+                                f"creating a new one and adding zone '{zone_name}' as first entry"
                             )
                             mid_cfg = MonitorsSettings(
                                 models=None,
@@ -103,30 +82,30 @@ class ZMApi:
                                 },
                             )
                             g.config.monitors[g.mid] = mid_cfg
+                            existing_zones = mid_cfg.zones
+                            continue
 
                         if existing_zones is None:
                             existing_zones = {}
 
                         if mid_cfg:
-                            logger.debug(
-                                f"{lp} monitor configuration found for monitor {g.mid}"
-                            )
                             if existing_zones is not None:
                                 # logger.debug(f"{lp} existing zones found: {existing_zones}")
                                 if not (existing_zone := existing_zones.get(zone_name)):
+                                    logger.debug(
+                                        f"{lp} Zone->'{zone_name}' is being constructed into a model and imported into monitor {g.mid} config"
+                                    )
                                     new_zone = MonitorZones(
                                         points=zone_points,
                                         resolution=monitor_resolution,
                                     )
                                     g.config.monitors[g.mid].zones[zone_name] = new_zone
                                     imported_zones.append({zone_name: new_zone})
-                                    logger.debug(
-                                        f"{lp} '{zone_name}' has been constructed into a model and imported"
-                                    )
+
                                 else:
-                                    # logger.debug(
-                                    # f"{lp} '{zone_name}' already exists in the monitor configuration {existing_zone}"
-                                    # )
+                                    logger.debug(
+                                        f"{lp} '{zone_name}' is defined in ZM ML monitor {g.mid} configuration -> {existing_zone}"
+                                    )
                                     # only update if points are not set
                                     if not existing_zone.points:
                                         # logger.debug(f"{lp} updating points for '{zone_name}'")
@@ -147,11 +126,15 @@ class ZMApi:
                                             f"{lp} '{zone_name}' already exists, updated points and resolution"
                                         )
                                     else:
-                                        logger.debug(
+                                        logger.warning(
                                             f"{lp} '{zone_name}' HAS POINTS SET which is interpreted "
-                                            f"as already existing, skipping"
+                                            f"as a ZM ML configured zone, not importing ZM defined zone points"
                                         )
                         # logger.debug(f"{lp}DBG>>> END OF ZONE LOOP for '{zone_name}'")
+                else:
+                    logger.debug(f"{lp} no ZM defined zones found for monitor {g.mid}")
+            else:
+                logger.debug(f"{lp} no response from ZM API for monitor {g.mid} zones")
         else:
             logger.debug(f"{lp} import_zones() is disabled, skipping")
         # logger.debug(f"{lp} ALL ZONES with imported zones => {imported_zones}")
@@ -164,7 +147,6 @@ class ZMApi:
         from pydantic import SecretStr
 
         g = get_global_config()
-        logger.debug(f"{lp} called")
         self.token_file = g.config.system.variable_data_path / "api_access_token"
         self.access_token: Optional[str] = ""
         self.refresh_token: Optional[str] = ""
