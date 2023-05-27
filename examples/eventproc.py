@@ -149,7 +149,6 @@ async def main():
         f"Config File: {cfg_file}"
     )
     g.config = parse_client_config_file(cfg_file)
-    logger.debug(f"{lp} INITIALIZING ZMCLIENT")
     zm_client = Client.ZMClient(global_config=g)
     _end_init = time.perf_counter()
     __event_modes = ["event", ""]

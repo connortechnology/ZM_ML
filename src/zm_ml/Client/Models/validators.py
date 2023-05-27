@@ -133,7 +133,6 @@ def validate_resolution(v, **kwargs):
                     f"Invalid resolution string: {v}. Valid strings are: W*H WxH W,H OR "
                     f"{', '.join(_RESOLUTION_STRINGS)}"
                 )
-    logger.debug(f"Validated Monitor Zone resolution: {v}")
     return v
 
 
