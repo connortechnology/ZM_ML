@@ -286,10 +286,6 @@ class OverRideObjectFilters(BaseObjectFilters):
         Dict[str, Union[BaseObjectFilters, "OverRideObjectFilters", Dict]]
     ] = None
 
-    # _normalize_areas = validator(
-    #     "total_max_area", "total_min_area", "max_area", "min_area", allow_reuse=True, pre=True, always=True
-    # )(percentage_and_pixels_validator)
-
 
 class ObjectFilters(BaseObjectFilters):
     pattern: Optional[Pattern] = None
