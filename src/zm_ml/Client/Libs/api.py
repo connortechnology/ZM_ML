@@ -233,11 +233,11 @@ class ZMApi:
             h, m = divmod(m, 60)
             if not grace_period:
                 grace_period = GRACE
-            logger.debug(
-                f"{lp} GRACE: {grace_period} --  ISSUED AT: {datetime.datetime.fromtimestamp(iat)}"
-                f" EXPIRES AT: {datetime.datetime.fromtimestamp(exp)} -- CURRENTLY: "
-                f"{datetime.datetime.fromtimestamp(now)}   -------- remaining seconds = {remaining}"
-            )
+            # logger.debug(
+            #     f"{lp} GRACE: {grace_period} --  ISSUED AT: {datetime.datetime.fromtimestamp(iat)}"
+            #     f" EXPIRES AT: {datetime.datetime.fromtimestamp(exp)} -- CURRENTLY: "
+            #     f"{datetime.datetime.fromtimestamp(now)}   -------- remaining seconds = {remaining}"
+            # )
         if not _login and not _relogin:
             if exp > now > (exp - grace_period):
                 logger.debug(
