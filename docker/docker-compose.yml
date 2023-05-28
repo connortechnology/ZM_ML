@@ -9,7 +9,7 @@ services:
     image: baudneo/zm_ml:server-full
     container_name: mlapi
     restart: always
-    # Need privileged for USB TPU access, comment out if not using TPU
+    # Need privileged for USB access, comment out if not using USB compute device
     privileged: true
     ports:
       - "5000:5000"
@@ -25,9 +25,14 @@ services:
       - ./mlapi/unknown_faces:/zm_ml/data/unknown_faces
       - ./mlapi/known_faces:/zm_ml/data/known_faces
       - ./mlapi/log:/log/zm_mlapi
+      # USB access for USB TPU/NCS (mount the whole USB system, unless you know which device it is)
+      #- /dev/bus/usb:/dev/bus/usb
 
-      # TPU access (mount the whole USB system, unless you know which device it is)
-#      - /dev/bus/usb:/dev/bus/usb
+    devices:
+      # This is a WIP aka DOES NOT WORK YET (OpenVINO)
+      #- "/dev/ion:/dev/ion"  # HDDL - Intel Neural Compute Stick 2 :: See
+      - "/dev/dri:/dev/dri" # Allow access to iGPU (QuickSync)
+
 
     env_file:
       - ./server.env
