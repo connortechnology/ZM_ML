@@ -78,9 +78,9 @@ class ZMDB:
                 logger.error(f"{lp} error opening ZoneMinder .conf files! -> {files}")
             else:
                 logger.debug(f"{lp} ZoneMinder .conf files -> {files}")
-                for section in config_file.sections():
-                    for key, value in config_file.items(section):
-                        logger.debug(f"{section} >>> {key} = {value}")
+                # for section in config_file.sections():
+                    # for key, value in config_file.items(section):
+                    #     logger.debug(f"{section} >>> {key} = {value}")
                 conf_data = config_file["zm_root"]
                 if not db_config.db_user:
                     db_config.db_user = conf_data["ZM_DB_USER"]
@@ -102,13 +102,11 @@ class ZMDB:
     def _check_conn(self):
         try:
             if not self.engine:
-                logger.debug(f"{LP} creating engine with {self.connection_str = } TYPE={type(self.connection_str)}")
+                # logger.debug(f"{LP} creating engine with {self.connection_str = } TYPE={type(self.connection_str)}")
                 self.engine = create_engine(self.connection_str, pool_recycle=3600)
             if not self.connection:
-                logger.debug(f"{LP} creating connection")
                 self.connection = self.engine.connect()
             if not self.meta:
-                logger.debug(f"{LP} creating meta")
                 self._refresh_meta()
         except SQLAlchemyError as e:
             logger.error(f"{self.connection_str = } :: TYPE={type(self.connection_str)}")
