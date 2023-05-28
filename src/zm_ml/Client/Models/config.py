@@ -162,6 +162,7 @@ class MLNotificationSettings(BaseModel):
 
     class ShellScriptNotificationSettings(DefaultNotEnabled):
         script: str = None
+        I_AM_AWARE_OF_THE_DANGER_OF_RUNNING_SHELL_SCRIPTS: str = 'No I am not'
 
     class WebHookNotificationSettings(DefaultNotEnabled):
         host: AnyUrl = None
