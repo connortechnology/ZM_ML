@@ -188,7 +188,6 @@ class CFGHash:
         self.hash = ""
         if config_file:
             from ...Shared.Models.validators import str_to_path
-            logger.debug(f"{lp} {config_file=}")
             self.config_file = str_to_path(config_file)
 
     def compute(
@@ -231,7 +230,7 @@ class CFGHash:
         else:
             self.hash = checksum.hexdigest()
             logger.debug(
-                f"{lp} the hex-digest for file '{self.config_file.as_posix()}' -> {self.hash}"
+                f"{lp} the hex-digest for file '{self.config_file.expanduser().resolve().as_posix()}' -> {self.hash}"
             )
         return self.hash
 

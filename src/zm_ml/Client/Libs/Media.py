@@ -123,9 +123,9 @@ class APIImagePipeLine:
         lp = f"{LP}read:"
         if self.frames_processed > 0:
             logger.debug(
-                f"{lp} [{self.frames_processed}/{self.total_max_frames} frames processed: {self._processed_fids}] "
-                f"- [{self.frames_skipped}/{self.total_max_frames} frames skipped: {self._skipped_fids}] - "
-                f"[{self.frames_attempted}/{self.total_max_frames} frames attempted: {self._attempted_fids}]"
+                f"{lp} [{self.frames_processed}/{self.total_max_frames} frames processed: {sorted(list(self._processed_fids), reverse=True)}] "
+                f"- [{self.frames_skipped}/{self.total_max_frames} frames skipped: {sorted(list(self._skipped_fids), reverse=True)}] - "
+                f"[{self.frames_attempted}/{self.total_max_frames} frames attempted: {sorted(list(self._attempted_fids), reverse=True)}]"
             )
         else:
             logger.debug(f"{lp} processing first frame!")
