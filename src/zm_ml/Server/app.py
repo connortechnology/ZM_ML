@@ -4,7 +4,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from platform import python_version
-from typing import Union, Dict, List, Optional
+from typing import Union, Dict, List, Optional, Any
 
 try:
     import cv2
@@ -42,6 +42,7 @@ from .Models.config import (
 from ..Shared.Models.Enums import ModelType, ModelFrameWork, ModelProcessor
 from .Log import SERVER_LOGGER_NAME, SERVER_LOG_FORMAT, SERVER_LOG_FORMAT_S6
 from zm_ml.Shared.Log.handlers import BufferedLogHandler
+from .ML.Detectors.color_detector import ColorDetector
 
 __version__ = "0.0.1a"
 __version_type__ = "dev"
@@ -282,6 +283,7 @@ class MLAPI:
     cached_settings: Settings
     cfg_file: Path
     server: uvicorn.Server
+    color_detector: Any
 
     def __init__(self, cfg_file: Union[str, Path], run_server: bool = False):
         """
