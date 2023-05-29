@@ -15,13 +15,19 @@ class Gotify:
     def __init__(self):
         global g
         g = get_global_config()
-        self.noti_cfg = g.config.notifications
-        self.config = self.noti_cfg.gotify
+        self.config = g.config.notifications.gotify
         self.title = f"({g.eid}) {g.mon_name}->{g.event_cause}"
         self.message = ''
 
+    def check_cooldown(self):
+
+        return True
+
 
     def send(self, pred_out: str):
+        if not self.check_cooldown():
+
+            return
         lp = "gotify::send::"
         url_opts = self.config.url_opts
         _mode = url_opts.mode
