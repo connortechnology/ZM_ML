@@ -2060,11 +2060,10 @@ class ZMClient:
             if new_notes != old_notes:
                 try:
                     events_url = f"{g.api.api_url}/events/{g.eid}.json"
-                    g.api.make_request(
+                    g.api.make_async_request(
                         url=events_url,
                         payload={"Event[Notes]": new_notes},
                         type_action="put",
-                        # quiet=True,
                     )
                 except Exception as custom_push_exc:
                     logger.error(
