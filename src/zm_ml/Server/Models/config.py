@@ -592,6 +592,12 @@ class PyTorchModelConfig(BaseModelConfig):
     pass
 
 
+class ColorDetectSettings(BaseModel):
+    enabled: bool = Field(True, description="Enable Color Detection")
+    n_most_common: int = Field(4, ge=1, description="Number of dominant colors to detect")
+    labels: List[str] = Field(None, description="List of labels to run color detection on")
+
+
 def _replace_vars(search_str: str, var_pool: Dict) -> Dict:
     """Replace variables in a string.
 
