@@ -11,26 +11,25 @@ from pydantic import BaseModel, Field, AnyUrl
 
 from ..main import get_global_config
 from ...Shared.configs import GlobalConfig
-from ..Models.config import MLNotificationSettings
 from ..Log import CLIENT_LOGGER_NAME
+from ..Notifications import CoolDownBase
 
 logger = logging.getLogger(CLIENT_LOGGER_NAME)
 g: Optional[GlobalConfig] = None
 LP: str = "shell_script:"
 
-class ShellScriptNotification:
-    config: Optional[MLNotificationSettings.ShellScriptNotificationSettings]
-    def __init__(self, config: Optional[MLNotificationSettings.ShellScriptNotificationSettings] = None):
+
+class ShellScriptNotification(CoolDownBase):
+    _data_dir_str: str = "push/shell_script"
+
+    def __init__(self):
         global g
 
-        lp: str = "{LP}:init:"
-        logger.debug(f"{lp} creating object")
         g = get_global_config()
-        if config:
-            self.config = config
-        else:
-            logger.debug(f"{lp} No config passed, using global config")
-            self.config = g.config.notifications.shell_script
+        self.config = g.config.notifications.shell_script
+        self.data_dir = g.config.system.variable_data_path / self._data_dir_str
+        super().__init__()
+
 
 
     def run(self):

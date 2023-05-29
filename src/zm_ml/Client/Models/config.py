@@ -84,6 +84,12 @@ class NotificationZMURLOptions(BaseModel):
     replay: str = Field("single")
 
 
+class CoolDownSettings(DefaultNotEnabled):
+    seconds: float = Field(60.00, ge=0.0, description="Seconds to wait before sending another notification")
+class OverRideCoolDownSettings(CoolDownSettings):
+    linked: Optional[list[str]] = Field(default_factory=list, description="List of linked monitors")
+
+
 class MLNotificationSettings(BaseModel):
     class ZMNinjaNotificationSettings(BaseModel):
         class ZMNinjaFCMSettings(BaseModel):
@@ -102,6 +108,7 @@ class MLNotificationSettings(BaseModel):
             android_ttl: int = Field(0)
 
         enabled: bool = Field(True)
+        cooldown: CoolDownSettings = Field(default_factory=CoolDownSettings)
         fcm: ZMNinjaFCMSettings = Field(default_factory=ZMNinjaFCMSettings)
 
     class GotifyNotificationSettings(BaseModel):
@@ -114,6 +121,7 @@ class MLNotificationSettings(BaseModel):
         link_user: Optional[SecretStr] = None
         link_pass: Optional[SecretStr] = None
         _push_auth: Optional[SecretStr] = None
+        cooldown: CoolDownSettings = Field(default_factory=CoolDownSettings)
 
         url_opts: NotificationZMURLOptions = Field(
             default_factory=NotificationZMURLOptions
@@ -143,7 +151,7 @@ class MLNotificationSettings(BaseModel):
         key: str = Field(...)
         animation: SendAnimations = Field(default_factory=SendAnimations)
         sounds: Dict[str, str] = Field(default_factory=dict)
-        cooldown: float = Field(gt=0.0, default=30.00)
+        cooldown: CoolDownSettings = Field(default_factory=CoolDownSettings)
         device: Optional[str] = None
         url_opts: NotificationZMURLOptions = Field(
             default_factory=NotificationZMURLOptions
@@ -162,17 +170,8 @@ class MLNotificationSettings(BaseModel):
 
     class ShellScriptNotificationSettings(DefaultNotEnabled):
         script: str = None
+        cooldown: CoolDownSettings = Field(default_factory=CoolDownSettings)
         I_AM_AWARE_OF_THE_DANGER_OF_RUNNING_SHELL_SCRIPTS: str = 'No I am not'
-
-    class WebHookNotificationSettings(DefaultNotEnabled):
-        host: AnyUrl = None
-        token: str = None
-        ssl_verify: bool = Field(True)
-
-        # validators
-        _validate_host_portal = validator("host", allow_reuse=True, pre=True)(
-            validate_no_scheme_url
-        )
 
     class MQTTNotificationSettings(BaseModel):
         class MQTTAnimationSettings(DefaultNotEnabled):
@@ -217,7 +216,7 @@ class MLNotificationSettings(BaseModel):
     shell_script: ShellScriptNotificationSettings = Field(
         default_factory=ShellScriptNotificationSettings
     )
-    webhook: WebHookNotificationSettings = Field(default_factory=WebHookNotificationSettings)
+
 
 
 class APIPullMethod(DefaultNotEnabled):

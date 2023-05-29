@@ -10,22 +10,23 @@ import paho.mqtt.client as mqtt_client
 
 from .. import get_global_config
 from ...Shared.configs import GlobalConfig
-from ..main import CLIENT_LOGGER_NAME
+from ..Log import CLIENT_LOGGER_NAME
+from ..Notifications import CoolDownBase
 
-g: GlobalConfig
+g: Optional[GlobalConfig] = None
 
 wasConnected = False
 Connected = False  # global variable for the state of the connection
 
 logger = logging.getLogger(CLIENT_LOGGER_NAME)
-
+LP: str = "MQTT:"
 
 def on_log(client, userdata, level, buf):
-    logger.debug(1, f"mqtt:paho_log: {buf}")
+    logger.debug(f"{LP}paho_log: {buf}")
 
 
 def on_connect(client, userdata, flags, rc):
-    lp = "mqtt:connect: "
+    lp = f"{LP}connect: "
     if rc == 0:
         logger.debug(f"{lp} connected to broker with flags-> {flags}")
         global Connected, wasConnected  # Use global variable
@@ -36,16 +37,16 @@ def on_connect(client, userdata, flags, rc):
 
 
 def on_publish(client, userdata, mid):
-    logger.debug(f"mqtt:on_publish: message_id: {mid = }")
+    logger.debug(f"{LP}on_publish: message_id: {mid = }")
 
 
-class MQTT:
-    """Create an MQTT object to publish
+class MQTT(CoolDownBase):
+    """Create an MQTT object to publish data
     config: (dict)
     config_file: path to a config file to read
     secrets: same as config but for secrets
-
     """
+    _data_dir_str: str = "push/mqtt"
 
     def __init__(
         self,
@@ -65,8 +66,9 @@ class MQTT:
         g = get_global_config()
         self.ssl_cert = ssl.CERT_REQUIRED  # start with strict cert checking/verification of CN
         cfg = self.config = g.config.notifications.mqtt
-        self.sanitize = g.config.logging.sanitize
-        self.sanitize_str = g.config.logging.sanitize_string
+        self.data_dir = g.config.system.variable_data_path / self._data_dir_str
+        self.sanitize = g.config.logging.sanitize.enabled
+        self.sanitize_str = g.config.logging.sanitize.replacement_str
         self.tls_allow_self_signed = cfg.allow_self_signed
         # config and secrets
         self.user = self.config.user
@@ -88,6 +90,8 @@ class MQTT:
         self.qos = self.config.qos
         self.client_id = "zm_ml-"
         self._image: Any = None
+        self.data_dir = g.config.system.variable_data_path / self._data_dir_str
+        super().__init__()
 
     @staticmethod
     def is_connected():
@@ -111,14 +115,14 @@ class MQTT:
         """
         if _type == "byte":
             logger.debug(
-                f"mqtt:grab_image: converting to byte array"
+                f"{LP}grab_image: converting to byte array"
             )
             image = bytearray(image.to_bytes())
         else:
             import base64
 
             logger.debug(
-                f"mqtt:grab_image: converting to BASE64"
+                f"{LP}grab_image: converting to BASE64"
             )
             image = base64.b64encode(image.to_bytes()).decode("utf-8")
         return image

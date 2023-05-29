@@ -14,7 +14,8 @@ from pydantic import BaseModel, Field, AnyUrl
 
 from ..main import get_global_config
 from ...Shared.configs import GlobalConfig
-from ..main import CLIENT_LOGGER_NAME
+from ..Log import CLIENT_LOGGER_NAME
+from ..Notifications import CoolDownBase
 
 logger = logging.getLogger(CLIENT_LOGGER_NAME)
 g: Optional[GlobalConfig] = None
@@ -142,22 +143,24 @@ class RequestData(BaseModel):
     #         return values
 
 
-class Pushover:
+class Pushover(CoolDownBase):
     _request_data: RequestData = RequestData()
     _urls: PushoverURLs = PushoverURLs()
     _optionals: Optionals = Optionals()
     _limits: Limits = Limits()
     _push_auth: str = ""
+    _data_dir_str: str = "push/pushover"
 
 
     def __init__(self):
         """Create a Pushover object to interact with the pushover service"""
         global g
         g = get_global_config()
-        from ..Models.config import MLNotificationSettings
-        self.config: MLNotificationSettings.PushoverNotificationSettings = g.config.notifications.pushover
-        lp: str = "pushover::init::"
-        logger.debug(f"{lp} creating Pushover object")
+        self.config = g.config.notifications.pushover
+        self.lp: str = "PushOver:"
+        self.data_dir = g.config.system.variable_data_path / self._data_dir_str
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        super().__init__()
 
     @property
     def image(self):
