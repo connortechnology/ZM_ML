@@ -1,8 +1,12 @@
 import time
 from logging import getLogger
 from typing import Optional
-
-import cv2
+from warnings import warn
+try:
+    import cv2
+except ImportError:
+    warn("OpenCV not installed, cannot use OpenCV detectors")
+    raise
 import numpy as np
 
 from ....Models.config import BaseModelOptions, BaseModelConfig, CV2YOLOModelConfig
@@ -10,7 +14,7 @@ from .....Shared.Models.Enums import ModelProcessor
 from .cv_base import CV2Base
 
 LP: str = "OpenCV:YOLO:"
-from zm_ml.Server.Log import SERVER_LOGGER_NAME
+from ....Log import SERVER_LOGGER_NAME
 logger = getLogger(SERVER_LOGGER_NAME)
 # TODO: Choose what models to load and keep in memory and which to load and drop for memory constraints
 

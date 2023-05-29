@@ -155,8 +155,7 @@ class Pushover:
         global g
         g = get_global_config()
         from ..Models.config import MLNotificationSettings
-        self.noti_cfg: MLNotificationSettings = g.config.notifications
-        self.config = self.noti_cfg.pushover
+        self.config: MLNotificationSettings.PushoverNotificationSettings = g.config.notifications.pushover
         lp: str = "pushover::init::"
         logger.debug(f"{lp} creating Pushover object")
 

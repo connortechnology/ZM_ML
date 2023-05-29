@@ -901,8 +901,6 @@ def install_host_dependencies(_type: str):
         deps = []
         deps_cmd = []
 
-        import subprocess
-
         if _type == "server":
             _msg = "Installing server HOST dependencies..."
             test_msg(_msg)
