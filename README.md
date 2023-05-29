@@ -1,11 +1,13 @@
-# Please support ZoneMinder!
+# Please support ZoneMinder if you can!
 If you use software from the [ZoneMinder organization](https://github.com/ZoneMinder)
 please consider [sponsoring ZoneMinder](https://github.com/sponsors/ZoneMinder). ZoneMinder has been free with
 a paid support option and paid bounties but, it has come to the communities attention that the main/only dev of
 ZM needs help with bringing cash flow in. If you have the means, please consider sponsoring ZoneMinder, Thanks!
 
 # ZoneMinder Machine Learning Library (ZM ML)
-**Try the GPU/TPU accelerated Server docker image!** [docker.io/baudneo/zm_ml:server-full](https://hub.docker.com/r/baudneo/zm_ml)
+**Try the x86_64 GPU/TPU accelerated Server docker image!** [docker.io/baudneo/zm_ml:server-full](https://hub.docker.com/r/baudneo/zm_ml)
+### NOTE
+**This software is currently in alpha stage, expect issues. That said, it is fairly fast. YMMV.**
 
 This is a project aiming to update how [ZoneMinder](https://github.com/ZoneMinder/zoneminder) Object Detection works.
 A server and client are supplied to allow for easy integration with ZoneMinder.
@@ -16,8 +18,8 @@ accelerated using an NVIDIA GPU or Coral.ai EdgeTPU (USB confirmed working, othe
 The Server offers object detection, face detection, face recognition and Automatic License Plate Recognition (ALPR). 
 There are plans to add TensorRT, OpenVINO, PyTorch, [deepface](https://github.com/serengil/deepface) and TensorFlow support.
 
-The client is installed on the ZoneMinder machine, grabs and sends images to a ZM ML server for
-inference and then processes the results to annotate images, create animations and send notifications.
+The client is an asynchronous (mostly) script installed on the ZoneMinder machine, grabs and sends images to a ZM ML server for
+inference and then processes the results to annotate images, create animations and send notifications, if configured to do so.
 
 ## Thanks
 
@@ -30,6 +32,7 @@ inference and then processes the results to annotate images, create animations a
 ## Prerequisites for Server and Client
 
 - ZoneMinder 1.37.5+ (*EventStartCommand* is **REQUIRED**)
+  - debian based distros can [build a .deb package for the 1.37 dev branch](https://gist.github.com/baudneo/d352c5a944a5d1371c9dfe455056e0a2)
 - Python 3.8+ (3.9 recommended)
 - Python packages required by the [install script](examples/install.py)
   - `psutil`
@@ -44,9 +47,12 @@ inference and then processes the results to annotate images, create animations a
 1. [**EventStartCommand**/**EventEndCommand**](https://zoneminder.readthedocs.io/en/latest/userguide/definemonitor.html#recording-tab:~:text=events%20are%20recorded.-,Event%20Start%20Command,the%20command%20will%20be%20the%20event%20id%20and%20the%20monitor%20id.,-Viewing%20Tab) is what runs the object detection script. Before, SHM was polled every \<X> seconds to see if a new event had been triggered.
 
 ## Installation
+### Manual Install
+See the Wiki for [Manual Installation](https://github.com/baudneo/ZM_ML/wiki/Manual-Installation) instructions.
+
 **Try the GPU/TPU accelerated** [Docker image](https://hub.docker.com/repository/docker/baudneo/zm_ml)!
 
-### Bootstrap
+### Bootstrap (WIP)
 **NOTE: bootstrap is a WIP**
 - Download the file first and read it before running
     - ```bash 
@@ -56,8 +62,6 @@ inference and then processes the results to annotate images, create animations a
     - ```bash
       curl -H 'Cache-Control: no-cache' -s https://raw.githubusercontent.com/baudneo/ZM_ML/master/examples/bootstrap | bash /dev/stdin --help 
       ```
-### Manual Install
-See the Wiki for [Manual Installation]() instructions.
 
 # Server
 1. Based on [FastAPI](https://fastapi.tiangolo.com/ "FastAPI") (With all the Pydantic goodness!)
@@ -67,6 +71,7 @@ See the Wiki for [Manual Installation]() instructions.
 5. [pycoral](https://github.com/google-coral/pycoral) (tflite) for TPU support.
 6. DLib based [face-recognition](https://github.com/ageitgey/face_recognition) (GPU Recommended)
 7. Run locally on ZoneMinder machine or deploy to a remote machine.
+8. Docker images! [Docker Hub](https://hub.docker.com/repository/docker/baudneo/zm_ml)
 
 ## Server - Docker
 
