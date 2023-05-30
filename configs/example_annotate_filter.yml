@@ -1,0 +1,288 @@
+# Same as ZM ML, allows for ${} wrapped BASH like variables to be substituted
+testing:
+  enabled: no
+  substitutions:
+    You can override the normal substitutions section completely when testing: "sweet"
+
+
+substitutions:
+  DATA_DIR: /opt/zm_ml/data
+  TMP_DIR: /opt/zm_ml/tmp
+  CFG_DIR: /etc/zm
+  LOGGING_DIR: /var/log/zm
+  MODEL_DIR: /opt/zm_ml/data/models
+  # This file contains substitutions that will be imported into this file (secrets)
+  # NOTE: The 'IncludeFile' directive must be contained in the 'substitutions' section
+  IncludeFile: /etc/zm/secrets.yml
+
+
+system:
+  # Override the default config path [/etc/zm]
+  config_path: ${CFG_DIR}
+  # Path where the system will store variable data [/opt/zmml/data]
+  variable_data_path: ${DATA_DIR}
+  # Path where temp files will be stored, leave empty to auto-detect
+  tmp_path: ${TMP_DIR}
+  # Path to where any images will be stored
+  image_dir: ${DATA_DIR}/images
+  # Maximum parallel threaded processes (set to cores)
+  thread_workers: 4
+
+zoneminder:
+  api: ${ZM_API}
+  portal: ${ZM_PORTAL}
+  user: ${ZM_USER}
+  password: ${ZM_PASS}
+  # a value of 'no' will allow self-signed certs
+  ssl_verify: no
+  headers:
+    # Add custom headers to all requests
+    # This is useful for adding custom headers to ZM API requests
+    # You can put CloudFlare ZeroTrust Access headers here as well
+
+    #CF-Access-Client-Secret: ${ZM_CF_0TRUST_SECRET}
+    #CF-Access-Client-Id: ${ZM_CF_0TRUST_HEADER}
+
+label_groups:
+  # These are 'groups' of labels that can be used for per monitor filtering
+  animals:
+    - dog
+    - cat
+    - bird
+    - horse
+    - mouse
+  vehicles:
+    - car
+    - truck
+    - bus
+    - motorbike
+    - boat
+  # For face detection/recognition
+  friends:
+    - Bart
+    - Maggie
+    - Lisa
+  foes:
+    - Nelson
+    - Sideshow Bob
+    - Mr. Burns
+
+models:
+  # Default dict of Models that will run if not specified per monitor
+  # NOTE: You can override these settings per monitor
+#    yolov4 tiny:
+#    yolov7 tiny:
+  yolov4:
+#    yolov4-p6:
+#    yolov7:
+#    yolov7x:
+  # TEST for TPU
+#    tpu test:
+  # Dlib face detection/recognition test
+#    dlib face:
+
+# Import zones defined in ZM
+import_zones: yes
+
+
+filters:
+  # This is globally applied to all monitors but can be overridden on a per monitor basis
+  object:
+    min_conf: 0.42069
+    pattern: "(DEFAULT PATTERN|car|truck|bus|person|dog|cat)"
+    total_max_area: 100%
+    total_min_area: 1px
+  face:
+    pattern: ".*"
+  alpr:
+    pattern: ".*"
+    min_conf: 0.456
+
+monitors:
+# Override settings based on which monitor an event was triggered by
+  6:
+    name: Front
+    # -- Cooldown between notifications config
+    cooldown:
+      enabled: yes
+      seconds: 60
+      # -- 'Link' monitors into a group. 'linked:' is only available in the Monitor section.
+      # -- If any monitor in the group is within the cooldown period, nothing is sent.
+      # -- If you have multiple cameras covering the same area, you can link them together.
+#      linked:
+#        - 1
+#        - 2
+
+    # -- Monitor level - static objects
+    static_objects:
+      enabled: no
+      # -- difference in area between current and previous detection
+      difference: 18%
+      # only check if these labels are static (label_groups supported)
+      labels:
+        - car
+
+    # Monitor level filters (these override global filters and can be overridden by zone level filters)
+    filters:
+      object:
+        min_conf: .498
+        pattern: "(MONITOR LEVEL PATTERN|person|dog|cat)"
+    zones:
+      # -- These are zones that are defined in the config file on top of imported ZoneMinder zones
+      # -- If you import ZM zones you can add a ML config for that zone here.
+      # -- Example: If the imported zone is named "Yard", this would set the ML config for it.
+      Yard:
+        enabled: yes
+        # zone level filters (these override global and monitor level filters)
+        filters:
+          static_objects:
+            enabled: no
+          object:
+            # min_conf for the zone
+            min_conf: .499
+            pattern: "(person|dog|cat)"
+            # -- Per label filtering (label_groups supported)
+            # -- Trained faces are labeled with the name of the person it was trained for
+            labels:
+              # filters for 'person' label
+              person:
+                # min_conf for 'person' label in this zone
+                min_conf: 0.5
+                # -- The minimum and maximum area of the detection box in pixels or percentage of the zone.
+                # -- (how much of the zone is covered by the detection box)
+#                min_area: 10px
+#                max_area: 10%
+                # -- The minimum and maximum area of the detection box in pixels or percentage of the full image.
+                # -- (how much of the image is covered by the detection box)
+#                total_min_area: 10px
+#                total_max_area: 10%
+          face:
+            # -- You can specify trained face names here, only pattern supported currently
+            pattern: ".*"
+            # pattern: "(James|Addison)"
+          alpr:
+            # -- Only pattern and min_conf supported
+            pattern: ".*"
+            min_conf: 0.1
+
+  7:
+    # name is for for user convenience
+    name: Front Doorbell
+    # -- object confirm is WIP. If more than 1 model, try and confirm that the object is relatively the same in both models
+    object_confirm: no
+    # -- static objects
+    static_objects:
+      enabled: no
+      # -- difference in area between current and previous detection
+      difference: 18%
+      # only check if these labels are static (label_groups supported)
+      labels:
+        - car
+
+    # Monitor level filters (these override global filters and can be overridden by zone level filters)
+    filters:
+      object:
+        min_conf: .5
+        pattern: "(MONITOR LEVEL PATTERN|person|dog|cat)"
+
+    zones:
+      front door:
+        enabled: yes
+        # Polygon points. Use ZM zone editor to draw the polygon and copy the points here
+        points: 0,700 1430,700 1430,1080 0,1080
+        resolution: 1080p
+        filters:
+          static_objects:
+            enabled: no
+          object:
+            pattern: "(ZONE LEVEL PATTERN|person)"
+            # -- Per label filtering (label_groups supported)
+            # -- Trained faces are labeled with the name of the person
+            labels:
+              person:
+                min_conf: 0.5
+                # -- The minimum and maximum area of the detection box in pixels or percentage of the zone.
+                # -- (how much of the zone is covered by the detection box)
+                min_area: 1px
+#                max_area: 10%
+                # -- The minimum and maximum area of the detection box in pixels or percentage of the full image.
+                # -- (how much of the image is covered by the detection box)
+                total_min_area: 1px
+#                total_max_area: 10%
+          face:
+            # -- You can specify trained face names here, only pattern supported currently
+            pattern: ".*"
+            # pattern: "(James|Addison)"
+
+  2:
+    name: Back yard
+    filters:
+      static_objects:
+        enabled: no
+    # back yard
+    zones:
+      just yard:
+        enabled: yes
+        # Polygon points. Use ZM zone editor to draw the polygon and copy the points here
+        points: 0,435 660,85 1285,40 1910,160 1920,1080 0,1080
+        resolution: 1080p
+
+        filters:
+          static_objects:
+            enabled: no
+          object:
+            pattern: "(person)"
+            # -- Per label filtering (label_groups supported)
+            # -- Trained faces are labeled with the name of the person
+            labels:
+              person:
+                min_conf: 0.5
+                # -- The minimum and maximum area of the detection box in pixels or percentage of the zone.
+                # -- (how much of the zone is covered by the detection box)
+                min_area: 1px
+                #                max_area: 10%
+                # -- The minimum and maximum area of the detection box in pixels or percentage of the full image.
+                # -- (how much of the image is covered by the detection box)
+                total_min_area: 1px
+          #                total_max_area: 10%
+          face:
+            # -- You can specify trained face names here, only pattern supported currently
+            pattern: ".*"
+            # pattern: "(James|Addison)"
+
+  5:
+    name: Alley
+    filters:
+      static_objects:
+        enabled: no
+    zones:
+      back alley:
+        enabled: yes
+        # Polygon points. Use ZM zone editor to draw the polygon and copy the points here
+        points: 0,180 1920,180 1920,1080 0,1080
+        resolution: 1080p
+        filters:
+          static_objects:
+            enabled: no
+          object:
+            pattern: "(person|car|truck|bus|dog|cat|bicycle|motorcycle)"
+            # -- Per label filtering (label_groups supported)
+            # -- Trained faces are labeled with the name of the person
+            labels:
+              person:
+                min_conf: 0.5
+                # -- The minimum and maximum area of the detection box in pixels or percentage of the zone.
+                # -- (how much of the zone is covered by the detection box)
+                min_area: 1px
+#                max_area: 10%
+                # -- The minimum and maximum area of the detection box in pixels or percentage of the full image.
+                # -- (how much of the image is covered by the detection box)
+                total_min_area: 1px
+#                total_max_area: 10%
+          face:
+            # -- You can specify trained face names here, only pattern supported currently
+            pattern: ".*"
+            # pattern: "(James|Addison)"
+
+  3:
+    name: Garage Interior
