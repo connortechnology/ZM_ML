@@ -4,20 +4,23 @@ import logging
 import pickle
 import time
 from typing import Dict, List, Optional, Union, Tuple, TYPE_CHECKING
+import warnings
+try:
+    import aiohttp
+    import jwt
+    from pydantic import SecretStr
+    from requests import Response, Session
+    from requests.exceptions import HTTPError, JSONDecodeError
+    from urllib3 import disable_warnings
+    from urllib3.exceptions import InsecureRequestWarning
+except ImportError as e:
+    warnings.warn(f"ImportError: {e}")
 
-import aiohttp
-import jwt
-from pydantic import SecretStr
-from requests import Response, Session
-from requests.exceptions import HTTPError, JSONDecodeError
-from urllib3 import disable_warnings
-from urllib3.exceptions import InsecureRequestWarning
-
-from ..Log import CLIENT_LOGGER_NAME
-from ..Models.config import ZoneMinderSettings, MonitorsSettings
+from ...Log import CLIENT_LOGGER_NAME
+from ...Models.config import ZoneMinderSettings, MonitorsSettings
 
 if TYPE_CHECKING:
-    from ...Shared.configs import GlobalConfig
+    from ....Shared.configs import GlobalConfig
 
 GRACE: int = 60 * 5  # 5 mins
 lp: str = "api::"
@@ -65,7 +68,7 @@ class ZMAPI:
                             )
                             continue
 
-                        from ..Models.config import MonitorZones
+                        from ...Models.config import MonitorZones
 
                         if not mid_cfg:
                             logger.debug(
@@ -146,7 +149,7 @@ class ZMAPI:
     def __init__(self, config: ZoneMinderSettings):
         lp: str = f"{LP}init::"
         global g
-        from ..main import get_global_config
+        from ...main import get_global_config
         from pydantic import SecretStr
 
         g = get_global_config()
