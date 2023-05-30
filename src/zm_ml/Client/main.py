@@ -11,18 +11,27 @@ import signal
 from pathlib import Path
 from shutil import which
 from time import perf_counter, time
+import warnings
 from typing import Union, Dict, Optional, List, Any, Tuple
 
 try:
     import cv2
 except ImportError:
     cv2 = None
-    raise ImportError("OpenCV is not installed!")
-
-import numpy as np
-import yaml
-from pydantic import BaseModel, Field
-from shapely.geometry import Polygon
+    warnings.warn(
+        "OpenCV is not installed. This is required for image processing. "
+        "Please install OpenCV to enable image processing."
+    )
+try:
+    import numpy as np
+    import yaml
+    from pydantic import BaseModel, Field
+    from shapely.geometry import Polygon
+except ImportError as e:
+    warnings.warn(
+        f"Some dependencies are not installed. Please install them to enable "
+        f"all features. {e}"
+    )
 
 from .Libs.Media import APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine
 from .Libs.API import ZMAPI
