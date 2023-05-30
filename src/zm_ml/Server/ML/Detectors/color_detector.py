@@ -4,11 +4,11 @@ Use ML to find a car, truck, etc. crop the bounding box and pass the image to th
 Understand that if CCTV IR is on, you will only get black/white/grey spectrum.
 """
 
-from pathlib import Path
+from logging import getLogger
 from time import perf_counter
 from typing import List
-from logging import getLogger
 from warnings import warn
+
 try:
     import cv2
 except ImportError:
@@ -18,14 +18,14 @@ import numpy as np
 from sklearn.cluster import KMeans
 import webcolors
 
-from ..file_locks import FileLock
+from ...Log import SERVER_LOGGER_NAME
+
 
 LP: str = "color detect:"
-from ...Log import SERVER_LOGGER_NAME
 logger = getLogger(SERVER_LOGGER_NAME)
 # TODO: Make it a detector and have it initialized during init
 
-class ColorDetector(FileLock):
+class ColorDetector:
     kmeans: KMeans
 
     def __init__(self, config):
