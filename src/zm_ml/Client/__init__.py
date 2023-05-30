@@ -2,7 +2,6 @@ from . import Libs
 from . import Models
 from . import Notifications
 from . import Log
-from . import main
 from .Models.validators import (
     validate_points,
     validate_resolution,
