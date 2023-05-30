@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import glob
 import logging
 from configparser import ConfigParser
@@ -7,10 +6,16 @@ from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Optional, Union, Tuple, TYPE_CHECKING
+import warnings
 
-from sqlalchemy import MetaData, create_engine, select
-from sqlalchemy.engine import Engine, Connection, CursorResult
-from sqlalchemy.exc import SQLAlchemyError
+try:
+    from sqlalchemy import MetaData, create_engine, select
+    from sqlalchemy.engine import Engine, Connection, CursorResult
+    from sqlalchemy.exc import SQLAlchemyError
+except ImportError:
+    warnings.warn(
+        "SQLAlchemy not installed, ZMDB will not be available", ImportWarning
+    )
 
 from ...Log import CLIENT_LOGGER_NAME
 from ...Models.config import ZMDBSettings
