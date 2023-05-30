@@ -239,7 +239,7 @@ class FaceRecognitionLibDetector(FileLock):
                 logger.debug(
                     f"perf:{LP} recognition sequence took {time.perf_counter() - comparing_timer:.5f} s"
                 )
-
+        self.release_lock()
         return {
             "success": True if labels else False,
             "type": self.config.model_type,
