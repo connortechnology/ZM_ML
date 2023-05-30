@@ -16,7 +16,7 @@ from typing import Optional
 import uvloop
 import asyncio
 
-from zm_ml import Client
+import zm_ml
 from zm_ml.Shared.Models.validators import str_to_path
 from zm_ml.Shared.configs import GlobalConfig
 from zm_ml.Client.Models.config import ClientEnvVars
@@ -150,7 +150,7 @@ async def main():
         f"Config File: {cfg_file}"
     )
     g.config = parse_client_config_file(cfg_file)
-    zm_client = Client.ZMClient(global_config=g)
+    zm_client = zm_ml.Client.ZMClient(global_config=g)
     _end_init = time.perf_counter()
     __event_modes = ["event", ""]
     if _mode in __event_modes:
