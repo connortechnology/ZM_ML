@@ -5,17 +5,16 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Union, Dict, List, Type, Optional, TYPE_CHECKING
 
-from pydantic import BaseSettings, Field, IPvAnyAddress, AnyUrl, SecretStr, validator, BaseModel
+from pydantic import Field, BaseModel
 
-from .Models.validators import _validate_replace_localhost, _validate_dir, _validate_file
-from ..Client.Libs.API import ZMAPI
 from ..Client.Log import CLIENT_LOGGER_NAME
-from ..Client.Models.config import ConfigFileModel
-from ..Client.Libs.DB import ZMDB
 from ..Server.Log import SERVER_LOGGER_NAME
 
 if TYPE_CHECKING:
+    from ..Client.Libs.DB import ZMDB
+    from ..Client.Libs.API import ZMAPI
     from ..Client.Models.config import ClientEnvVars
+    from ..Client.Models.config import ConfigFileModel
 
 # find loggers
 loggers = [logging.getLogger(name) for name in logging.root.manager.loggerDict]
@@ -89,7 +88,7 @@ class GlobalConfig(BaseModel):
     mon_colorspace: Optional[int] = None
     frame_buffer: Optional[Dict] = Field(default_factory=dict)
 
-    Environment: Optional[Union["ClientEnvVars"]] = None
+    Environment: Optional[Union[ClientEnvVars]] = None
     imported_zones: list = Field(default_factory=list)
     random: Dict = Field(default_factory=dict)
 

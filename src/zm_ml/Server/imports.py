@@ -11,7 +11,6 @@ from .Models.config import Settings, DetectionResult, BaseModelOptions, CV2YOLOM
 from ..Shared.Models.Enums import ModelType, ModelFrameWork, ModelProcessor, FaceRecognitionLibModelTypes, ALPRAPIType, \
     ALPRService
 
-from ..Shared.configs import GlobalConfig
 
 __all__ = [
     "Settings", "DetectionResult", "BaseModelOptions", "CV2YOLOModelOptions", "FaceRecognitionLibModelOptions",
@@ -20,5 +19,5 @@ __all__ = [
     "CV2YOLOModelConfig", "FaceRecognitionLibModelConfig", "ALPRModelConfig", "CV2HOGModelConfig",
     "RekognitionModelConfig", "DeepFaceModelConfig", "CV2TFModelConfig", "PyTorchModelConfig", "APIDetector",
     "LockSettings", "ModelType", "ModelFrameWork", "ModelProcessor", "FaceRecognitionLibModelTypes", "ALPRAPIType",
-    "ALPRService", "GlobalConfig", "portalocker", "getLogger"
+    "ALPRService", "portalocker", "getLogger"
 ]
