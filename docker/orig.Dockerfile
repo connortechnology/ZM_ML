@@ -7,7 +7,7 @@ ARG DLIB_METHOD=release
 ARG DLIB_VERSION=19.22
 ARG ALPR_METHOD=branch
 ARG ALPR_VERSION=master
-# I think a minimum of 6.1 Compute Cabability required - these are GeForce cards
+# I think a minimum of 5.3 Compute Cabability required - these are GeForce cards
 # CHECK https://developer.nvidia.com/cuda-gpus#compute
 # 6.1 = 1050 thru to 1080ti includes TITAN X and TITAN XP
 # 7.0 = TITAN V
@@ -450,7 +450,7 @@ RUN set -x \
 
 ARG ZMML_VERSION=master
 # ZM ML Server Install
-#ARG CacheBust=1
+ARG CacheBust=1
 #COPY . /opt/zm_ml/src
 RUN set -x \
       && mkdir -p /opt/zm_ml/src \
