@@ -1,20 +1,14 @@
-import json
+from __future__ import annotations
 import logging
-from datetime import datetime, timedelta
-from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, TYPE_CHECKING
 
 import requests
 
-from ..main import get_global_config
-from ...Shared.configs import GlobalConfig
 from ..Log import CLIENT_LOGGER_NAME
 from ..Notifications import CoolDownBase
-from ..Models.config import (
-    MLNotificationSettings,
-    CoolDownSettings,
-    OverRideCoolDownSettings,
-)
+from ..main import get_global_config
+if TYPE_CHECKING:
+    from ...Shared.configs import GlobalConfig
 
 logger = logging.getLogger(CLIENT_LOGGER_NAME)
 g: Optional[GlobalConfig] = None

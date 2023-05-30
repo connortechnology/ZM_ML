@@ -1,15 +1,23 @@
+from __future__ import annotations
 import logging
 from hashlib import new
 from pathlib import Path
-from typing import List, Dict, Tuple, Optional, Union
+from typing import List, Dict, Tuple, Optional, Union, TYPE_CHECKING
+import warnings
 
-import requests
-from pydantic import SecretStr
-from shapely.geometry import Polygon
 import cv2
 import numpy as np
+from pydantic import SecretStr
+try:
+    import requests
+    from shapely.geometry import Polygon
+except ImportError as e:
+    warnings.warn(f"ImportError: {e}")
 
 from ..Log import CLIENT_LOGGER_NAME
+
+if TYPE_CHECKING:
+    from ..Libs.API import ZMAPI
 
 logger = logging.getLogger(CLIENT_LOGGER_NAME)
 
@@ -246,7 +254,7 @@ class CFGHash:
         return self.__repr__()
 
 
-from ..Libs.API import ZMAPI
+
 def get_push_auth(api: ZMAPI, user: SecretStr, pw: SecretStr, has_https: bool = False):
     from urllib.parse import urlencode, quote_plus
 
