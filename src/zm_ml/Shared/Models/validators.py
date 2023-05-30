@@ -4,6 +4,15 @@ import re
 from pathlib import Path
 from typing import Union
 
+
+def _validate_replace_localhost(v, field, values, config):
+    # logger.debug(f"Validating ENVVAR {field}: {v}")
+    if v:
+        if v == 'localhost':
+            v = "127.0.0.1"
+    return v
+
+
 def validate_no_scheme_url(v, field, values, config):
     _name_ = inspect.currentframe().f_code.co_name
     # logger.debug(f"{_name_}:: Validating '{field.name}' -> {v}")
@@ -72,4 +81,20 @@ def str_to_path(v: Union[str, Path, None], **kwargs):
     if v:
         assert isinstance(v, (Path, str))
         v = Path(v)
+    return v
+
+
+def _validate_dir(v, field=None, values=None, config=None):
+    if v:
+        v = str_to_path(v, field=field, values=values, config=config)
+        assert v.exists(), f"Path [{v}] does not exist"
+        assert v.is_dir(), f"Path [{v}] is not a directory"
+    return v
+
+
+def _validate_file(v, field=None, values=None, config=None):
+    if v:
+        v = str_to_path(v, field=field, values=values, config=config)
+        assert v.exists(), f"Path [{v}] does not exist"
+        assert v.is_file(), f"Path [{v}] is not a file"
     return v

@@ -246,8 +246,8 @@ class CFGHash:
         return self.__repr__()
 
 
-from ..Libs.api import ZMApi
-def get_push_auth(api: ZMApi, user: SecretStr, pw: SecretStr, has_https: bool = False):
+from ..Libs.api import ZMAPI
+def get_push_auth(api: ZMAPI, user: SecretStr, pw: SecretStr, has_https: bool = False):
     from urllib.parse import urlencode, quote_plus
 
     lp = "get_api_auth::"

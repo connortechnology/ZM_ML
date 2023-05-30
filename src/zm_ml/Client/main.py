@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from shapely.geometry import Polygon
 
 from .Libs.Media import APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine
-from .Libs.api import ZMApi
+from .Libs.api import ZMAPI
 from .Libs.zmdb import ZMDB
 from .Models.utils import CFGHash, get_push_auth, check_imports
 from .Models.config import (
@@ -40,9 +40,10 @@ from .Models.config import (
     OverRideAlprFilters,
     MatchStrategy,
     NotificationZMURLOptions,
+    ClientEnvVars
 )
 from ..Shared.Models.config import Testing
-from ..Shared.configs import ClientEnvVars, GlobalConfig
+from ..Shared.configs import GlobalConfig
 from .Log import CLIENT_LOGGER_NAME, CLIENT_LOG_FORMAT
 
 _PR: str = "print():"
@@ -54,10 +55,16 @@ logger = logging.getLogger(CLIENT_LOGGER_NAME)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.NullHandler())
 
-ENV_VARS: Optional[ClientEnvVars] = None
 g: Optional[GlobalConfig] = None
 LP: str = "Client::"
 logger: Optional[logging.Logger] = None
+
+
+def set_logger(l: logging.Logger) -> None:
+    global logger
+
+    logger = l
+    logger.info(f"{LP} Setting logger to {l.name}")
 
 def create_logs() -> logging.Logger:
     global logger
@@ -167,8 +174,11 @@ async def init_logs(config: ConfigFileModel) -> None:
     logger.info(f"Logging initialized...")
 
 
-def parse_client_config_file(cfg_file: Path) -> Optional[ConfigFileModel]:
+def parse_client_config_file(cfg_file: Path, template: Optional[Union[ConfigFileModel, Any]] = None) -> Optional[ConfigFileModel]:
     """Parse the YAML configuration file."""
+    if template is None:
+        template = ConfigFileModel
+    logger.debug(f"template type = {type(template)} {template=}")
     cfg: Dict = {}
     _start = perf_counter()
     raw_config = cfg_file.read_text()
@@ -226,7 +236,7 @@ def parse_client_config_file(cfg_file: Path) -> Optional[ConfigFileModel]:
         f"perf:: Config file loaded and validated in {perf_counter() - _start:.5f} seconds"
     )
 
-    return ConfigFileModel(**cfg)
+    return template(**cfg)
 
 
 def _replace_vars(search_str: str, var_pool: Dict) -> Dict:
@@ -418,8 +428,6 @@ class Notifications:
 
         if config.shell_script.enabled:
             self.shell_script = None
-        if config.webhook.enabled:
-            self.webhook = None
         if config.mqtt.enabled:
             self.mqtt = MQTT()
 
@@ -430,7 +438,7 @@ class ZMClient:
     raw_config: str
     parsed_cfg: Dict
     config: ConfigFileModel
-    api: ZMApi
+    api: ZMAPI
     db: ZMDB
     routes: List[ServerRoute]
     mid: int
@@ -482,6 +490,10 @@ class ZMClient:
         if global_config:
             logger.debug(f"{lp} Using supplied global config")
             set_global_config(global_config)
+        global g
+        g = get_global_config()
+        # DO env vars
+        g.Environment = ClientEnvVars()
         check_imports()
         self.zones: Dict = {}
         self.zone_polygons: List[Polygon] = []
@@ -533,7 +545,7 @@ class ZMClient:
         ) = self.db.grab_all(eid)
 
     def _init_api(self):
-        g.api = self.api = ZMApi(g.config.zoneminder)
+        g.api = self.api = ZMAPI(g.config.zoneminder)
         logger.debug(f"API initialized")
         self.notifications = Notifications()
 
@@ -993,7 +1005,7 @@ class ZMClient:
             logger.debug(
                 f"based on strategy of {strategy}, BEST MATCH IS {matched['labels']}"
             )
-            self.post_process(matched)
+            await self.post_process(matched)
             matched.pop("frame_img")
             logger.debug(f"Writing static_objects to disk")
             self.static_objects.pickle(
@@ -1838,7 +1850,6 @@ class ZMClient:
                 noti_cfg.mqtt.enabled,
                 noti_cfg.pushover.enabled,
                 noti_cfg.shell_script.enabled,
-                noti_cfg.webhook.enabled,
             ]
         ):
             futures: List[concurrent.futures.Future] = []
@@ -1891,10 +1902,10 @@ class ZMClient:
                     po.image = cv2.cvtColor(noti_img, cv2.COLOR_BGR2RGB)
                     po.optionals.cache_write = False if g.past_event else True
                     futures.append(executor.submit(po.send))
-                    logger.debug(f"{lp} Pushover notification configured, sending")
+                    logger.debug(f"{lp} Pushover notification configured")
 
                 if noti_cfg.gotify.enabled:
-                    logger.debug(f"{lp} Gotify notification configured, sending")
+                    logger.debug(f"{lp} Gotify notification configured")
                     goti = self.notifications.gotify
                     # gotify has no limits, so it can send a notification for each frame
                     goti.title = f"({g.eid}) {g.mon_name}->{g.event_cause}"
@@ -1920,7 +1931,7 @@ class ZMClient:
             logger.debug(f"{lp} No notifications configured, skipping")
         del noti_img
 
-    def post_process(self, matches: Dict[str, Any]) -> None:
+    async def post_process(self, matches: Dict[str, Any]) -> None:
         labels, scores, boxes = (
             matches["labels"],
             matches["confidences"],
@@ -2060,7 +2071,7 @@ class ZMClient:
             if new_notes != old_notes:
                 try:
                     events_url = f"{g.api.api_url}/events/{g.eid}.json"
-                    g.api.make_async_request(
+                    await g.api.make_async_request(
                         url=events_url,
                         payload={"Event[Notes]": new_notes},
                         type_action="put",

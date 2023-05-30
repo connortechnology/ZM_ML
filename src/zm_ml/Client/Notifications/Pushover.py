@@ -344,6 +344,8 @@ class Pushover(CoolDownBase):
     def send(self):
         """Send Pushover notification"""
         lp: str = "pushover::send::"
+        if not self.check_cooldown(g.mid):
+            return
         logger.debug(f"{lp} {self.request_data = }")
         if self.request_data.priority == Priorities.EMERGENCY:
             logger.debug(f"{lp} emergency priority, setting retry and expire")
@@ -411,13 +413,13 @@ class Pushover(CoolDownBase):
                 f"- reset counter Epoch: {self.limits.reset} "
                 f"({datetime.datetime.fromtimestamp(float(self.limits.reset))})"
             )
-            if self.optionals.cache_write:
-                if r_status == 1:
-                    self.pickle("w", time.time())
-                else:
-                    logger.error(
-                        f"{lp} pushover replied with FAILED: {json_}"
-                    )
+            if r_status == 1:
+                self.write_cooldown(g.mid)
+                # self.pickle("w", time.time())
+            else:
+                logger.error(
+                    f"{lp} pushover replied with FAILED: {json_}"
+                )
 
 
 def do_po_emerg(labels: List[str], *args, **kwargs) -> bool:

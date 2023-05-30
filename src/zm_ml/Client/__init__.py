@@ -10,7 +10,7 @@ from .Models.validators import (
 from ..Shared.Models.validators import validate_no_scheme_url, validate_octal, validate_log_level, str_to_path
 from .main import ZMClient, get_global_config, set_global_config, parse_client_config_file, CLIENT_LOG_FORMAT, \
     CLIENT_LOGGER_NAME
-from ..Shared.configs import GlobalConfig, ClientEnvVars
+from ..Shared.configs import GlobalConfig
 
 __all__ = [
     'CLIENT_LOG_FORMAT',
@@ -24,7 +24,6 @@ __all__ = [
     'validate_resolution',
     'validate_percentage_or_pixels',
     'GlobalConfig',
-    'ClientEnvVars',
     'parse_client_config_file',
     'CLIENT_LOGGER_NAME',
     'Log',

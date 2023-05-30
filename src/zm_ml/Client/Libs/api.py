@@ -13,7 +13,7 @@ import jwt
 import aiohttp
 from pydantic import SecretStr
 
-from ..Models.config import ZMAPISettings, MonitorsSettings
+from ..Models.config import ZoneMinderSettings, MonitorsSettings
 from ..Log import CLIENT_LOGGER_NAME
 
 GRACE: int = 60 * 5  # 5 mins
@@ -24,7 +24,7 @@ g = None
 LP: str = "api::"
 
 
-class ZMApi:
+class ZMAPI:
     async def import_zones(self):
         """A function to import zones that are defined in the ZoneMinder web GUI instead of defining
         zones in the per-monitor section of the configuration file.
@@ -140,7 +140,7 @@ class ZMApi:
         # logger.debug(f"{lp} ALL ZONES with imported zones => {imported_zones}")
         return imported_zones
 
-    def __init__(self, config: ZMAPISettings):
+    def __init__(self, config: ZoneMinderSettings):
         lp: str = f"{LP}init::"
         global g
         from ..main import get_global_config
@@ -150,7 +150,7 @@ class ZMApi:
         self.token_file = g.config.system.variable_data_path / "api_access_token"
         self.access_token: Optional[str] = ""
         self.refresh_token: Optional[str] = ""
-        self.config: ZMAPISettings = config
+        self.config: ZoneMinderSettings = config
         self.api_url: Optional[str] = config.api
         self.portal_url: Optional[str] = config.portal
 

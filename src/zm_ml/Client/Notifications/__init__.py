@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Union
+from typing import Optional, Union, List
 from pathlib import Path
 import json
 from datetime import datetime, timedelta
@@ -45,7 +45,9 @@ class CoolDownBase:
 
     def check_cooldown(self, mid: int):
         # JSON: {'last_sent': 1685383194.070348 }
-        linked = self.cooldown.linked
+        linked: Optional[List] = None
+        if getattr(self.cooldown, "linked", False):
+            linked = self.cooldown.linked
         ids = []
         if linked:
             ids = [int(str(x).strip()) for x in linked]

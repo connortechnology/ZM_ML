@@ -4,11 +4,29 @@ from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Tuple, Pattern, Union, Any, Optional
 
-from pydantic import BaseModel, Field, AnyUrl, validator, IPvAnyAddress, SecretStr
+from pydantic import (
+    BaseModel,
+    Field,
+    AnyUrl,
+    validator,
+    IPvAnyAddress,
+    SecretStr,
+    BaseSettings,
+)
 
 from .validators import validate_percentage_or_pixels
-from ...Shared.Models.validators import validate_no_scheme_url
-from ...Shared.Models.config import Testing, DefaultEnabled, DefaultNotEnabled, LoggingSettings
+from ...Shared.Models.validators import (
+    validate_no_scheme_url,
+    _validate_replace_localhost,
+    _validate_file,
+    _validate_dir,
+)
+from ...Shared.Models.config import (
+    Testing,
+    DefaultEnabled,
+    DefaultNotEnabled,
+    LoggingSettings,
+)
 from ..Log import CLIENT_LOGGER_NAME
 from ..Models.DEFAULTS import *
 
@@ -22,21 +40,31 @@ class SystemSettings(BaseModel):
     tmp_path: Optional[Path] = Field(Path(DEF_CLNT_SYS_TMPDIR))
     thread_workers: Optional[int] = Field(DEF_CLNT_SYS_THREAD_WORKERS)
 
-class ZMAPISettings(BaseModel):
-    class ZMMisc(BaseModel):
-        write_notes: bool = Field(True)
-    misc: ZMMisc = Field(ZMMisc())
-    portal: AnyUrl = None
-    api: AnyUrl = None
-    user: Optional[SecretStr] = None
-    password: Optional[SecretStr] = None
-    ssl_verify: bool = Field(True)
+
+class ZoneMinderSettings(BaseSettings):
+    class ZMMisc(BaseSettings):
+        write_notes: bool = Field(True, env="WRITE_NOTES")
+
+        class Config:
+            extras = "allow"
+            env_prefix = "ML_CLIENT_ZONEMINDER_MISC_"
+
+    misc: ZMMisc = Field(default_factory=ZMMisc)
+    portal: Optional[AnyUrl] = Field(None, env="PORTAL")
+    api: Optional[AnyUrl] = Field(None, env="API")
+    user: Optional[SecretStr] = Field(None, env="USER")
+    password: Optional[SecretStr] = Field(None, env="PASSWORD")
+    ssl_verify: bool = Field(True, env="SSL_VERIFY")
     headers: Optional[Dict[str, str]] = Field(default_factory=dict)
 
     # validators
-    _validate_host_portal = validator("api", "portal", allow_reuse=True, pre=True)(
+    _validate_api_portal = validator("api", "portal", allow_reuse=True, pre=True)(
         validate_no_scheme_url
     )
+
+    class Config:
+        extras = "allow"
+        env_prefix = "ML_CLIENT_ZM_"
 
 
 class ServerRoute(BaseModel):
@@ -73,7 +101,9 @@ class AnimationSettings(BaseModel):
     low_memory: bool = Field(False)
     overwrite: bool = Field(False)
     max_attempts: int = Field(ge=1, default=3)
-    attempt_delay: float = Field(ge=0.1, default=2.9, description="Delay between attempts in seconds")
+    attempt_delay: float = Field(
+        ge=0.1, default=2.9, description="Delay between attempts in seconds"
+    )
 
 
 class NotificationZMURLOptions(BaseModel):
@@ -85,9 +115,15 @@ class NotificationZMURLOptions(BaseModel):
 
 
 class CoolDownSettings(DefaultNotEnabled):
-    seconds: float = Field(60.00, ge=0.0, description="Seconds to wait before sending another notification")
+    seconds: float = Field(
+        60.00, ge=0.0, description="Seconds to wait before sending another notification"
+    )
+
+
 class OverRideCoolDownSettings(CoolDownSettings):
-    linked: Optional[list[str]] = Field(default_factory=list, description="List of linked monitors")
+    linked: Optional[list[str]] = Field(
+        default_factory=list, description="List of linked monitors"
+    )
 
 
 class MLNotificationSettings(BaseModel):
@@ -137,6 +173,7 @@ class MLNotificationSettings(BaseModel):
             enabled: bool = Field(False)
             token: Optional[str] = None
             key: Optional[str] = None
+
         class EndPoints(BaseModel):
             messages: str = Field("/messages.json")
             users: str = Field("/users/validate.json")
@@ -171,14 +208,14 @@ class MLNotificationSettings(BaseModel):
     class ShellScriptNotificationSettings(DefaultNotEnabled):
         script: str = None
         cooldown: CoolDownSettings = Field(default_factory=CoolDownSettings)
-        I_AM_AWARE_OF_THE_DANGER_OF_RUNNING_SHELL_SCRIPTS: str = 'No I am not'
+        I_AM_AWARE_OF_THE_DANGER_OF_RUNNING_SHELL_SCRIPTS: str = "No I am not"
 
     class MQTTNotificationSettings(BaseModel):
         class MQTTAnimationSettings(DefaultNotEnabled):
-            topic: str = Field('zm_ml/animation')
+            topic: str = Field("zm_ml/animation")
 
         class MQTTImageSettings(DefaultNotEnabled):
-            topic: str = Field('zm_ml/image')
+            topic: str = Field("zm_ml/image")
 
         enabled: bool = Field(False)
         force: bool = Field(False)
@@ -216,7 +253,6 @@ class MLNotificationSettings(BaseModel):
     shell_script: ShellScriptNotificationSettings = Field(
         default_factory=ShellScriptNotificationSettings
     )
-
 
 
 class APIPullMethod(DefaultNotEnabled):
@@ -289,9 +325,7 @@ class OverRideObjectFilters(BaseObjectFilters):
 
 class ObjectFilters(BaseObjectFilters):
     pattern: Optional[Pattern] = None
-    labels: Optional[
-        Dict[str, Union[BaseObjectFilters, OverRideObjectFilters]]
-    ] = None
+    labels: Optional[Dict[str, Union[BaseObjectFilters, OverRideObjectFilters]]] = None
 
 
 class FaceFilters(BaseModel):
@@ -373,16 +407,40 @@ class MonitorZones(BaseModel):
     )
 
     from .validators import validate_resolution, validate_points
-    __validate_resolution = validator("resolution", pre=True, allow_reuse=True)(validate_resolution)
+
+    __validate_resolution = validator("resolution", pre=True, allow_reuse=True)(
+        validate_resolution
+    )
     __validate_points = validator("points", pre=True, allow_reuse=True)(validate_points)
 
 
 class MonitorsSettings(BaseModel):
     models: Optional[Dict[str, Any]] = Field(default_factory=dict)
     object_confirm: Optional[bool] = None
-    static_objects: Optional[OverRideStaticObjects] = Field(default_factory=OverRideStaticObjects)
-    filters: Optional[OverRideMatchFilters] = Field(default_factory=OverRideMatchFilters)
+    static_objects: Optional[OverRideStaticObjects] = Field(
+        default_factory=OverRideStaticObjects
+    )
+    filters: Optional[OverRideMatchFilters] = Field(
+        default_factory=OverRideMatchFilters
+    )
     zones: Optional[Dict[str, MonitorZones]] = Field(default_factory=dict)
+
+
+class ZMDBSettings(BaseSettings):
+    host: Union[IPvAnyAddress, AnyUrl, None] = Field(None, env="HOST")
+    port: Optional[int] = Field(None, env="PORT")
+    user: Optional[str] = Field(None, env="USER")
+    password: Optional[SecretStr] = Field(None, env="PASSWORD")
+    name: Optional[str] = Field(None, env="NAME")
+    driver: Optional[str] = Field(None, env="DRIVER")
+
+    _validate_host = validator("host", allow_reuse=True, pre=True)(
+        _validate_replace_localhost
+    )
+
+    class Config:
+        extra = "allow"
+        env_prefix = "ML_CLIENT_DB_"
 
 
 class ConfigFileModel(BaseModel):
@@ -390,7 +448,8 @@ class ConfigFileModel(BaseModel):
     substitutions: Dict[str, str] = Field(default_factory=dict)
     config_path: Path = Field(Path("/etc/zm/ML"))
     system: SystemSettings = Field(default_factory=SystemSettings)
-    zoneminder: ZMAPISettings = Field(default_factory=ZMAPISettings)
+    zoneminder: ZoneMinderSettings = Field(default_factory=ZoneMinderSettings)
+    db: ZMDBSettings = Field(default_factory=ZMDBSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     mlapi: ServerRoutes = Field(default_factory=ServerRoutes)
     animation: AnimationSettings = Field(default_factory=AnimationSettings)
@@ -402,11 +461,35 @@ class ConfigFileModel(BaseModel):
     matching: MatchingSettings = Field(default_factory=MatchingSettings)
     monitors: Dict[int, MonitorsSettings] = Field(default_factory=dict)
 
-    @validator("config_path", always=True, pre=True)
-    def val_cfg_path(cls, v):
-        if v:
-            assert isinstance(v, (Path, str))
-            if isinstance(v, str):
-                v = Path(v)
-        return v
+    _validate_config_path = validator(
+        "config_path", allow_reuse=True, always=True, pre=True
+    )(_validate_dir)
 
+
+class ClientEnvVars(BaseSettings):
+    zm_conf_dir: Path = Field(
+        Path("/etc/zm"),
+        description="Path to ZoneMinder config files",
+        env="ZM_CONF_DIR",
+    )
+    ml_conf_dir: Optional[Path] = Field(
+        None,
+        description="Path to ZoneMinder ML config file directory (client/server/secrets .yml)",
+        env="ML_CONF_DIR",
+    )
+    client_conf_file: Optional[Path] = Field(
+        None, description="Path to ZM-ML CLIENT config file", env="ML_CLIENT_CONF_FILE"
+    )
+
+    db: Optional[ZMDBSettings] = Field(default_factory=ZMDBSettings)
+    api: Optional[ZoneMinderSettings] = Field(default_factory=ZoneMinderSettings)
+
+    _validate_client_conf_file = validator(
+        "client_conf_file", allow_reuse=True, pre=True, always=True, check_fields=False
+    )(_validate_file)
+    _validate_zm_conf_dir = validator(
+        "zm_conf_dir", allow_reuse=True, pre=True, always=True
+    )(_validate_dir)
+    _validate_ml_conf_dir = validator(
+        "ml_conf_dir", allow_reuse=True, pre=True, always=True
+    )(_validate_dir)

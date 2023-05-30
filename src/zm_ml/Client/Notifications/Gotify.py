@@ -35,7 +35,7 @@ class Gotify(CoolDownBase):
         super().__init__()
 
     def send(self, pred_out: str):
-        if not self.check_cooldown():
+        if not self.check_cooldown(g.mid):
             return
         lp = "gotify::send::"
         url_opts = self.config.url_opts
@@ -118,6 +118,7 @@ class Gotify(CoolDownBase):
             # g.logger.debug(f"{lp} response from gotify -> {resp.status_code=} - {resp.text = }")
             if resp and resp.status_code == 200:
                 logger.debug(f"{lp} Gotify returned SUCCESS")
+                self.write_cooldown(g.mid)
             elif resp and resp.status_code != 200:
                 logger.debug(
                     f"{lp} Gotify FAILURE STATUS_CODE: {resp.status_code} -> {resp.json()}"
