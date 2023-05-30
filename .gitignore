@@ -156,3 +156,4 @@ examples/kmeans_dominant_color.py
 examples/*.json
 src/zm_ml.egg-info
 .zmml_cache/
+/configs/client_new.yml
