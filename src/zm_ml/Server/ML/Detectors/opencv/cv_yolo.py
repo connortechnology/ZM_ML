@@ -68,11 +68,11 @@ class CV2YOLODetector(CV2Base):
             ) if self.processor == ModelProcessor.GPU else None
 
             logger.debug(
-                f"perf:{LP} '{self.name}' loading completed in {time.perf_counter() - load_timer:.5f}ms"
+                f"perf:{LP} '{self.name}' loading completed in {time.perf_counter() - load_timer:.5f} s"
             )
         else:
             logger.debug(
-                f"perf:{LP} '{self.name}' FAILED in {time.perf_counter() - load_timer:.5f}ms"
+                f"perf:{LP} '{self.name}' FAILED in {time.perf_counter() - load_timer:.5f} s"
             )
 
     def detect(self, input_image: np.ndarray):
@@ -103,7 +103,7 @@ class CV2YOLODetector(CV2Base):
 
             logger.debug(
                 f"perf:{LP}{self.processor}: '{self.name}' detection "
-                f"took: {time.perf_counter() - detection_timer:.5f}ms"
+                f"took: {time.perf_counter() - detection_timer:.5f} s"
             )
             for (class_id, confidence, box) in zip(l, c, b):
                 confidence = float(confidence)

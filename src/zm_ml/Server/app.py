@@ -138,7 +138,7 @@ async def detect(
     timer = time.perf_counter()
     detection: Dict = detector.detect(image)
     logger.info(
-        f"{LP} single detection completed in {time.perf_counter() - timer:.5f}ms -> {detection}"
+        f"perf:{LP} single detection completed in {time.perf_counter() - timer:.5f} s -> {detection}"
     )
     return detection
 
@@ -330,7 +330,7 @@ class MLAPI:
             for future in futures:
                 future.result()
             logger.info(
-                f"{LP} TOTAL ThreadPool loading {len(futures)} models took {time.perf_counter() - timer:.5f}ms"
+                f"perf:{LP} TOTAL ThreadPool loading {len(futures)} models took {time.perf_counter() - timer:.5f} s"
             )
 
         return self.cached_settings

@@ -1,19 +1,18 @@
 from __future__ import annotations
+
 import glob
+import logging
 from configparser import ConfigParser
 from datetime import datetime
 from decimal import Decimal
-import logging
 from pathlib import Path
 from typing import Optional, Union, Tuple, TYPE_CHECKING
 
-import attr
 from sqlalchemy import MetaData, create_engine, select
 from sqlalchemy.engine import Engine, Connection, CursorResult
 from sqlalchemy.exc import SQLAlchemyError
 
 from ...Log import CLIENT_LOGGER_NAME
-from ...Models.config import ClientEnvVars
 from ...Models.config import ZMDBSettings
 from ...main import get_global_config
 
@@ -23,22 +22,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(CLIENT_LOGGER_NAME)
 LP = "zmdb::"
 g: Optional[GlobalConfig] = None
-
-def _rel_path(eid: int, mid: int, scheme: str, dt: Optional[datetime] = None) -> str:
-    ret_val: str = ""
-    lp: str = f"{LP}relative path::"
-    if scheme == "Deep":
-        if dt:
-            ret_val = f"{mid}/{dt.strftime('%y/%m/%d/%H/%M/%S')}"
-        else:
-            logger.error(f"{lp} no datetime for deep scheme path!")
-    elif scheme == "Medium":
-        ret_val = f"{mid}/{dt.strftime('%Y-%m-%d')}/{eid}"
-    elif scheme == "Shallow":
-        ret_val = f"{mid}/{eid}"
-    else:
-        logger.error(f"{lp} unknown scheme {scheme}")
-    return ret_val
 
 
 class ZMDB:
@@ -54,10 +37,33 @@ class ZMDB:
         self.engine = None
         self.connection = None
         self.meta = None
-        self.config = self.get_config()
+        self.config = self.init_config()
         self._db_create()
 
-    def read_zm_configs(self) -> None:
+    def set_config(self, config: ZMDBSettings):
+        self.config = config
+        self.reset_db()
+        self._db_create()
+
+    @staticmethod
+    def _rel_path(eid: int, mid: int, scheme: str, dt: Optional[datetime] = None) -> str:
+        ret_val: str = ""
+        lp: str = f"{LP}relative path::"
+        if scheme == "Deep":
+            if dt:
+                ret_val = f"{mid}/{dt.strftime('%y/%m/%d/%H/%M/%S')}"
+            else:
+                logger.error(f"{lp} no datetime for deep scheme path!")
+        elif scheme == "Medium":
+            ret_val = f"{mid}/{dt.strftime('%Y-%m-%d')}/{eid}"
+        elif scheme == "Shallow":
+            ret_val = f"{mid}/{eid}"
+        else:
+            logger.error(f"{lp} unknown scheme {scheme}")
+        return ret_val
+
+    @staticmethod
+    def read_zm_configs():
         files = []
         conf_path = g.Environment.zm_conf_dir
         if conf_path.is_dir():
@@ -83,7 +89,7 @@ class ZMDB:
                 conf_data = config_file["zm_root"]
                 return conf_data
 
-    def get_config(self):
+    def init_config(self):
         defaults = {
             'host': 'localhost',
             'port': 3306,
@@ -320,7 +326,7 @@ class ZMDB:
         if start_datetime:
             if storage_path:
                 event_path = Path(
-                    f"{storage_path}/{_rel_path(eid, mid, scheme, start_datetime)}"
+                    f"{storage_path}/{self._rel_path(eid, mid, scheme, start_datetime)}"
                 )
             else:
                 if storage_id:
@@ -410,6 +416,18 @@ class ZMDB:
         g.event_cause = reason
         g.event_path = event_path
         return mid, mon_name, mon_post, mon_pre, mon_fps, reason, event_path
+
+    def reset_db(self):
+        if self.engine:
+            self.engine.dispose()
+            self.engine = None
+        if self.connection:
+            self.connection.close()
+            self.connection = None
+        if self.meta:
+            self.meta.clear()
+            self.meta = None
+
 
     def clean_up(self):
         if self.connection.closed is False:

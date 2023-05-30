@@ -39,7 +39,7 @@ class CV2TFDetector(CV2Base):
             raise model_load_exc
         self.cv2_processor_check()
         logger.debug(
-            f"perf:{LP} loading completed in {time.perf_counter() - load_timer:.5f}ms"
+            f"perf:{LP} loading completed in {time.perf_counter() - load_timer:.5f} s"
         )
 
     def detect(self, input_image: np.ndarray):
@@ -71,7 +71,7 @@ class CV2TFDetector(CV2Base):
         else:
             logger.debug(
                 f"perf:{LP}{self.processor}: '{self.name}' detection "
-                f"took: {time.perf_counter() - detection_timer:.5f}ms"
+                f"took: {time.perf_counter() - detection_timer:.5f} s"
             )
             for detection in outs[0, 0, :, :]:
                 conf = float(detection[2])

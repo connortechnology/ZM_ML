@@ -69,7 +69,7 @@ class FaceRecognitionLibDetector(FileLock):
         else:
             logger.debug(
                 f"perf:{LP}{self.processor}: importing Face Recognition library "
-                f"took: {time.perf_counter() - load_timer:.5f}ms"
+                f"took: {time.perf_counter() - load_timer:.5f} s"
             )
         self.processor_check()
 
@@ -79,7 +79,7 @@ class FaceRecognitionLibDetector(FileLock):
         #     f"{LP} '{self.name}' configuration: {self.config}"
         # )
         logger.debug(
-            f"perf:{LP} '{self.name}' loading completed in {time.perf_counter() - load_timer:.5f}ms"
+            f"perf:{LP} '{self.name}' loading completed in {time.perf_counter() - load_timer:.5f} s"
         )
 
     def load_trained_faces(self, faces_file: Optional[Path] = None):
@@ -163,6 +163,7 @@ class FaceRecognitionLibDetector(FileLock):
 
         # Find all the faces and face encodings in the target image
         logger.debug(f"{LP}detect: finding faces in image")
+        self.acquire_lock()
         self.face_locations = face_recognition.face_locations(
             rgb_image,
             model=self.config.detection_model,
@@ -172,7 +173,7 @@ class FaceRecognitionLibDetector(FileLock):
         if not len(self.face_locations):
             logger.debug(
                 f"perf:{LP}{self.processor}: computing locations took "
-                f"{time.perf_counter() - detect_start_timer:.5f}ms"
+                f"{time.perf_counter() - detect_start_timer:.5f} s"
             )
         else:
             logger.debug(f"{LP}detect: finding face encodings")
@@ -185,9 +186,11 @@ class FaceRecognitionLibDetector(FileLock):
 
             logger.debug(
                 f"perf:{LP}{self.processor}: computing locations and encodings took "
-                f"{time.perf_counter() - detect_start_timer:.5f}ms"
+                f"{time.perf_counter() - detect_start_timer:.5f} s"
             )
 
+            # TODO: We use KNN for color detection, but we could use it for face recognition too
+            ## Create a global KNN object
             if not self.knn:
                 logger.debug(f"{LP} no trained faces found, skipping recognition")
                 for loc in self.face_locations:
@@ -219,7 +222,7 @@ class FaceRecognitionLibDetector(FileLock):
                 )
                 logger.debug(
                     f"perf:{LP}{self.processor}: matching detected faces to known faces took "
-                    f"{time.perf_counter() - comparing_timer:.5f}ms"
+                    f"{time.perf_counter() - comparing_timer:.5f} s"
                 )
 
                 for pred, loc, rec in zip(prediction_labels, self.face_locations, are_matches):
@@ -234,7 +237,7 @@ class FaceRecognitionLibDetector(FileLock):
                     b_boxes.append([loc[3], loc[0], loc[1], loc[2]])
                     labels.append(f"face: {label}")
                 logger.debug(
-                    f"perf:{LP} recognition sequence took {time.perf_counter() - comparing_timer:.5f}ms"
+                    f"perf:{LP} recognition sequence took {time.perf_counter() - comparing_timer:.5f} s"
                 )
 
         return {
@@ -343,7 +346,7 @@ class FaceRecognitionLibDetector(FileLock):
             import math
 
             n_neighbors = int(round(math.sqrt(len(known_face_names))))
-            logger.debug(f"{LP} using algo: {knn_algo} n_neighbors: {n_neighbors}")
+            logger.debug(f"{LP} KNN using algo: {knn_algo} n_neighbors: {n_neighbors}")
             knn = neighbors.KNeighborsClassifier(
                 n_neighbors=n_neighbors, algorithm=knn_algo, weights="distance"
             )
@@ -351,7 +354,7 @@ class FaceRecognitionLibDetector(FileLock):
             logger.debug(f"{LP} training model ...")
             knn.fit(known_face_encodings, known_face_names)
             logger.debug(
-                f"{LP} training model took {time.perf_counter() - timer:.5f}ms"
+                f"perf:{LP} training model took {time.perf_counter() - timer:.5f} s"
             )
             try:
                 with open(self.trained_faces_file, "wb") as f:
@@ -364,7 +367,7 @@ class FaceRecognitionLibDetector(FileLock):
                 logger.debug(f"{LP} wrote KNN encodings (known faces data) to '{self.trained_faces_file}'")
 
         logger.debug(
-            f"perf:{LP} Recognition training took: {time.perf_counter() - t:.5f}ms"
+            f"perf:{LP} Recognition training took: {time.perf_counter() - t:.5f} s"
         )
 
     def save_unknown_faces(self, loc: list, input_image: np.ndarray):
@@ -399,5 +402,5 @@ class FaceRecognitionLibDetector(FileLock):
                 f"{LP} saving cropped UNKNOWN '{self.config.unknown_face_name}' face "
                 f"at [{x1},{y1},{x2},{y2} - includes leeway of {leeway}px] to {unf}"
             )
-            # cv2.imwrite won't throw an exception it outputs a WARN to console
+            # cv2.imwrite won't throw an exception it outputs a C language WARN to console
             cv2.imwrite(unf, crop_img)
