@@ -1,3 +1,4 @@
+from __future__ import annotations
 import asyncio
 import concurrent.futures
 import copy
@@ -12,7 +13,7 @@ from pathlib import Path
 from shutil import which
 from time import perf_counter, time
 import warnings
-from typing import Union, Dict, Optional, List, Any, Tuple
+from typing import Union, Dict, Optional, List, Any, Tuple, TYPE_CHECKING
 
 try:
     import cv2
@@ -35,7 +36,6 @@ except ImportError as e:
 
 from .Libs.Media import APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine
 from .Libs.API import ZMAPI
-from .Libs.DB import ZMDB
 from .Models.utils import CFGHash, get_push_auth, check_imports
 from .Models.config import (
     ConfigFileModel,
@@ -54,6 +54,9 @@ from .Models.config import (
 from ..Shared.Models.config import Testing
 from ..Shared.configs import GlobalConfig
 from .Log import CLIENT_LOGGER_NAME, CLIENT_LOG_FORMAT
+
+if TYPE_CHECKING:
+    from .Libs.DB import ZMDB
 
 _PR: str = "print():"
 __version__: str = "0.0.1"
@@ -538,6 +541,7 @@ class ZMClient:
             logger.debug(f"Routes: AFTER sorting >> {self.routes}")
 
     def _init_db(self):
+        from .Libs.DB import ZMDB
         self.db = ZMDB()
         logger.debug(f"DB initialized")
 
