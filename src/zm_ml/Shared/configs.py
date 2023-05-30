@@ -8,10 +8,10 @@ from typing import Union, Dict, List, Type, Optional, TYPE_CHECKING
 from pydantic import BaseSettings, Field, IPvAnyAddress, AnyUrl, SecretStr, validator, BaseModel
 
 from .Models.validators import _validate_replace_localhost, _validate_dir, _validate_file
-from ..Client.Libs.api import ZMAPI
+from ..Client.Libs.API import ZMAPI
 from ..Client.Log import CLIENT_LOGGER_NAME
 from ..Client.Models.config import ConfigFileModel
-from ..Client.Libs.zmdb import ZMDB
+from ..Client.Libs.DB import ZMDB
 from ..Server.Log import SERVER_LOGGER_NAME
 
 if TYPE_CHECKING:

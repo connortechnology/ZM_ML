@@ -1,26 +1,29 @@
+from __future__ import annotations
 import datetime
-import pickle
-import re
 import logging
+import pickle
 import time
-from typing import Dict, List, Optional, Union, Tuple
+from typing import Dict, List, Optional, Union, Tuple, TYPE_CHECKING
 
+import aiohttp
+import jwt
+from pydantic import SecretStr
 from requests import Response, Session
 from requests.exceptions import HTTPError, JSONDecodeError
 from urllib3 import disable_warnings
 from urllib3.exceptions import InsecureRequestWarning
-import jwt
-import aiohttp
-from pydantic import SecretStr
 
-from ..Models.config import ZoneMinderSettings, MonitorsSettings
 from ..Log import CLIENT_LOGGER_NAME
+from ..Models.config import ZoneMinderSettings, MonitorsSettings
+
+if TYPE_CHECKING:
+    from ...Shared.configs import GlobalConfig
 
 GRACE: int = 60 * 5  # 5 mins
 lp: str = "api::"
 
-logger = logging.getLogger(CLIENT_LOGGER_NAME)
-g = None
+logger: logging.Logger = logging.getLogger(CLIENT_LOGGER_NAME)
+g: Optional[GlobalConfig] = None
 LP: str = "api::"
 
 

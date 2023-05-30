@@ -18,7 +18,8 @@ import asyncio
 
 from zm_ml import Client
 from zm_ml.Shared.Models.validators import str_to_path
-from zm_ml.Shared.configs import ClientEnvVars, GlobalConfig
+from zm_ml.Shared.configs import GlobalConfig
+from zm_ml.Client.Models.config import ClientEnvVars
 from zm_ml.Client.main import (
     parse_client_config_file,
     create_global_config,

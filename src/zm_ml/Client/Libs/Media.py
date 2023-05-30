@@ -14,7 +14,7 @@ from typing import Optional, IO, Union, TYPE_CHECKING, Set, Tuple
 from ..Log import CLIENT_LOGGER_NAME
 
 if TYPE_CHECKING:
-    from ..main import GlobalConfig
+    from ...Shared.configs import GlobalConfig
 
 IS_64BITS = sys_maxsize > 2**32
 # This will compensate for 32/64 bit
