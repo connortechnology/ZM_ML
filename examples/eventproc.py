@@ -1,17 +1,12 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 # vim:fenc=utf-8
-__doc__ = """
-An example that uses ZM's EventStartCommand mechanism to run 
-object detection on a ZM event using ZM-ML library.
-"""
-
-
+from __future__ import annotations
 import logging.handlers
 import sys
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 import uvloop
 import asyncio
@@ -25,12 +20,18 @@ from zm_ml.Client.main import (
     create_global_config,
     create_logs,
 )
+if TYPE_CHECKING:
+    from zm_ml.Client.main import ZMClient
 
+__doc__ = """
+An example that uses ZM's EventStartCommand/EventEndCommand mechanism to run 
+object detection on a ZM event using ZM ML library.
+"""
 __version__ = "0.0.0-a1"
 __version_type__ = "dev"
 # Setup basic console logging (hook into library logging)
 logger: logging.Logger = create_logs()
-
+zm_client: Optional[ZMClient] = None
 
 def _parse_cli():
     from argparse import ArgumentParser
@@ -105,7 +106,7 @@ def _parse_cli():
 
 
 async def main():
-    global g
+    global g, zm_client
     _mode = ""
     _start = time.perf_counter()
     # Do all the config stuff and setup logging
@@ -150,7 +151,7 @@ async def main():
         f"Config File: {cfg_file}"
     )
     g.config = parse_client_config_file(cfg_file)
-    zm_client = zm_ml.Client.ZMClient(global_config=g)
+    zm_client = zm_ml.Client.main.ZMClient(global_config=g)
     _end_init = time.perf_counter()
     __event_modes = ["event", ""]
     if _mode in __event_modes:
@@ -180,5 +181,8 @@ if __name__ == "__main__":
     # Allow 250ms for aiohttp SSL session context to close properly
     loop.run_until_complete(asyncio.sleep(0.25))
     logger.debug(f"DETECTIONS FROM uvloop: {detections}")
-    print(f"DETECTIONS FROM uvloop: {detections}")
+    loop.run_until_complete(zm_client.clean_up())
+    if not loop.is_closed():
+        loop.close()
     logger.info(f"perf::FINAL:: Total: {time.perf_counter() - _start:.5f} seconds")
+
