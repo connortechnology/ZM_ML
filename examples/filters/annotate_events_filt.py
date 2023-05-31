@@ -11,26 +11,16 @@ to the script. This is the beggining of the exploratory work on how to integrate
 """
 import argparse
 import logging
+import sys
 import time
 import warnings
-import os
-import sys
 from datetime import timedelta
 from enum import Enum
 from pathlib import Path
 from typing import List, Optional, NamedTuple, Tuple, Dict
 
-from pydantic import BaseModel, Field, validator
-
-from zm_ml.Client.Models.config import DetectionSettings, SystemSettings, ZMAPISettings, \
-    MatchingSettings, MonitorsSettings, MatchFilters
-from zm_ml.Client.main import _replace_vars, parse_client_config_file as parse_cfg, set_logger
-from zm_ml.Server.ML.coco17_cv2 import COCO17
-from zm_ml.Shared.Models.config import Testing
-# read data from zm db
-from zm_ml.Client.Libs.zmdb import ZMDB
-
-
+from pydantic import BaseModel, Field
+import ffmpegcv
 try:
     try:
         import cv2
@@ -38,15 +28,19 @@ try:
         warnings.warn("OpenCV not installed, will not be able to annotate images")
     # Jetbrains hack
 except ImportError:
-    pass
-    if not cv2:
-        cv2 = None
-    # raise
+    cv2: Optional[cv2] = None
+
 try:
     import numpy as np
 except ImportError:
     warnings.warn("Numpy not installed, will not be able to annotate images")
     # raise
+
+from zm_ml.Client.Libs.DB import ZMDB
+from zm_ml.Client.Models.config import SystemSettings, MonitorsSettings, MatchFilters, ZoneMinderSettings, ClientEnvVars
+from zm_ml.Client.main import parse_client_config_file as parse_cfg, set_logger
+from zm_ml.Server.ML.coco17_cv2 import COCO17
+from zm_ml.Shared.Models.config import Testing
 
 LP: str = "filter:annotate:"
 SOURCE_DIR: Path
@@ -81,9 +75,10 @@ MODEL_H: int = 416
 MODEL_W: int = 416
 CONFIDENCE_THRESHOLD: float = 0.5
 NMS_THRESHOLD: float = 0.3
-ALLOWED_LABELS: List[str] = ["person", "car", "truck", "motorbike", "bicycle", "bus", "cat", "dog", "boat"]
-WRITER: Optional[cv2.VideoWriter] = None
-VC: Optional[cv2.VideoCapture] = None
+ALLOWED_LABELS: List[str] = ["person", "car", "truck", "motorbike", "bicycle", "bus", "cat", "dog"]
+
+WRITER: Optional[ffmpegcv.VideoWriter] = None
+VC: Optional[ffmpegcv.VideoCapture] = None
 IS_VIDEO: bool = False
 # log status updates of the video file processing
 STATUS_UPDATES: bool = True
@@ -101,6 +96,7 @@ FRAME_SKIP: int = 1
 UPDATE_TIMER: float = 0.0
 TARGET_FPS: int = 1
 ZM_DB: Optional[ZMDB] = None
+ENV: Optional[ClientEnvVars] = None
 # CONFIG_PATH = Path("/opt/zm_ml/configs/example_annotate_filter.yml")
 
 
@@ -108,7 +104,7 @@ class FilterConfigFileModel(BaseModel):
     testing: Testing = Field(default_factory=Testing)
     substitutions: Dict[str, str] = Field(default_factory=dict)
     system: SystemSettings = Field(default_factory=SystemSettings)
-    zoneminder: ZMAPISettings = Field(default_factory=ZMAPISettings)
+    zoneminder: ZoneMinderSettings = Field(default_factory=ZoneMinderSettings)
     label_groups: Dict[str, List[str]] = Field(default_factory=dict)
     models: Dict = Field(default_factory=dict)
     import_zones: bool = Field(False)
@@ -228,7 +224,8 @@ def main():
     global SOURCE_DIR, WRITER, MODEL, NET, COLORS, \
             CLASS_NAMES, WEIGHTS, MODEL_CFG, MODEL_H,\
             MODEL_W, VC, IS_VIDEO, FRAME_SKIP, UPDATE_TIMER, \
-            TARGET_FPS
+            TARGET_FPS, ZM_DB, ENV, MONITOR_ID
+    ENV = ClientEnvVars()
     source: List[Optional[Path]] = []
     video_files = get_files(SOURCE_DIR, FileType.VIDEO)
     image_files = get_files(SOURCE_DIR, FileType.IMAGE)
@@ -241,7 +238,6 @@ def main():
         source.append(video_files[0])
     elif image_files:
         # we need to query db for event and monitor info to encode video at correct fps
-        event_info = get_event_info(ZMDB())
         source = image_files
 
     if len(source) == 0:
@@ -256,6 +252,15 @@ def main():
             f"{LP} Multiple source files found in {SOURCE_DIR}, assuming jpeg images"
         )
         IS_VIDEO = False
+        # get event data from db
+        ZM_DB = ZMDB(ENV)
+        if not EVENT_ID:
+            raise ValueError(f"{LP} No event id specified, cannot continue. Use --eid %EID% and --EPATH %EPATH% for your filter script arguments at a minimum!")
+        if not ZM_DB.eid_exists(EVENT_ID):
+            raise ValueError(f"{LP} Event id {EVENT_ID} does not exist in db?")
+        MONITOR_ID = ZM_DB._mid_from_eid(EVENT_ID)
+        TARGET_FPS = float(ZM_DB._mon_fps_from_mid(MONITOR_ID))
+        logger.debug(f"FROM ZMDB -> Target FPS for monitor {MONITOR_ID} is {TARGET_FPS}")
 
     if not COLORS:
         COLORS = np.random.randint(0, 255, size=(len(CLASS_NAMES), 3), dtype="uint8")
@@ -271,28 +276,27 @@ def main():
             f"perf:{LP} Loaded DarkNet network from {WEIGHTS.as_posix()} in {time.perf_counter() - load_timer:.5f}s"
         )
     if not MODEL:
-        load_timer = time.perf_counter()
         MODEL = cv2.dnn.DetectionModel(NET)
         MODEL.setInputParams(scale=1 / 255, size=(MODEL_H, MODEL_W), swapRB=True)
-        logger.info(
-            f"perf:{LP} Initializing DetectionModel() completed in {time.perf_counter() - load_timer:.5f}s"
-        )
 
     output = (SOURCE_DIR / "annotated.mp4")
     if output.exists():
         logger.warning(f"{LP} Output file {output} already exists, deleting")
         output.unlink()
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    WRITER = ffmpegcv.VideoWriter(output, 'h264', TARGET_FPS)
     if IS_VIDEO:
         _source = source[0]
         logger.info(f"{LP} Processing video file {_source}")
-        VC = cv2.VideoCapture(_source.as_posix())
+        VC = ffmpegcv.VideoCapture(_source.as_posix())
+        # for information on the video instead of pulling from db
+        # OVC = cv2.VideoCapture(_source.as_posix())
         if not VC.isOpened():
             raise FileNotFoundError(f"{LP} Source video file could not be opened.")
         target_res = (int(VC.get(cv2.CAP_PROP_FRAME_WIDTH)), int(VC.get(cv2.CAP_PROP_FRAME_HEIGHT)))
         logger.debug(f"{LP} Target resolution: {target_res} ({type(target_res)}) ||| fourcc: {fourcc} ({type(fourcc)})")
         total_frames = VC.get(cv2.CAP_PROP_FRAME_COUNT)
         video_fps = VC.get(cv2.CAP_PROP_FPS)
+
         video_seconds = total_frames / video_fps
         if video_seconds > 60:
             logger.warning(
@@ -305,15 +309,6 @@ def main():
         if not output.exists():
             logger.info(f"{LP} Creating output file {output}")
             output.touch(mode=0o666)
-        if not WRITER:
-            logger.info(f"{LP} Writing output to {output}")
-            WRITER = cv2.VideoWriter(
-                output.as_posix(),
-                fourcc,
-                float(TARGET_FPS),
-                target_res,
-                True,
-            )
         frames_pulled = 0
         frames_processed = 0
         frames_timer = time.perf_counter()
@@ -384,15 +379,7 @@ def main():
                     UPDATE_TIMER = time.perf_counter()
             if RESIZE and (RESIZE_TO):
                 frame = cv2.resize(frame, RESIZE_TO)
-            if not WRITER:
-                logger.info(f"{LP} Writing output to {output}")
-                WRITER = cv2.VideoWriter(
-                    output.as_posix(),
-                    cv2.VideoWriter_fourcc(*"mp4v"),
-                    float(10),
-                    (frame.shape[1], frame.shape[0]),
-                )
-            #
+
             frame = detect(frame, DetectMethod.LOCAL)
             frames_processed += 1
 
