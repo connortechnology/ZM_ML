@@ -43,18 +43,17 @@ class SystemSettings(BaseModel):
 
 class ZoneMinderSettings(BaseSettings):
     class ZMMisc(BaseSettings):
-        write_notes: bool = Field(True, env="WRITE_NOTES")
+        write_notes: bool = Field(True, env="ML_CLIENT_ZONEMINDER_MISC_WRITE_NOTES")
 
         class Config:
-            extras = "allow"
-            env_prefix = "ML_CLIENT_ZONEMINDER_MISC_"
+            extra = "allow"
 
     misc: ZMMisc = Field(default_factory=ZMMisc)
-    portal: Optional[AnyUrl] = Field(None, env="PORTAL")
-    api: Optional[AnyUrl] = Field(None, env="API")
-    user: Optional[SecretStr] = Field(None, env="USER")
-    password: Optional[SecretStr] = Field(None, env="PASSWORD")
-    ssl_verify: bool = Field(True, env="SSL_VERIFY")
+    portal: Optional[AnyUrl] = Field(None, env="ML_CLIENT_ZONEMINDER_PORTAL")
+    api: Optional[AnyUrl] = Field(None, env="ML_CLIENT_ZONEMINDER_API")
+    user: Optional[SecretStr] = Field(None, env="ML_CLIENT_ZONEMINDER_USER")
+    password: Optional[SecretStr] = Field(None, env="ML_CLIENT_ZONEMINDER_PASSWORD")
+    ssl_verify: bool = Field(True, env="ML_CLIENT_ZONEMINDER_SSL_VERIFY")
     headers: Optional[Dict[str, str]] = Field(default_factory=dict)
 
     # validators
@@ -63,8 +62,7 @@ class ZoneMinderSettings(BaseSettings):
     )
 
     class Config:
-        extras = "allow"
-        env_prefix = "ML_CLIENT_ZM_"
+        extra = "allow"
 
 
 class ServerRoute(BaseModel):
@@ -427,12 +425,12 @@ class MonitorsSettings(BaseModel):
 
 
 class ZMDBSettings(BaseSettings):
-    host: Union[IPvAnyAddress, AnyUrl, None] = Field(None, env="HOST")
-    port: Optional[int] = Field(None, env="PORT")
-    user: Optional[str] = Field(None, env="USER")
+    host: Union[IPvAnyAddress, AnyUrl, None] = Field(None, env="ML_CLIENT_DB_HOST")
+    port: Optional[int] = Field(None, env="ML_CLIENT_DB_PORT")
+    user: Optional[str] = Field(None, env="ML_CLIENT_DB_USER")
     password: Optional[SecretStr] = Field(None, env="PASSWORD")
-    name: Optional[str] = Field(None, env="NAME")
-    driver: Optional[str] = Field(None, env="DRIVER")
+    name: Optional[str] = Field(None, env="ML_CLIENT_DB_NAME")
+    driver: Optional[str] = Field(None, env="ML_CLIENT_DB_DRIVER")
 
     _validate_host = validator("host", allow_reuse=True, pre=True)(
         _validate_replace_localhost
@@ -440,13 +438,12 @@ class ZMDBSettings(BaseSettings):
 
     class Config:
         extra = "allow"
-        env_prefix = "ML_CLIENT_DB_"
 
 
 class ConfigFileModel(BaseModel):
     testing: Testing = Field(default_factory=Testing)
     substitutions: Dict[str, str] = Field(default_factory=dict)
-    config_path: Path = Field(Path("/etc/zm/ML"))
+    config_path: Path = Field(Path("/etc/zm"))
     system: SystemSettings = Field(default_factory=SystemSettings)
     zoneminder: ZoneMinderSettings = Field(default_factory=ZoneMinderSettings)
     db: ZMDBSettings = Field(default_factory=ZMDBSettings)

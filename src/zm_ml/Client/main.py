@@ -49,7 +49,7 @@ from .Models.config import (
     OverRideAlprFilters,
     MatchStrategy,
     NotificationZMURLOptions,
-    ClientEnvVars
+    ClientEnvVars,
 )
 from ..Shared.Models.config import Testing
 from ..Shared.configs import GlobalConfig
@@ -77,6 +77,7 @@ def set_logger(l: logging.Logger) -> None:
 
     logger = l
     logger.info(f"{LP} Setting logger to {l.name}")
+
 
 def create_logs() -> logging.Logger:
     global logger
@@ -109,9 +110,7 @@ async def init_logs(config: ConfigFileModel) -> None:
 
     cfg: LoggingSettings = config.logging
     root_level = cfg.level
-    logger.debug(
-        f"Setting root logger level to {logging._levelToName[root_level]}"
-    )
+    logger.debug(f"Setting root logger level to {logging._levelToName[root_level]}")
     logger.setLevel(root_level)
 
     if cfg.console.enabled is False:
@@ -186,7 +185,9 @@ async def init_logs(config: ConfigFileModel) -> None:
     logger.info(f"Logging initialized...")
 
 
-def parse_client_config_file(cfg_file: Path, template: Optional[Union[ConfigFileModel, Any]] = None) -> Optional[ConfigFileModel]:
+def parse_client_config_file(
+    cfg_file: Path, template: Optional[Union[ConfigFileModel, Any]] = None
+) -> Optional[ConfigFileModel]:
     """Parse the YAML configuration file."""
     if template is None:
         template = ConfigFileModel
@@ -542,27 +543,40 @@ class ZMClient:
 
     def _init_db(self):
         from .Libs.DB import ZMDB
+
         self.db = ZMDB()
         logger.debug(f"DB initialized")
 
     async def _get_db_data(self, eid: int):
         """Get data from the database"""
+        # return mid, mon_name, mon_post, mon_pre, mon_fps, reason, event_path, \
+        #        notes, width, height, color, ring_buffer
+        mid: int = 0
         (
-            g.mid,
+            mid,
             g.mon_name,
             g.mon_post,
             g.mon_pre,
             g.mon_fps,
             g.event_cause,
             g.event_path,
+            g.notes,
+            g.mon_width,
+            g.mon_height,
+            g.mon_colorspace,
+            g.mon_image_buffer_count,
         ) = self.db.grab_all(eid)
+        if (mid and g.mid) and (g.mid != mid):
+            logger.debug(
+                f"{LP} CLI supplied monitor ID ({g.mid}) INCORRECT! Changed to: {mid}"
+            )
+        if mid:
+            g.mid = mid
 
     def _init_api(self):
         g.api = self.api = ZMAPI(g.config.zoneminder)
         logger.debug(f"API initialized")
         self.notifications = Notifications()
-
-
 
     @staticmethod
     async def convert_to_cv2(image: Union[np.ndarray, bytes]):
@@ -1002,7 +1016,6 @@ class ZMClient:
             f"perf:: Total detections time {perf_counter() - _start:.5f} seconds"
         )
         # logger.debug(f"\n\n\nFINAL RESULTS: {final_detections}\n\n\n")
-        await self.clean_up()
         if matched_l:
             matched = {
                 "labels": matched_l,
@@ -1331,7 +1344,6 @@ class ZMClient:
                                 # check max area compared to zone
                                 lp = f"{__lp}zone max area::"
                                 if max_area := type_filter.max_area is not None:
-
                                     if isinstance(max_area, float):
                                         if max_area >= 1.0:
                                             max_area = 1.0
@@ -1426,10 +1438,18 @@ class ZMClient:
 
                                 # Override with monitor filters than zone filters
                                 if not s_o:
-                                    if mon_filt and mon_filt.static_objects and mon_filt.static_objects.enabled:
+                                    if (
+                                        mon_filt
+                                        and mon_filt.static_objects
+                                        and mon_filt.static_objects.enabled
+                                    ):
                                         s_o = True
                                 elif s_o:
-                                    if mon_filt and mon_filt.static_objects and mon_filt.static_objects.enabled:
+                                    if (
+                                        mon_filt
+                                        and mon_filt.static_objects
+                                        and mon_filt.static_objects.enabled
+                                    ):
                                         s_o = False
                                 # zone filters override monitor filters
                                 if not s_o:

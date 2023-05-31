@@ -9,7 +9,7 @@ from enum import IntEnum
 import logging
 from sys import maxsize as sys_maxsize
 from time import sleep
-from typing import Optional, IO, Union, TYPE_CHECKING, Set, Tuple
+from typing import Optional, IO, Union, TYPE_CHECKING, Set, Tuple, Any, Dict
 
 from ..Log import CLIENT_LOGGER_NAME
 
@@ -373,6 +373,11 @@ class ZMAlarmStateChanges(IntEnum):
     TRIGGER_CANCEL = 10
     TRIGGER_ON = 11
     TRIGGER_OFF = 12
+
+
+# Read images from a video/image file
+class FileImagePipeLine:
+    config: Optional[Dict[str, Any]] = None
 
 
 class SHMImagePipeLine:
