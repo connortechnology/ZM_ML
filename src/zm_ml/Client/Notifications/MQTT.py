@@ -1,17 +1,19 @@
+from __future__ import annotations
+
 import logging
 import ssl
-from datetime import datetime
 from time import time
-from pathlib import Path
-from typing import Union, Optional, Any
+from typing import Union, Optional, Any, TYPE_CHECKING
 
 import numpy as np
 import paho.mqtt.client as mqtt_client
 
-from .. import get_global_config
-from ...Shared.configs import GlobalConfig
 from ..Log import CLIENT_LOGGER_NAME
 from ..Notifications import CoolDownBase
+from ..main import get_global_config
+
+if TYPE_CHECKING:
+    from ...Shared.configs import GlobalConfig
 
 g: Optional[GlobalConfig] = None
 
