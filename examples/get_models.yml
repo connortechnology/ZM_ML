@@ -1,0 +1,37 @@
+# Config to grab ML models
+# from the web and store them
+
+download:
+    # name is for convenience
+    - name: "yolo v4"
+      enabled: yes  # defaults to true
+      # absolute or relative path to destination
+      destination: "models/yolo"
+      # saves the file name as is
+      urls:
+        - # newer yolov4 pretrained
+        - "https://github.com/AlexeyAB/darknet/releases/download/yolov4/yolov4_new.weights"
+        - "https://raw.githubusercontent.com/AlexeyAB/darknet/master/cfg/yolov4_new.cfg"
+        # v4 tiny
+        - "https://github.com/AlexeyAB/darknet/releases/download/yolov4/yolov4-tiny.weights"
+        - "https://raw.githubusercontent.com/AlexeyAB/darknet/master/cfg/yolov4-tiny.cfg"
+
+    - name: "yolo v7"
+      destination: "models/yolo"
+      urls:
+        - "https://github.com/AlexeyAB/darknet/releases/download/yolov4/yolov7.weights"
+        - "https://raw.githubusercontent.com/AlexeyAB/darknet/master/cfg/yolov7.cfg"
+        - "https://github.com/AlexeyAB/darknet/releases/download/yolov4/yolov7-tiny.weights"
+        - "https://raw.githubusercontent.com/AlexeyAB/darknet/master/cfg/yolov7-tiny.cfg"
+        - "https://github.com/AlexeyAB/darknet/releases/download/yolov4/yolov7x.weights"
+        - "https://raw.githubusercontent.com/AlexeyAB/darknet/master/cfg/yolov7x.cfg"
+
+    - name: "tpu models"
+      enabled: no
+      destination: "models/tpu"
+      urls:
+        - "https://github.com/google-coral/edgetpu/raw/master/test_data/ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite"
+        - "https://github.com/google-coral/test_data/raw/master/ssdlite_mobiledet_coco_qat_postprocess_edgetpu.tflite"
+        - "https://github.com/google-coral/test_data/raw/master/ssd_mobilenet_v2_face_quant_postprocess_edgetpu.tflite"
+        - "https://github.com/google-coral/test_data/raw/master/tf2_ssd_mobilenet_v2_coco17_ptq_edgetpu.tflite"
+        - "https://github.com/google-coral/test_data/raw/master/efficientdet_lite3_512_ptq_edgetpu.tflite"
