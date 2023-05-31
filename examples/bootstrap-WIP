@@ -116,7 +116,7 @@ usage() {
 # NOTE: This requires GNU getopt.  On Mac OS X and FreeBSD, you have to install this
 # separately; see below.
 TEMP=$(getopt -o thg:P:u:i: --long testing,help,git:,pip:,python:,installer:,type: \
-              -n 'bootstrap' -- "$@")
+              -n 'bootstrap-WIP' -- "$@")
 if [ $? != 0 ] ; then
   pprint_ error "Options parsing error!! Terminating..." >&2
   exit 1
