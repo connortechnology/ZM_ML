@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
+# USAGE -> zmml_obj_det [Event ID]
+# set ML_BAT_THEME to control the bat theme, set it to 'random' to grab a random theme each time
 
-files=''
+# Manually set the bat theme, disables random
+bat_theme='Coldark-Dark'
 
-config="'${ML_CLIENT_CONF_FILE:-/home/zmadmin/zm_ml/configs/client.yml}"
-detect_script="${ML_CLIENT_EVENT_START:-/home/zmadmin/zm_ml/examples/eventstart.py}"
+config="${ML_CLIENT_CONF_FILE:-/etc/zm/client.yml}"
+detect_script="${ML_CLIENT_EVENT_START:-/usr/local/bin/zmml_eventproc}"
 
 # pliablepixels
 _WEB_OWNER_FROM_PS=$(ps xao user,group,comm | grep -E '(httpd|hiawatha|apache|apache2|nginx)' | grep -v whoami | grep -v root | head -n1 | awk '{print $1}')
@@ -14,102 +17,105 @@ _WEB_OWNER_FROM_PS=$(ps xao user,group,comm | grep -E '(httpd|hiawatha|apache|ap
 
 WEB_OWNER=${WEB_OWNER:-${_WEB_OWNER_FROM_PS}}
 #WEB_GROUP=${WEB_GROUP:-${_WEB_GROUP_FROM_PS}}
-# Personal project for dynamic bat theming
-bat_="$(which bat)"
-bat_themes=(
-  "1337"
-  "Coldark-Cold"
-  "Coldark-Dark"
-  "DarkNeon"
-  "Dracula"
-  "GitHub"
-  "Monokai Extended"
-  "Monokai Extended Bright"
-  "Monokai Extended Light"
-  "Monokai Extended Origin"
-  "Nord"
-  "OneHalfDark"
-  "OneHalfLight"
-  "Solarized (dark)"
-  "Solarized (light)"
-  "Sublime Snazzy"
-  "TwoDark"
-  "Visual Studio Dark+"
-  "ansi"
-  "base16"
-  "base16-256"
-  "gruvbox-dark"
-  "gruvbox-light"
-  "zenburn"
-)
-# Themes for dark bg terminals
-bat_theme_darkbg=(
-  "1337"
-  "Coldark-Cold"
-  "Coldark-Dark"
-  "DarkNeon"
-  "Dracula"
-  "Monokai Extended"
-  "Monokai Extended Bright"
-  "Monokai Extended Light"
-  "Monokai Extended Origin"
-  "Nord"
-  "OneHalfDark"
-  "Solarized (dark)"
-  "Sublime Snazzy"
-  "TwoDark"
-  "Visual Studio Dark+"
-  "ansi"
-  "base16"
-  "base16-256"
-  "gruvbox-dark"
-  "zenburn"
-)
-# Themes for light bg terminals
-bat_theme_lightbg=(
-  "GitHub"
-  "OneHalfLight"
-  "Solarized (light)"
-  "gruvbox-light"
-)
-# Manually set the bat theme
-bat_theme='Coldark-Dark'
-
-if [[ -n "${bat_}" ]]; then
-  use_random_bat_theme="${ML_BAT_RANDOM:-false}"
-  if [[ "${use_random_bat_theme}" == 'true' ]]; then
-    bat_theme="${bat_themes[$RANDOM % ${#bat_themes[@]}]}"
-    echo "Using RANDOM bat theme: ${bat_theme}"
-
-  fi
-  echo "Using bat ($bat_) theme: $bat_theme"
-fi
 
 usage() {
-  echo "ZM-ML Client EventStartCommand helper shell script, NOTE: Must use only numerical arguments"
-  echo "Usage: '$0 Event-ID [Monitor-ID: Optional]'"
+  echo "ZM-ML Client EventStartCommand helper shell script"
+  echo "NOTE: Must use only numerical Event-ID"
+  echo "Usage: '$0 Event-ID'"
 }
 
-# Check we have 1 to 2 arguments
-if [[ $# -lt 1 || $# -gt 2 ]]; then
-  usage
-  exit 1
-fi
-# Check that both arguments are numerical
-if ! [[ "$1" =~ ^[0-9]+$ ]] || [[ -n "$2" && ! "$2" =~ ^[0-9]+$ ]]; then
-  usage
-  exit 1
-fi
 
 zmml_obj_det() {
+  # Check we have 1 arg
+  if [[ ! $# -ge 1 ]]; then
+    usage
+    exit 1
+  fi
+  # Check that the only arg is numerical
+  if ! [[ "$1" =~ ^[0-9]+$ ]]; then
+    usage
+    exit 1
+  fi
+
+  # Personal project for dynamic bat theming
+  bat_="$(which bat)"
+  bat_themes=(
+    "1337"
+    "Coldark-Cold"
+    "Coldark-Dark"
+    "DarkNeon"
+    "Dracula"
+    "GitHub"
+    "Monokai Extended"
+    "Monokai Extended Bright"
+    "Monokai Extended Light"
+    "Monokai Extended Origin"
+    "Nord"
+    "OneHalfDark"
+    "OneHalfLight"
+    "Solarized (dark)"
+    "Solarized (light)"
+    "Sublime Snazzy"
+    "TwoDark"
+    "Visual Studio Dark+"
+    "ansi"
+    "base16"
+    "base16-256"
+    "gruvbox-dark"
+    "gruvbox-light"
+    "zenburn"
+  )
+  # Themes for dark bg terminals
+  bat_theme_darkbg=(
+    "1337"
+    "Coldark-Cold"
+    "Coldark-Dark"
+    "DarkNeon"
+    "Dracula"
+    "Monokai Extended"
+    "Monokai Extended Bright"
+    "Monokai Extended Light"
+    "Monokai Extended Origin"
+    "Nord"
+    "OneHalfDark"
+    "Solarized (dark)"
+    "Sublime Snazzy"
+    "TwoDark"
+    "Visual Studio Dark+"
+    "ansi"
+    "base16"
+    "base16-256"
+    "gruvbox-dark"
+    "zenburn"
+  )
+  # Themes for light bg terminals
+  bat_theme_lightbg=(
+    "GitHub"
+    "OneHalfLight"
+    "Solarized (light)"
+    "gruvbox-light"
+  )
+  if [[ -n "${bat_}" ]]; then
+    use_random_bat_theme="${ML_BAT_RANDOM:-false}"
+    if [[ "${use_random_bat_theme}" == 'true' ]]; then
+      bat_theme="${bat_themes[$RANDOM % ${#bat_themes[@]}]}"
+      echo "Using RANDOM bat theme: ${bat_theme}"
+
+    fi
+    echo "Using bat ($bat_) theme: $bat_theme"
+  fi
+
   EID="$1"
-  MID="$2"
-  cmd_="sudo -u ${WEB_OWNER} python3 ${detect_script} --config ${config} --mid ${MID} --eid ${EID} 2>&1"
+  echo "args before shift: $*"
+  # shift the args
+  shift
+  echo "ARGS after shift: $*"
+
+  cmd_="sudo -u ${WEB_OWNER} python3 ${detect_script} --config ${config} --eid ${EID} -E $* 2>&1"
+  echo "Executing: $cmd_"
   if [ -n "$bat_" ]; then
     cmd_="${cmd_} | ${bat_} --style changes,header,rule,snip --paging never -l log --theme '${bat_theme}'"
   fi
   # execute the command
   eval "$cmd_"
-
 }
-zmml_obj_det "$@"
