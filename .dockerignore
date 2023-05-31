@@ -17,7 +17,7 @@ src/zm_ml.egg-info/
 configs/server.yml
 configs/secrets.yml
 configs/client.yml
-examples/filter_rclone.py
+examples/filters/filter_rclone.py
 examples/kmeans_dominant_color.py
 pip_install_report.json
 zm-ml_install.log
