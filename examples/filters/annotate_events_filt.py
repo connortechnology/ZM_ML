@@ -300,7 +300,7 @@ def get_files(src: Path, file_type: Optional[FileType] = None) -> List[Path]:
 
 def main():
     global model, COLORS, CLASS_NAMES, VC, UPDATE_TIMER, output_fps, ZM_DB, MONITOR_ID
-    writer: ffmpegcv.VideoWriterNV
+    writer: ffmpegcv.VideoWriter
     method: DetectMethod = DetectMethod.LOCAL
     if g.remote.enabled:
         method = DetectMethod.MLAPI
@@ -389,8 +389,8 @@ def main():
         # CPU
         # writer = ffmpegcv.VideoWriter(output, "h264", TARGET_FPS)
         # GPU
-        logger.info(f"{LP} Creating GPU accelerated video writer")
-        writer = ffmpegcv.VideoWriterNV(output, "h264", output_fps)
+        
+        writer = ffmpegcv.VideoWriter(output, "h264", output_fps)
 
         video_seconds = total_frames / video_fps
         if video_seconds > 60:
@@ -459,8 +459,8 @@ def main():
         # CPU
         # writer = ffmpegcv.VideoWriter(output, "h264", TARGET_FPS)
         # GPU
-        logger.info(f"{LP} Creating GPU accelerated video writer")
-        writer = ffmpegcv.VideoWriterNV(output, "h264", output_fps)
+        
+        writer = ffmpegcv.VideoWriter(output, "h264", output_fps)
 
         for _file in source:
             frame = cv2.imread(_file.as_posix())
