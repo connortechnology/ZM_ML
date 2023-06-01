@@ -1,0 +1,9 @@
+pydantic~=1.10.2
+SQLAlchemy~=1.4.42
+requests~=2.28.1
+urllib3~=1.26.12
+numpy~=1.23.4
+Shapely~=1.8.5.post1
+PyYAML~=6.0
+python-dotenv~=0.21.0
+ffmpegcv~=0.3.1
