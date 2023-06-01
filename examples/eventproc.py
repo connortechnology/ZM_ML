@@ -12,7 +12,7 @@ import uvloop
 import asyncio
 
 import zm_ml
-from zm_ml.Shared.Models.validators import str_to_path
+from zm_ml.Shared.Models.validators import str2path
 from zm_ml.Shared.configs import GlobalConfig
 from zm_ml.Client.Models.config import ClientEnvVars
 from zm_ml.Client.main import (
@@ -142,7 +142,7 @@ async def main():
         if g.Environment.client_conf_file:
             cfg_file = g.Environment.client_conf_file
     if cfg_file:
-        cfg_file = str_to_path(cfg_file)
+        cfg_file = str2path(cfg_file)
     assert cfg_file, "No config file supplied via CLI or ENV"
     g.config_file = cfg_file
     logger.info(

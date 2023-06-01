@@ -66,7 +66,7 @@ def validate_log_level(v, **kwargs):
     return v
 
 
-def str_to_path(v: Union[str, Path, None], **kwargs):
+def str2path(v: Union[str, Path, None], **kwargs):
     """Convert a str to a Path object - pydantic validator
 
     Args:
@@ -81,12 +81,13 @@ def str_to_path(v: Union[str, Path, None], **kwargs):
     if v:
         assert isinstance(v, (Path, str))
         v = Path(v)
+    v.expanduser().resolve()
     return v
 
 
 def _validate_dir(v, field=None, values=None, config=None):
     if v:
-        v = str_to_path(v, field=field, values=values, config=config)
+        v = str2path(v, field=field, values=values, config=config)
         assert v.exists(), f"Path [{v}] does not exist"
         assert v.is_dir(), f"Path [{v}] is not a directory"
     return v
@@ -94,7 +95,7 @@ def _validate_dir(v, field=None, values=None, config=None):
 
 def _validate_file(v, field=None, values=None, config=None):
     if v:
-        v = str_to_path(v, field=field, values=values, config=config)
+        v = str2path(v, field=field, values=values, config=config)
         assert v.exists(), f"Path [{v}] does not exist"
         assert v.is_file(), f"Path [{v}] is not a file"
     return v

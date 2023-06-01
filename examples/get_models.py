@@ -72,10 +72,12 @@ if __name__ == "__main__":
                 logger.error(f"Could not download '{url}': {r.status_code}")
                 continue
             fname = url.split("/")[-1]
+            d.destination.mkdir(parents=True, exist_ok=True)
             dest = d.destination / fname
+            dest.touch(exist_ok=True)
             logger.info(f"Saving to '{dest}'")
             dest.write_bytes(r.content)
-
+    logger.info("Done")
 
 
 

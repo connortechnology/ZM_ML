@@ -191,7 +191,6 @@ def parse_client_config_file(
     """Parse the YAML configuration file."""
     if template is None:
         template = ConfigFileModel
-    logger.debug(f"template type = {type(template)} {template=}")
     cfg: Dict = {}
     _start = perf_counter()
     raw_config = cfg_file.read_text()

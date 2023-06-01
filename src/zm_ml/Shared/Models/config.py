@@ -4,7 +4,7 @@ from typing import Dict, Optional
 
 from pydantic import BaseModel, Field, validator
 
-from .validators import validate_log_level, str_to_path
+from .validators import validate_log_level, str2path
 from ...Server.Models.DEFAULTS import *
 
 
@@ -42,7 +42,7 @@ class LoggingSettings(LoggingLevelBase):
         group: str = Field(default="www-data")
 
         _validate_path = validator("path", allow_reuse=True, pre=True)(
-            str_to_path
+            str2path
         )
     class SanitizeLogging(DefaultNotEnabled):
         replacement_str: str = Field(default="<sanitized>")

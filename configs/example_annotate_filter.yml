@@ -1,48 +1,75 @@
 # Same as ZM ML, allows for ${} wrapped BASH like variables to be substituted
-testing:
-  enabled: no
-  substitutions:
-    You can override the normal substitutions section completely when testing: "sweet"
-
-
 substitutions:
-  DATA_DIR: /opt/zm_ml/data
-  TMP_DIR: /opt/zm_ml/tmp
   CFG_DIR: /etc/zm
-  LOGGING_DIR: /var/log/zm
-  MODEL_DIR: /opt/zm_ml/data/models
+  MODEL_DIR: /shared/models
   # This file contains substitutions that will be imported into this file (secrets)
   # NOTE: The 'IncludeFile' directive must be contained in the 'substitutions' section
-  IncludeFile: /etc/zm/secrets.yml
+#  IncludeFile: /etc/zm/secrets.yml
+
+# Directory of ZoneMinder zm.conf file and conf.d dir
+zm_conf: "${CFG_DIR}"
+# log status updates
+status_updates: yes
+
+logging:
+  debug: yes
+  # log to a file and console
+  file:
+    enabled: yes
+    # zm log directory
+    path: /var/log/zm
+    #
+    filename: annotate_events.log  # If the event is from monitor 4 this becomes annotated_m4.log
+
+# Until filters and per monitor overrides work, only annotate these labels
+annotate_labels:
+  - person
+  - car
+  - truck
+  - bus
+  - dog
+  - cat
+  - bicycle
+  - motorbike
+
+# If the event is a JPG stored event, The DB is queried for the encoding FPS
+db:
+  # Leave empty to try and read values from zm .conf files (requires zm_conf to be set!)
+  host:
+  port:
+  user:
+  password:
+  name:
+
+# If local and remote are enabled, remote will be used
+
+local:
+  # Run ML locally.
+  enabled: yes
+
+  model:
+    name: yolov4
+    confidence: 0.3
+    nms: 0.323
+    # height and width of images for the model
+    width: 416
+    height: 416
+    input: ${MODEL_DIR}/yolo/yolov4_new.weights  # REQUIRED
+    config: ${MODEL_DIR}/yolo/yolov4_new.cfg
+    # If labels is unspecified, COCO17 labels will be used by default
+#    labels: /opt/zm_ml/data/models/yolov4/coco.names
 
 
-system:
-  # Override the default config path [/etc/zm]
-  config_path: ${CFG_DIR}
-  # Path where the system will store variable data [/opt/zmml/data]
-  variable_data_path: ${DATA_DIR}
-  # Path where temp files will be stored, leave empty to auto-detect
-  tmp_path: ${TMP_DIR}
-  # Path to where any images will be stored
-  image_dir: ${DATA_DIR}/images
-  # Maximum parallel threaded processes (set to cores)
-  thread_workers: 4
+# Send to MLAPI instead of processing locally
+remote:
+  enabled: no
+  host:
+  port: 5000
+  # what models to request for each frame sent to MLAPI
+  models:
+    - yolov4
 
-zoneminder:
-  api: ${ZM_API}
-  portal: ${ZM_PORTAL}
-  user: ${ZM_USER}
-  password: ${ZM_PASS}
-  # a value of 'no' will allow self-signed certs
-  ssl_verify: no
-  headers:
-    # Add custom headers to all requests
-    # This is useful for adding custom headers to ZM API requests
-    # You can put CloudFlare ZeroTrust Access headers here as well
-
-    #CF-Access-Client-Secret: ${ZM_CF_0TRUST_SECRET}
-    #CF-Access-Client-Id: ${ZM_CF_0TRUST_HEADER}
-
+# This is all WIP aka NOT WORKING YET
 label_groups:
   # These are 'groups' of labels that can be used for per monitor filtering
   animals:
@@ -66,20 +93,6 @@ label_groups:
     - Nelson
     - Sideshow Bob
     - Mr. Burns
-
-models:
-  # Default dict of Models that will run if not specified per monitor
-  # NOTE: You can override these settings per monitor
-#    yolov4 tiny:
-#    yolov7 tiny:
-  yolov4:
-#    yolov4-p6:
-#    yolov7:
-#    yolov7x:
-  # TEST for TPU
-#    tpu test:
-  # Dlib face detection/recognition test
-#    dlib face:
 
 # Import zones defined in ZM
 import_zones: yes

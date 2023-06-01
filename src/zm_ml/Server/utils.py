@@ -1,15 +1,21 @@
 import os
+import warnings
 from datetime import datetime, timedelta
 from logging import getLogger
 from typing import Union, Any, Optional
 
 import cv2
 import numpy as np
-from jose import jwt
-from passlib.context import CryptContext
+try:
+    from jose import jwt
+    from passlib.context import CryptContext
+except ImportError:
+    warnings.warn(
+        "Unable to import 'jose' and/or 'passlib.context' modules. "
+        "JWT and password hashing will not be available."
+    )
 
-from .Log import SERVER_LOGGER_NAME, SERVER_LOG_FORMAT
-
+from .Log import SERVER_LOGGER_NAME
 
 logger = getLogger(SERVER_LOGGER_NAME)
 ACCESS_TOKEN_EXPIRE_MINUTES = 30  # 30 minutes
@@ -17,11 +23,13 @@ REFRESH_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 ALGORITHM = "HS256"
 JWT_SECRET_KEY = os.environ.get("ML_SERVER_JWT_SECRET_KEY")  # should be kept secret
 JWT_REFRESH_SECRET_KEY = os.environ.get("ML_SERVER_JWT_REFRESH_SECRET_KEY")  # should be kept secret
+try:
+    password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+except NameError:
+    pass
 
-password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-
-def str2bool(v: Optional[Union[Any, bool]]) -> Union[Any, bool]:
+def str2bool(v: Optional[Union[Any, bool]], **kwargs) -> Union[Any, bool]:
     """Convert a string to a boolean value, if possible.
 
     .. note::
@@ -36,7 +44,9 @@ def str2bool(v: Optional[Union[Any, bool]]) -> Union[Any, bool]:
         false_ret = ("no", "false", "f", "n", "0", "off", "nyet", "disabled")
         if isinstance(v, bool):
             return v
-        elif isinstance(v, str):
+        if isinstance(v, int):
+            v = str(v)
+        if isinstance(v, str):
             if (normalized_v := str(v).lower().strip()) in true_ret:
                 return True
             elif normalized_v in false_ret:
