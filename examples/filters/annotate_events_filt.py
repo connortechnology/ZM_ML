@@ -124,7 +124,7 @@ class FilterConfigFileModel(BaseModel):
 
     class RemoteSettings(BaseModel):
         enabled: bool = False
-        host: Union[AnyUrl, IPvAnyAddress, None] = 'localhost'
+        host: Union[AnyUrl, IPvAnyAddress, None] = "localhost"
         port: int = 5000
         models: List[str] = Field(default_factory=list)
 
@@ -134,7 +134,6 @@ class FilterConfigFileModel(BaseModel):
             if v:
                 v = _validate_replace_localhost
             return v
-
 
     class LoggingSettings(BaseModel):
         class LogFileSettings(BaseModel):
@@ -335,7 +334,6 @@ def main():
         # we need to query db for event and monitor info to encode video at correct fps
         source = image_files
 
-
     if len(source) == 0:
         logger.error(f"{LP} No source files found in {SOURCE_DIR}")
         sys.exit(1)
@@ -365,7 +363,6 @@ def main():
             f"FROM ZMDB -> Target FPS for monitor {MONITOR_ID} is {output_fps}"
         )
 
-
     COLORS = np.random.randint(0, 255, size=(len(CLASS_NAMES), 3), dtype="uint8")
     output = SOURCE_DIR / "annotated.mp4"
     if output.exists():
@@ -386,15 +383,16 @@ def main():
         video_fps = VC.get(cv2.CAP_PROP_FPS)
         output_fps = video_fps
         logger.debug(f"{LP} Target resolution: {target_res} - target_fps: {output_fps}")
-        # CPU
-        # writer = ffmpegcv.VideoWriter(output, "h264", TARGET_FPS)
-        # GPU
-        
+        # GPU accelerated writer (is it worth it?)
+        # writer = ffmpegcv.VideoWriterNV(output, "h264", TARGET_FPS)
+        # CPU writer
         writer = ffmpegcv.VideoWriter(output, "h264", output_fps)
 
         video_seconds = total_frames / video_fps
         if video_seconds > 60:
-            logger.warning(f"{LP} Video file is longer than 60 seconds, if you are not using a GPU, this may take awhile!")
+            logger.warning(
+                f"{LP} Video file is longer than 60 seconds, if you are not using a GPU, this may take awhile!"
+            )
         if not output.exists():
             logger.info(f"{LP} Creating output file {output}")
             output.touch(mode=0o666)
@@ -449,7 +447,6 @@ def main():
             writer.write(frame)
 
     else:
-
         logger.info("Processing image...")
         frames_timer = time.perf_counter()
         frames_processed = 0
@@ -459,7 +456,7 @@ def main():
         # CPU
         # writer = ffmpegcv.VideoWriter(output, "h264", TARGET_FPS)
         # GPU
-        
+
         writer = ffmpegcv.VideoWriter(output, "h264", output_fps)
 
         for _file in source:
