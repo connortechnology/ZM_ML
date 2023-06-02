@@ -17,14 +17,23 @@ import warnings
 from datetime import timedelta
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional, NamedTuple, Tuple, Dict, Union
+from typing import List, Optional, NamedTuple, Tuple, Dict, Union, Any
 
-import pydantic.fields
-from zm_ml.Server.utils import str2bool
-from zm_ml.Shared.Models.validators import _validate_replace_localhost, str2path
+from zm_ml.Shared.Models.validators import (
+    _validate_replace_localhost,
+    str2path,
+    str2bool, _validate_dir,
+)
 
 try:
-    from pydantic import BaseModel, Field, AnyUrl, IPvAnyAddress, validator
+    import pydantic.fields
+    from pydantic import (
+        BaseModel as PydanticBaseModel,
+        Field,
+        AnyUrl,
+        IPvAnyAddress,
+        validator,
+    )
 except ImportError:
     warnings.warn("pydantic not installed, please install it to use this script")
     raise
@@ -67,7 +76,6 @@ from zm_ml.Server.ML.coco17_cv2 import COCO17
 
 
 LP: str = "filter:annotate:"
-SOURCE_DIR: Path
 logger = logging.getLogger("AnnotateEvents")
 logger.setLevel(logging.DEBUG)
 formatter: logging.Formatter = logging.Formatter(
@@ -80,27 +88,40 @@ logger.addHandler(ch)
 # zm has logrotation enabled for all files ending in .log in its log folder
 
 set_logger(logger)
-# Model class names
-CLASS_NAMES: List[str] = COCO17
-# Colors for bounding boxes
-COLORS: Optional[np.ndarray] = None
-# log status updates of the video file processing
-STATUS_UPDATES: bool = True
-# how often to log status updates
-UPDATE_FRAME_COUNT: int = 10
+SOURCE_DIR: Path
+CLASS_NAMES: List[str] = []
 # Resize the output video from whatever the source is
-RESIZE: bool = False
-# Resize to this size (H, W)
-RESIZE_TO: Optional[Tuple[int, int]] = None
-
 CONFIG_PATH: Optional[Path] = None
 UPDATE_TIMER: float = 0.0
-output_fps: int = 1
-
+COLORS: List[Tuple[int, int, int]] = []
 ZM_DB: Optional[ZMDB] = None
 
 
+class BaseModel(PydanticBaseModel):
+    class Config:
+        arbitrary_types_allowed = True
+
+
 class FilterConfigFileModel(BaseModel):
+    class OutputSettings(BaseModel):
+        class ResizeSettings(BaseModel):
+            enabled: bool = False
+            width: Optional[int] = 0
+            height: Optional[int] = 0
+            keep_aspect: bool = True
+
+            _validate_1 = validator(
+                "enabled", "keep_aspect", allow_reuse=True, pre=True
+            )(str2bool)
+
+        resize: ResizeSettings = Field(default_factory=ResizeSettings)
+
+    class StatusUpdateSettings(BaseModel):
+        enabled: bool = True
+        every: Optional[int] = 10
+
+        _validate_1 = validator("enabled", allow_reuse=True, pre=True)(str2bool)
+
     class LocalSettings(BaseModel):
         class LocalModelSettings(BaseModel):
             name: str = Field("n/a")
@@ -111,6 +132,7 @@ class FilterConfigFileModel(BaseModel):
             labels: Optional[Path] = None
             width: int = 416
             height: int = 416
+
 
             @validator("input", "config", "labels", always=True)
             def check_path(cls, v, field: pydantic.fields.ModelField, **kwargs):
@@ -130,9 +152,10 @@ class FilterConfigFileModel(BaseModel):
 
         @validator("host", allow_reuse=True, pre=True)
         def _validate_host(cls, v, field):
-            logger.info(f"Validating {field.name} VALUE: {v}")
+            logger.info(f"Validating KEY: {field.name} VALUE: {v} - {type(v)}")
             if v:
-                v = _validate_replace_localhost
+                v = _validate_replace_localhost(v)
+                logger.debug(f"After validation: {v} - {type(v)}")
             return v
 
     class LoggingSettings(BaseModel):
@@ -147,24 +170,35 @@ class FilterConfigFileModel(BaseModel):
         debug: bool = False
         file: LogFileSettings = Field(default_factory=LogFileSettings)
 
+    class FrameSkipSettings(BaseModel):
+        enabled: bool = False
+        every: int = 1
+
+        _validate_1 = validator("enabled", allow_reuse=True, pre=True)(str2bool)
+
     substitutions: Dict[str, str] = Field(default_factory=dict)
     zm_conf: Path = Field("/etc/zm")
-    status_updates: bool = True
+    status_updates: StatusUpdateSettings = Field(default_factory=StatusUpdateSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     annotate_labels: List[str] = Field(default_factory=list)
     db: ZMDBSettings = Field(default_factory=ZMDBSettings)
+    output: OutputSettings = Field(default_factory=OutputSettings)
     local: LocalSettings = Field(default_factory=LocalSettings)
     remote: RemoteSettings = Field(default_factory=RemoteSettings)
     import_zones: bool = False
+    frame_skip: int = 1
     # filters: MatchFilters = Field(default_factory=MatchFilters)
     # monitors: Dict[int, MonitorsSettings] = Field(default_factory=dict)
 
-    _validate_1 = validator(
-        "status_updates", "import_zones", pre=True, allow_reuse=True
-    )(str2bool)
+    _validate_1 = validator("import_zones", pre=True, allow_reuse=True)(str2bool)
 
-    class Config:
-        extra = "allow"
+    @validator("zm_conf", pre=True, always=True)
+    def _validate_2(cls, v, field, values, config):
+        if v:
+            v = str2path(v)
+            v = _validate_dir(v)
+        return v
+
 
 
 class DetectedObject(NamedTuple):
@@ -194,7 +228,7 @@ def detect(
     conf: Optional[float] = None,
     nms: Optional[float] = None,
     allowed_labels: Optional[List[str]] = None,
-    model: Optional[cv2.dnn_DetectionModel] = None,
+    model: Optional[cv2.dnn.DetectionModel] = None,
 ):
     """Run detection on a frame"""
     height, width, _ = image.shape
@@ -265,8 +299,148 @@ def detect(
             #     image, text, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1
             # )
     elif method == DetectMethod.MLAPI:
-        # Send to zm mlapi server
-        pass
+        cfg = g.remote
+        # comma separated string of models
+        models = f",".join(cfg.models).rstrip(",")
+        from requests_toolbelt import MultipartEncoder
+        import json
+        import requests
+
+        img = cv2.imencode(".jpg", image)[1].tobytes()
+        url = f"http://{str(cfg.host).lstrip('http://').lstrip('https://')}:{cfg.port}/detect/group"
+        multipart_data = MultipartEncoder(
+            fields={
+                "model_hints": (None, json.dumps(models), "application/json"),
+                "image": ("image.jpg", img, "image/jpeg"),
+            }
+        )
+        headers = {
+            "Content-Type": multipart_data.content_type,
+        }
+        r = requests.post(
+            url,
+            data=multipart_data,
+            headers=headers,
+        )
+        response: Optional[List[Dict[str, Any]]] = None
+        if r.status_code == 200:
+            response = r.json()
+        else:
+            logger.error(f"{LP}detect: Got error from MLAPI (code: {r.status_code}) -> {r.text}")
+        if response:
+            # [ {response data from 1 model}, {response data from 2 model}, ... ]
+            for result in response:
+                if result.get('success') is True:
+                    # m_type = result.get('type')
+                    # m_proc = result.get('processor')
+                    # m_name = result.get('model_name')
+                    labels = result.get('label')
+                    confs = result.get('confidence')
+                    boxes = result.get('bounding_box')
+                    for _l, _c, _b in zip(labels, confs, boxes):
+                        label = _l
+                        if allowed_labels and (label not in allowed_labels):
+                            continue
+                        confidence = _c
+                        box = _b
+
+                        x, y, _w, _h = (
+                            int(round(box[0])),
+                            int(round(box[1])),
+                            int(round(box[2])),
+                            int(round(box[3])),
+                        )
+                        confidence = float(confidence)
+                        bbox = [
+                            x,
+                            y,
+                            x + _w,
+                            y + _h,
+                        ]
+                        color = [int(c) for c in COLORS[CLASS_NAMES.index(label)]]
+                        cv2.rectangle(image, (x, y), (x + _w, y + _h), color, 2)
+                        text = f"{label}: {confidence * 100:.2f}%"
+                        # scale text based on image resolution
+                        font = cv2.FONT_HERSHEY_SIMPLEX
+                        font_scale = 0.5 * min(width, height) / 1000
+                        thickness = max(int(font_scale * 2), 1)
+                        (text_width, text_height), _ = cv2.getTextSize(
+                            text, font, font_scale, thickness
+                        )
+                        cv2.rectangle(
+                            image,
+                            (x, y),
+                            (x + text_width, y - text_height),
+                            (
+                                0,
+                                0,
+                                0,
+                            ),
+                            -1,
+                        )
+                        text_x = x
+                        text_y = y - 5
+                        cv2.putText(
+                            image,
+                            text,
+                            (text_x, text_y),
+                            font,
+                            font_scale,
+                            (255, 255, 255),
+                            thickness,
+                        )
+
+                        # Old method
+                        # x, y, _w, _h = (
+                        #     int(round(box[0])),
+                        #     int(round(box[1])),
+                        #     int(round(box[2])),
+                        #     int(round(box[3])),
+                        # )
+                        # confidence = float(confidence)
+                        # bbox = [
+                        #     x,
+                        #     y,
+                        #     x + _w,
+                        #     y + _h,
+                        # ]
+                        # color = [int(c) for c in COLORS[CLASS_NAMES.index(label)]]
+                        # cv2.rectangle(image, (x, y), (x + _w, y + _h), color, 2)
+                        # text = f"{label}: {confidence * 100:.2f}%"
+                        # # scale text based on image resolution
+                        # font = cv2.FONT_HERSHEY_SIMPLEX
+                        # font_scale = 0.5 * min(width, height) / 1000
+                        # thickness = max(int(font_scale * 2), 1)
+                        # (text_width, text_height), _ = cv2.getTextSize(
+                        #     text, font, font_scale, thickness
+                        # )
+                        # cv2.rectangle(
+                        #     image,
+                        #     (x, y),
+                        #     (x + text_width, y - text_height),
+                        #     (
+                        #         0,
+                        #         0,
+                        #         0,
+                        #     ),
+                        #     -1,
+                        # )
+                        # text_x = x
+                        # text_y = y - 5
+                        # cv2.putText(
+                        #     image,
+                        #     text,
+                        #     (text_x, text_y),
+                        #     font,
+                        #     font_scale,
+                        #     (255, 255, 255),
+                        #     thickness,
+                        # )
+                    # {"success":false,"type":"object","processor":"gpu","model_name":"yolov4",
+                    # "label":[],
+                    # "confidence":[],
+                    # "bounding_box":[]}
+
     else:
         raise ValueError(f"Invalid detection method {method}")
     return image
@@ -297,15 +471,59 @@ def get_files(src: Path, file_type: Optional[FileType] = None) -> List[Path]:
     raise ValueError(f"Invalid file type {file_type}")
 
 
+def create_writer(
+    output, output_fps, gpu: bool = False, codec: Optional[str] = None
+) -> Union[ffmpegcv.VideoWriterNV, ffmpegcv.VideoWriter, None]:
+    writer: Union[ffmpegcv.VideoWriterNV, ffmpegcv.VideoWriter, None] = None
+    if not codec:
+        codec = "h264"
+    resize: bool = g.output.resize.enabled
+    resize_to: Optional[Tuple[int, int]] = g.output.resize.width, g.output.resize.height
+    keep_aspect: bool = g.output.resize.keep_aspect
+    _func = ffmpegcv.VideoWriterNV if gpu else ffmpegcv.VideoWriter
+    try:
+        if resize:
+            logger.debug(
+                f"{LP} Resizing video to width: {resize_to[0]} height: {resize_to[1]}"
+            )
+            if resize_to:
+                writer = _func(
+                    output,
+                    codec=codec,
+                    fps=output_fps,
+                    resize=resize_to,
+                    resize_keepratio=keep_aspect,
+                )
+        if not writer:
+            writer = _func(output, codec, output_fps)
+    except Exception as e:
+        logger.error(f"{LP} Error creating writer: {e}")
+        writer = None
+
+    return writer
+
+
 def main():
-    global model, COLORS, CLASS_NAMES, VC, UPDATE_TIMER, output_fps, ZM_DB, MONITOR_ID
-    writer: ffmpegcv.VideoWriter
+    global CLASS_NAMES, UPDATE_TIMER, ZM_DB, COLORS
+
+    VC: Optional[cv2.VideoCapture] = None
+    writer: Union[ffmpegcv.VideoWriterNV, ffmpegcv.VideoWriter]
+    frame_skip: int = g.frame_skip
     method: DetectMethod = DetectMethod.LOCAL
+    cfg: Union[FilterConfigFileModel.LocalSettings.LocalModelSettings, FilterConfigFileModel.RemoteSettings]
     if g.remote.enabled:
         method = DetectMethod.MLAPI
+    if not CLASS_NAMES:
+        logger.debug(f"{LP}main: No labels file specified, using COCO17")
+        CLASS_NAMES = COCO17
     if method == DetectMethod.LOCAL:
         cfg = g.local.model
-        net: Optional[cv2.dnn.Net]
+        if cfg.labels:
+            if cfg.labels.is_file():
+                with open(cfg.labels.as_posix(), "r") as f:
+                    CLASS_NAMES = [line.strip() for line in f.readlines()]
+        net: cv2.dnn.Net
+        model: cv2.dnn.DetectionModel
         load_timer = time.perf_counter()
         net = cv2.dnn.readNet(cfg.input.as_posix(), cfg.config.as_posix())
         net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
@@ -317,8 +535,9 @@ def main():
         )
         model = cv2.dnn.DetectionModel(net)
         model.setInputParams(scale=1 / 255, size=(cfg.height, cfg.width), swapRB=True)
+    else:
+        cfg = g.remote
 
-    frame_skip: int = 1
     is_video: bool = True
     source: List[Optional[Path]] = []
     video_files = get_files(SOURCE_DIR, FileType.VIDEO)
@@ -369,6 +588,8 @@ def main():
         logger.warning(f"{LP} Output file {output} already exists, deleting")
         output.unlink()
 
+    update_frame_count: int = g.status_updates.every
+    status_updates: bool = g.status_updates.enabled
     if is_video:
         _source = source[0]
         logger.info(f"{LP} Processing video file {_source}")
@@ -379,14 +600,11 @@ def main():
             int(VC.get(cv2.CAP_PROP_FRAME_WIDTH)),
             int(VC.get(cv2.CAP_PROP_FRAME_HEIGHT)),
         )
+        logger.debug(f"source width/height: {target_res}")
         total_frames = VC.get(cv2.CAP_PROP_FRAME_COUNT)
         video_fps = VC.get(cv2.CAP_PROP_FPS)
         output_fps = video_fps
-        logger.debug(f"{LP} Target resolution: {target_res} - target_fps: {output_fps}")
-        # GPU accelerated writer (is it worth it?)
-        # writer = ffmpegcv.VideoWriterNV(output, "h264", TARGET_FPS)
-        # CPU writer
-        writer = ffmpegcv.VideoWriter(output, "h264", output_fps)
+        writer = create_writer(output, output_fps)
 
         video_seconds = total_frames / video_fps
         if video_seconds > 60:
@@ -416,13 +634,13 @@ def main():
                 writer.write(frame)
                 continue
             frames_processed += 1
-            if STATUS_UPDATES:
+            if status_updates:
                 complete = frames_pulled / total_frames * 100
                 pull_fps = frames_pulled / (time.perf_counter() - frames_timer)
                 proc_fps = frames_processed / (time.perf_counter() - frames_timer)
                 eta = (total_frames - frames_pulled) / pull_fps
 
-                if frames_processed % min(UPDATE_FRAME_COUNT, total_frames) == 0:
+                if frames_processed % min(update_frame_count, total_frames) == 0:
                     update_str = f" - since last update: {timedelta(seconds=time.perf_counter() - UPDATE_TIMER) if UPDATE_TIMER else 'N/A'}"
                     logger.info(
                         f"Processing:: frame {frames_pulled} / "
@@ -431,15 +649,22 @@ def main():
                         f"ELAPSED: {timedelta(seconds=time.perf_counter() - frames_timer)}{update_str if frames_pulled > 1 else ''}"
                     )
                     UPDATE_TIMER = time.perf_counter()
-            # Resize if needed
-            if RESIZE and (RESIZE_TO):
-                frame = cv2.resize(frame, RESIZE_TO)  # H, W
             # Run a detection on the extracted frame
+            if cfg.host:
+                # remote
+                conf = None
+                nms = None
+                model = None
+            else:
+                conf = cfg.model.confidence
+                nms = cfg.model.nms
+
+
             frame = detect(
                 frame,
                 method,
-                conf=cfg.confidence,
-                nms=cfg.nms,
+                conf=conf,
+                nms=nms,
                 allowed_labels=g.annotate_labels,
                 model=model,
             )
@@ -453,12 +678,16 @@ def main():
         frames_pulled = 0
         total_frames = len(source)
 
-        # CPU
-        # writer = ffmpegcv.VideoWriter(output, "h264", TARGET_FPS)
-        # GPU
+        writer = create_writer(output, output_fps, gpu=False)
 
-        writer = ffmpegcv.VideoWriter(output, "h264", output_fps)
-
+        if cfg.host:
+            # remote
+            conf = None
+            nms = None
+            model = None
+        else:
+            conf = cfg.model.confidence
+            nms = cfg.model.nms
         for _file in source:
             frame = cv2.imread(_file.as_posix())
             frames_pulled += 1
@@ -471,7 +700,7 @@ def main():
                 proc_fps = frames_processed / (time.perf_counter() - frames_timer)
                 eta = (total_frames - frames_pulled) / pull_fps
 
-                if frames_processed % min(UPDATE_FRAME_COUNT, total_frames) == 0:
+                if frames_processed % min(update_frame_count, total_frames) == 0:
                     update_str = f" - since last update: {timedelta(seconds=time.perf_counter() - UPDATE_TIMER) if UPDATE_TIMER else 'N/A'}"
                     logger.info(
                         f"Processing:: frame {frames_pulled} / "
@@ -484,8 +713,8 @@ def main():
             frame = detect(
                 frame,
                 method,
-                conf=cfg.confidence,
-                nms=cfg.nms,
+                conf=conf,
+                nms=nms,
                 allowed_labels=g.annotate_labels,
                 model=model,
             )
@@ -494,7 +723,7 @@ def main():
             writer.write(frame)
     if VC:
         VC.release()
-    if writer:
+    if writer and writer:
         writer.release()
 
 
