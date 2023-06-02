@@ -29,41 +29,6 @@ except NameError:
     pass
 
 
-def str2bool(v: Optional[Union[Any, bool]], **kwargs) -> Union[Any, bool]:
-    """Convert a string to a boolean value, if possible.
-
-    .. note::
-        - The string is converted to all lower case before evaluation.
-        - Strings that will return True -> ("yes", "true", "t", "y", "1", "on", "ok", "okay", "da").
-        - Strings that will return False -> ("no", "false", "f", "n", "0", "off", "nyet").
-        - None is converted to False.
-        - A boolean is returned as-is.
-    """
-    if v is not None:
-        true_ret = ("yes", "true", "t", "y", "1", "on", "ok", "okay", "da", "enabled")
-        false_ret = ("no", "false", "f", "n", "0", "off", "nyet", "disabled")
-        if isinstance(v, bool):
-            return v
-        if isinstance(v, int):
-            v = str(v)
-        if isinstance(v, str):
-            if (normalized_v := str(v).lower().strip()) in true_ret:
-                return True
-            elif normalized_v in false_ret:
-                pass
-            else:
-                return logger.warning(
-                    f"str2bool: The value '{v}' (Type: {type(v)}) is not able to be parsed into a boolean operator"
-                )
-        else:
-            return logger.warning(
-                f"str2bool: The value '{v}' (Type: {type(v)}) is not able to be parsed into a boolean operator"
-            )
-    else:
-        return None
-    return False
-
-
 def get_hashed_password(password: str) -> str:
     return password_context.hash(password)
 

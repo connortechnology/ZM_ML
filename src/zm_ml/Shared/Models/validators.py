@@ -2,13 +2,32 @@ import inspect
 import logging
 import re
 from pathlib import Path
-from typing import Union
+from typing import Union, Any, Optional, Dict
+
+import pydantic.fields
+
+from ...Client.Log import CLIENT_LOGGER_NAME
+from ...Server.Log import SERVER_LOGGER_NAME
+
+# find loggers
+loggers = [logging.getLogger(name) for name in logging.root.manager.loggerDict]
+if CLIENT_LOGGER_NAME in loggers:
+    logger = logging.getLogger(CLIENT_LOGGER_NAME)
+elif SERVER_LOGGER_NAME in loggers:
+    logger = logging.getLogger(SERVER_LOGGER_NAME)
+else:
+    logger = logging.getLogger(CLIENT_LOGGER_NAME)
 
 
-def _validate_replace_localhost(v, field, values, config):
-    # logger.debug(f"Validating ENVVAR {field}: {v}")
+def _validate_replace_localhost(
+    v,
+    field: Optional[pydantic.fields.ModelField] = None,
+    values: Optional[Dict] = None,
+    config=None,
+):
+    logger.debug(f"Validating ENVVAR {field}: {v}")
     if v:
-        if v == 'localhost':
+        if v == "localhost":
             v = "127.0.0.1"
     return v
 
@@ -75,7 +94,7 @@ def str2path(v: Union[str, Path, None], **kwargs):
         field (pydantic.fields.ModelField): pydantic field object
         values (Dict): pydantic values dict
         config (pydantic.Config): pydantic config object
-        """
+    """
     # _name_ = inspect.currentframe().f_code.co_name
     # logger.debug(f"{_name_}:: Validating '{field.name}' -> {v}")
     if v:
@@ -99,3 +118,38 @@ def _validate_file(v, field=None, values=None, config=None):
         assert v.exists(), f"Path [{v}] does not exist"
         assert v.is_file(), f"Path [{v}] is not a file"
     return v
+
+
+def str2bool(v: Optional[Union[Any, bool]], **kwargs) -> Union[Any, bool]:
+    """Convert a string to a boolean value, if possible.
+
+    .. note::
+        - The string is converted to all lower case before evaluation.
+        - Strings that will return True -> ("yes", "true", "t", "y", "1", "on", "ok", "okay", "da").
+        - Strings that will return False -> ("no", "false", "f", "n", "0", "off", "nyet").
+        - None is converted to False.
+        - A boolean is returned as-is.
+    """
+    if v is not None:
+        true_ret = ("yes", "true", "t", "y", "1", "on", "ok", "okay", "da", "enabled")
+        false_ret = ("no", "false", "f", "n", "0", "off", "nyet", "disabled")
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, int):
+            v = str(v)
+        if isinstance(v, str):
+            if (normalized_v := str(v).lower().strip()) in true_ret:
+                return True
+            elif normalized_v in false_ret:
+                pass
+            else:
+                return logger.warning(
+                    f"str2bool: The value '{v}' (Type: {type(v)}) is not able to be parsed into a boolean operator"
+                )
+        else:
+            return logger.warning(
+                f"str2bool: The value '{v}' (Type: {type(v)}) is not able to be parsed into a boolean operator"
+            )
+    else:
+        return None
+    return False
