@@ -33,7 +33,7 @@ inference and then processes the results to annotate images, create animations a
 
 - ZoneMinder 1.37.5+ (*EventStartCommand* is **REQUIRED**)
   - debian based distros can [build a .deb package for the 1.37 dev branch](https://gist.github.com/baudneo/d352c5a944a5d1371c9dfe455056e0a2)
-- Python 3.8+ (3.9 recommended)
+- Python 3.8+ (3.9 recommended) **[3.10+ DOES NOT SUPPORT TPU ATM]**
 - Python packages required by the [install script](examples/install.py)
   - `psutil`
   - `request`
@@ -110,7 +110,7 @@ For TPU acceleration you will need to install the [edgetpu libraries](https://co
 
 ## _Cloud ALPR_
 
-For Cloud ALPR you will need to create an account with the service you want to use [Plate Recognizer, OpenALPR(WIP)]. OpenALPR Cloud [now knows as Rekor] has changed since zmeventnotification days and needs to be rewritten.
+For Cloud ALPR you will need to create an account with the service you want to use [Plate Recognizer, OpenALPR(WIP)]. OpenALPR Cloud [now knows as Rekor] has changed since zmeventnotification days and needs to be rewritten, if someone can give me access to their Rekor API I can update the code.
 
 ## Server Notes:
 
@@ -118,6 +118,7 @@ For Cloud ALPR you will need to create an account with the service you want to u
 2. Intel ARC/iGPU's are __CURRENTLY NOT__ supported. (this may change)
 3. If you do not need GPU acceleration you can install OpenCV using pip. (`pip install opencv-contrib-python`)
 4. pycoral recently released wheels for Python3.10 See [here](https://github.com/google-coral/pycoral/issues/85#issuecomment-1305826142 "Pycoral 3.10 wheels")
+    - **NOTE:** It is recommended to use python **3.8** *or* **3.9** if you want to use TPU acceleration.
 5. I am working on a script to make building OpenCV with GPU support easier.
 
 ---
@@ -139,8 +140,8 @@ The client needs a script to initialize and run it. A few examples are provided 
 
 - EventStartCommand / EventEndCommand - [eventproc.py](./examples/eventproc.py) is an example to use with a bash helper [script](./examples/EventStartCommand.sh)
   - The helper script is required due to ZoneMinder's `EventStartCommand` only passing Monitor ID and Event ID to the client script. 
-- MQTT (WIP) - [MQTT.py](./examples/MQTT.py) is an example to use with ZoneMinder's built in MQTT notifications. (Once ZM builds out MQTT support more I will work on this)
-- 'Continuous' (WIP) - [continuous.py](./examples/continuous.py) is an example that will check configured monitors every \<x> seconds. [YOLO-NAS ?]
+- MQTT (WIP) - Once ZM builds out MQTT support more I will work on using MQTT to trigger the ML chain.
+- Continuous (WIP) - Pull images from <x> monitors and run obj det on them, create an event if a filtered hit happens. 
 
 ---
 
