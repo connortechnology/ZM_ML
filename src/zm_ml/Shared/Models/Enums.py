@@ -16,8 +16,10 @@ class ModelType(str, Enum):
 
 class ModelFrameWork(str, Enum):
     OPENCV = "opencv"
+    DARKNET = "darknet"
     YOLO = "yolo"
     CV_YOLO = YOLO
+
     CORAL = "coral"
     PYCORAL = CORAL
     EDGETPU = CORAL
@@ -33,6 +35,7 @@ class ModelFrameWork(str, Enum):
 
 
 class ModelProcessor(str, Enum):
+    NONE = "none"
     CPU = "cpu"
     GPU = "gpu"
     TPU = "tpu"
