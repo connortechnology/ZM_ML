@@ -14,22 +14,33 @@ class ModelType(str, Enum):
         return self.__repr__()
 
 
+class OpenCVSubFrameWork(str, Enum):
+    DARKNET = "darknet"
+    CAFFE = "caffe"
+    TENSORFLOW = "tensorflow"
+    TORCH = "torch"
+    VINO = "vino"
+    ONNX = "onnx"
+    DEFAULT = DARKNET
+
+
+class HTTPSubFrameWork(str, Enum):
+    NONE = "none"
+    VIREL = "virel"
+    REKOGNITION = "rekognition"
+    DEFAULT = VIREL
+
+
 class ModelFrameWork(str, Enum):
     OPENCV = "opencv"
-    DARKNET = "darknet"
-    YOLO = "yolo"
-    CV_YOLO = YOLO
-
+    HTTP = "http"
     CORAL = "coral"
-    PYCORAL = CORAL
-    EDGETPU = CORAL
-    EDGE_TPU = CORAL
     TENSORFLOW = "tensorflow"
     PYTORCH = "pytorch"
     DEEPFACE = "deepface"
     ALPR = "alpr"
     FACE_RECOGNITION = "face_recognition"
-    DEFAULT = CV_YOLO
+    DEFAULT = OPENCV
     REKOGNITION = "rekognition"
     AWS = REKOGNITION
 

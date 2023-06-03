@@ -23,10 +23,14 @@ from ..ML.coco17_cv2 import COCO17
 from ...Shared.Models.Enums import (
     ModelType,
     ModelFrameWork,
+    OpenCVSubFrameWork,
+    HTTPSubFrameWork,
     ModelProcessor,
     FaceRecognitionLibModelTypes,
     ALPRAPIType,
     ALPRService,
+    HTTPSubFrameWork,
+    OpenCVSubFrameWork,
 )
 from ...Shared.Models.config import Testing, LoggingSettings
 from ..Log import SERVER_LOGGER_NAME
@@ -183,7 +187,7 @@ class ALPRModelOptions(BaseModelOptions):
     )
 
 
-class  OpenALPRLocalModelOptions(ALPRModelOptions):
+class OpenALPRLocalModelOptions(ALPRModelOptions):
     alpr_binary: str = Field(
         "alpr", description="OpenALPR binary name or absolute path"
     )
@@ -283,6 +287,10 @@ class BaseModelConfig(BaseModel):
         ModelProcessor.CPU, description="Processor to use for model"
     )
 
+    sub_framework: Optional[Union[OpenCVSubFrameWork, HTTPSubFrameWork]] = Field(
+        OpenCVSubFrameWork.DARKNET, description="sub-framework to use for model"
+    )
+
     detection_options: Union[
         BaseModelOptions,
         FaceRecognitionLibModelOptions,
@@ -361,7 +369,9 @@ class TPUModelConfig(BaseModelConfig):
         logger.debug(
             f"{lp} 'classes' is defined. Parsing '{labels_file}' into a list of strings for class identification"
         )
-        assert isinstance(labels_file, Path), f"{lp} '{labels_file}' is not a Path object"
+        assert isinstance(
+            labels_file, Path
+        ), f"{lp} '{labels_file}' is not a Path object"
         assert labels_file.exists(), f"{lp} '{labels_file}' does not exist"
         assert labels_file.is_file(), f"{lp} '{labels_file}' is not a file"
         with labels_file.open(mode="r") as f:
@@ -514,6 +524,10 @@ class DeepFaceModelConfig(BaseModelConfig):
     pass
 
 
+class VirelAIModelConfig(BaseModelConfig):
+    pass
+
+
 class CV2TFModelConfig(BaseModelConfig):
     input: Path = Field(
         None,
@@ -594,8 +608,12 @@ class PyTorchModelConfig(BaseModelConfig):
 
 class ColorDetectSettings(BaseModel):
     enabled: bool = Field(True, description="Enable Color Detection")
-    n_most_common: int = Field(4, ge=1, description="Number of dominant colors to detect")
-    labels: List[str] = Field(None, description="List of labels to run color detection on")
+    n_most_common: int = Field(
+        4, ge=1, description="Number of dominant colors to detect"
+    )
+    labels: List[str] = Field(
+        None, description="List of labels to run color detection on"
+    )
 
 
 def _replace_vars(search_str: str, var_pool: Dict) -> Dict:
@@ -688,32 +706,39 @@ class Settings(BaseModel):
         if models:
             v = []
             for model in models:
+                final_model = None
                 if model.get("enabled", True) is True:
                     # logger.debug(f"Adding model: {type(model) = } ------ {model = }")
                     _model: Union[
                         RekognitionModelConfig,
+                        VirelAIModelConfig,
                         FaceRecognitionLibModelConfig,
                         ALPRModelConfig,
                         CV2YOLOModelConfig,
                         None,
                     ] = None
-                    _framework = model.get("framework", "yolo")
+                    _framework = model.get("framework", "opencv")
+                    _sub_fw = model.get("sub_framework", "darknet")
                     _options = model.get("detection_options", {})
                     _type = model.get("model_type", "object")
                     logger.debug(
                         f"DBG<<< {_framework} FRAMEWORK RAW options are :: {_options}"
                     )
-                    if _framework == ModelFrameWork.REKOGNITION:
-                        model["model_type"] = ModelType.OBJECT
-                        model["processor"] = None
-                        v.append(RekognitionModelConfig(**model))
-
+                    if _framework == ModelFrameWork.HTTP:
+                        if _sub_fw == HTTPSubFrameWork.REKOGNITION:
+                            model["model_type"] = ModelType.OBJECT
+                            model["processor"] = ModelProcessor.NONE
+                            final_model = RekognitionModelConfig(**model)
+                        elif _sub_fw == HTTPSubFrameWork.VIREL:
+                            model["model_type"] = ModelType.OBJECT
+                            model["processor"] = ModelProcessor.NONE
+                            final_model = VirelAIModelConfig(**model)
                     elif _framework == ModelFrameWork.FACE_RECOGNITION:
                         model["model_type"] = ModelType.FACE
                         model["detection_options"] = FaceRecognitionLibModelOptions(
                             **_options
                         )
-                        v.append(FaceRecognitionLibModelConfig(**model))
+                        final_model = FaceRecognitionLibModelConfig(**model)
 
                     elif _framework == ModelFrameWork.ALPR:
                         model["model_type"] = ModelType.ALPR
@@ -729,13 +754,13 @@ class Settings(BaseModel):
                                     **_options
                                 )
                             elif api_type == ALPRAPIType.CLOUD:
-                                config.processor = None
+                                config.processor = ModelProcessor.NONE
                                 config.detection_options = OpenALPRCloudModelOptions(
                                     **_options
                                 )
                         elif api_service == ALPRService.PLATE_RECOGNIZER:
                             if api_service == ALPRAPIType.CLOUD:
-                                config.processor = None
+                                config.processor = ModelProcessor.NONE
                             config.detection_options = PlateRecognizerModelOptions(
                                 **_options
                             )
@@ -743,26 +768,47 @@ class Settings(BaseModel):
                             f"DEBUG>>> FINAL ALPR OPTIONS {config.detection_options = }"
                         )
                         # todo: init models and check if success?
-                        v.append(config)
-                    elif _framework == ModelFrameWork.CV_YOLO:
-                        config = CV2YOLOModelConfig(**model)
-                        config.detection_options = CV2YOLOModelOptions(**_options)
-                        logger.debug(
-                            f"DEBUG>>> FINAL YOLO OPTIONS {config.detection_options = }"
-                        )
-                        v.append(config)
+                        final_model = config
+                    elif _framework == ModelFrameWork.OPENCV:
+                        config = None
+                        if _sub_fw == OpenCVSubFrameWork.DARKNET:
+                            config = CV2YOLOModelConfig(**model)
+                            config.detection_options = CV2YOLOModelOptions(**_options)
+                            logger.debug(
+                                f"DEBUG>>> FINAL OpenCV:Darknet OPTIONS {config.detection_options = }"
+                            )
+                        elif _sub_fw == OpenCVSubFrameWork.ONNX:
+                            pass
+                        elif _sub_fw == OpenCVSubFrameWork.TENSORFLOW:
+                            pass
+                        elif _sub_fw == OpenCVSubFrameWork.TORCH:
+                            pass
+                        elif _sub_fw == OpenCVSubFrameWork.CAFFE:
+                            pass
+                        elif _sub_fw == OpenCVSubFrameWork.VINO:
+                            pass
+                        else:
+                            logger.debug(
+                                f"DEBUG>>> this SUB FRAMEWORK is NOT IMPLEMENTED -> {_sub_fw}"
+                            )
+                        if config:
+                            final_model = config
                     elif _framework == ModelFrameWork.CORAL:
                         config = TPUModelConfig(**model)
                         config.detection_options = TPUModelOptions(**_options)
                         logger.debug(
                             f"DEBUG>>> FINAL TPU OPTIONS {str(config.detection_options) = }"
                         )
-                        v.append(config)
+                        final_model = config
                     else:
                         logger.debug(
                             f"DEBUG>>> this FRAMEWORK is NOT IMPLEMENTED -> {_framework}"
                         )
-                        v.append(BaseModelConfig(**model))
+                        final_model = BaseModelConfig(**model)
+                    # load model here
+                    if final_model:
+                        logger.debug(f'Adding model: {final_model.name}')
+                        v.append(final_model)
                 else:
                     logger.debug(f"Skipping disabled model: {model.get('name')}")
 
@@ -879,11 +925,26 @@ class APIDetector:
     ):
         from ..ML.Detectors.opencv.cv_yolo import CV2YOLODetector
         from ..ML.Detectors.coral_edgetpu import TpuDetector
+        from ..ML.Detectors.face_recognition import FaceRecognitionLibDetector
+        from ..ML.Detectors.alpr import PlateRecognizer, OpenAlprCmdLine, OpenAlprCloud
+        from ..ML.Detectors.virelai import VirelAI
+        from ..ML.Detectors.aws_rekognition import AWSRekognition
 
         self.config = model_config
         self.id = self.config.id
         self.options = model_config.detection_options
-        self.model: Optional[Union[TpuDetector, CV2YOLODetector]] = None
+        self.model: Optional[
+            Union[
+                TpuDetector,
+                CV2YOLODetector,
+                FaceRecognitionLibDetector,
+                PlateRecognizer,
+                OpenAlprCmdLine,
+                OpenAlprCloud,
+                VirelAI,
+                AWSRekognition,
+            ]
+        ] = None
         self._load_model()
 
     @property
@@ -923,11 +984,12 @@ class APIDetector:
                 FaceRecognitionLibModelConfig,
                 DeepFaceModelConfig,
                 TPUModelConfig,
+                VirelAIModelConfig,
+                RekognitionModelConfig,
             ]
         ] = None,
     ):
         """Load the model"""
-
         self.model = None
         if config:
             self.config = config
@@ -935,10 +997,27 @@ class APIDetector:
             raise RuntimeError(
                 f"{self.config.processor} is not available on this system"
             )
-        if self.config.framework == ModelFrameWork.YOLO:
-            from ..ML.Detectors.opencv.cv_yolo import CV2YOLODetector
+        if self.config.framework == ModelFrameWork.OPENCV:
+            if self.config.sub_framework == OpenCVSubFrameWork.DARKNET:
+                from ..ML.Detectors.opencv.cv_yolo import CV2YOLODetector
 
-            self.model = CV2YOLODetector(self.config)
+                self.model = CV2YOLODetector(self.config)
+        elif self.config.framework == ModelFrameWork.HTTP:
+            sub_fw = self.config.sub_framework
+            if sub_fw == HTTPSubFrameWork.REKOGNITION:
+                from ..ML.Detectors.aws_rekognition import AWSRekognition
+
+                self.model = AWSRekognition(self.config)
+            elif sub_fw == HTTPSubFrameWork.VIREL:
+                from ..ML.Detectors.virelai import VirelAI
+
+                self.model = VirelAI(self.config)
+            elif sub_fw == HTTPSubFrameWork.NONE:
+                raise RuntimeError(
+                    f"Invalid HTTP sub framework {sub_fw}, YOU MUST CHOOSE A sub_framework!"
+                )
+            else:
+                raise RuntimeError(f"Invalid HTTP sub framework: {sub_fw}")
         elif self.config.framework == ModelFrameWork.FACE_RECOGNITION:
             from ..ML.Detectors.face_recognition import (
                 FaceRecognitionLibDetector,
@@ -959,6 +1038,7 @@ class APIDetector:
                     self.model = OpenAlprCmdLine(self.config)
                 elif self.config.api_type == ALPRAPIType.CLOUD:
                     self.model = OpenAlprCloud(self.config)
+
         elif self.config.framework == ModelFrameWork.CORAL:
             from ..ML.Detectors.coral_edgetpu import TpuDetector
 
@@ -968,12 +1048,15 @@ class APIDetector:
             logger.warning(
                 f"CANT CREATE DETECTOR -> Framework NOT IMPLEMENTED!!! {self.config.framework}"
             )
+        logger.debug(f"APIDetector:_load_model()-> {self.model = }")
 
     def is_processor_available(self) -> bool:
         """Check if the processor is available"""
         available = False
         processor = self.config.processor
         framework = self.config.framework
+        if processor == ModelProcessor.NONE:
+            available = True
         if framework == ModelFrameWork.ALPR or framework == ModelFrameWork.REKOGNITION:
             available = True
         elif not processor:
@@ -1004,7 +1087,7 @@ class APIDetector:
             else:
                 logger.warning("TPU processor is only available for Coral models!")
         elif processor == ModelProcessor.GPU:
-            if framework == ModelFrameWork.OPENCV or framework == ModelFrameWork.YOLO:
+            if framework == ModelFrameWork.OPENCV:
                 try:
                     import cv2.cuda
                 except ImportError:

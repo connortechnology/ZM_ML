@@ -113,6 +113,28 @@ locks:
 
 # Define what models the server will offer
 models:
+    - name: aws
+      description: "AWS Rekognition remote HTTP detection (PAID pre request!)"
+      enabled: no
+      framework: http
+      model_type: object
+      processor: none
+      sub_framework: rekognition
+
+      detection_options:
+        confidence: 0.4455
+
+    - name: virel
+      description: "virel.ai remote HTTP detection (FREE atm but will be PAID)"
+      enabled: no
+      framework: http
+      model_type: object
+      processor: none
+      sub_framework: virel
+
+      detection_options:
+        confidence: 0.4567
+
     # name is normalized to lowercase, spaces are preserved.
     # name is used to call the model via the API
     - name: tpu1
@@ -141,11 +163,11 @@ models:
     - name: YOLOv4 Tiny  # Name is converted to lowercase; 'yolov4 tiny'
       enabled: true  # Optional. Defaults to True.
       description: "yolov4 Tiny pretrained DarkNet model"  # Optional; metadata.
-      framework: yolo  # REQUIRED. Defaults to opencv/yolo.
+      framework: opencv  # REQUIRED. Defaults to opencv/yolo.
 #      framework: opencv
-      # framework_subset can come in handy to possibly tune your model for a specific framework. opencv has different "readers" for models
+      # sub_framework can come in handy to possibly tune your model for a specific framework. opencv has different "readers" for models
       # darknet is the default, but you can also use onnx, caffe, etc. See the OpenCV docs for more info.
-      framework_subset: darknet  # An example usage is for opencv framework, darknet/onnx/caffe are subsets of opencv.
+      sub_framework: darknet  # An example usage is for opencv framework, darknet/onnx/caffe are subsets of opencv.
       model_type: object # REQUIRED. Defaults to object - object/face/alpr (for identification).
       processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
       square: yes

@@ -2,27 +2,29 @@
 # Author: Michael Ludvig
 import time
 from logging import getLogger
+import warnings
 
 import numpy as np
+
+try:
+    import boto3
+except ImportError:
+    warnings.warn(
+        f"the 'boto3' package is not available! it is needed for aws rekognition support!"
+    )
+    boto3 = None
 
 from ...Models.config import RekognitionModelConfig
 
 LP: str = "AWS:Rekognition:"
 from zm_ml.Server.Log import SERVER_LOGGER_NAME
 logger = getLogger(SERVER_LOGGER_NAME)
-boto3 = None
 
-class AwsRekognition:
+class AWSRekognition:
     init: bool = False
     def __init__(self, model_config: RekognitionModelConfig):
-        global boto3
-        try:
-            import boto3
-        except ImportError:
-            logger.warning(
-                f"{LP} the 'boto3' package is needed for aws rekognition support! not loading rekognition model")
-            return
-        self.config = model_config
+        """AWS Rekognition wrapper for ZM ML"""
+        self.config: RekognitionModelConfig = model_config
         self.options = model_config.detection_options
         self.name: str = self.config.name
         self.processor = self.config.processor
