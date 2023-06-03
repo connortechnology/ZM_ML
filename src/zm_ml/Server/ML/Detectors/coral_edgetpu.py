@@ -76,7 +76,7 @@ class TpuDetector(FileLock):
         else:
             logger.debug(f"perf:{LP} loading took: {time.perf_counter() - t:.5f}s")
 
-    def nms(self, objects: List[detect.Object], threshold: float) -> List[detect.Object]:
+    def nms(self, objects: List, threshold: float) -> List:
         """Returns a list of objects passing the NMS filter.
 
         Args:
