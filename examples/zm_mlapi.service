@@ -1,0 +1,33 @@
+## This is a systemd startup file if you are on a system that
+## supports systemd and you want ZM MLAPI to work as an always
+## on service
+
+## To make this persistent
+# sudo cp mlapi.service /etc/systemd/system
+# sudo chmod 644 /etc/systemd/system/mlapi.service
+## Add --now to the following command to also start the ZM MLAPI server
+# sudo systemctl enable mlapi.service --now
+
+## To start,
+# sudo systemctl start mlapi
+
+## CHANGE User and ExecStart to match your system, if needed.
+[Unit]
+Description=ZM ML API service
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5
+# We need this to get logs correctly
+Environment=PYTHONUNBUFFERED=1
+
+# Change to the user that ZM MLAPI was installed for
+User=www-data
+#Change paths if needed
+ExecStart=/usr/local/bin/zmmlapi -C /path/to/server.yml
+
+[Install]
+WantedBy=multi-user.target
