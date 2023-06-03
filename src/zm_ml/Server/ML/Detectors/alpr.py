@@ -3,7 +3,6 @@ import os
 import subprocess
 import time
 import uuid
-from glob import glob
 from pathlib import Path
 from typing import Optional, Union, Dict
 from logging import getLogger
@@ -19,36 +18,34 @@ from ...Models.config import OpenALPRLocalModelOptions, \
 from ....Shared.Models.Enums import ModelProcessor, ALPRAPIType, ALPRService
 from ...utils import resize_cv2_image
 
-from zm_ml.Server.Log import SERVER_LOGGER_NAME
+from ....Server.Log import SERVER_LOGGER_NAME
+
 logger = getLogger(SERVER_LOGGER_NAME)
 
 
 class AlprBase:
     def __init__(self, model_config: ALPRModelConfig):
-        self.lp = f"Alpr:Base:"
+        self.lp = f"ALPR:Base:"
         if not model_config:
             raise ValueError(f"{self.lp} no config passed!")
         # Model init params
         self.config: ALPRModelConfig = model_config
         self.options: Union[PlateRecognizerModelOptions, OpenALPRLocalModelOptions, OpenALPRCloudModelOptions] = self.config.detection_options
         self.processor: ModelProcessor = self.config.processor
-        self.name = self.config.name
-        self.api_key = self.config.api_key
+        self.name: str = self.config.name
+        self.api_key: Optional[str] = self.config.api_key
         import tempfile
-        self.tempdir = tempfile.gettempdir()
-        self.url = self.config.api_url
-        self.filename = None
-        self.remove_temp = None
+        self.tempdir: Path = Path(tempfile.gettempdir())
+        self.url: Optional[str] = self.config.api_url
+        self.filename: Optional[Union[Path, str]] = None
+        self.remove_temp: bool = False
         if not self.config.api_key and self.config.api_type == ALPRAPIType.CLOUD:
             logger.debug(f"{self.lp} CLOUD API key not specified and you are not using the "
                          f"command line ALPR, did you forget?")
         # get rid of left over alpr temp files
-        files = glob(f"{self.tempdir}/*-alpr.png")
-        if files:
-            logger.debug(f"{self.lp} removing {len(files)} old alpr temp files from '{self.tempdir}'")
-            for file in files:
-                os.remove(file)
-        logger.debug(f"{self.lp} '{self.name}' configuration: {self.config}")
+        for _file in self.tempdir.glob("*-alpr.png"):
+            logger.debug(f"{self.lp} removing old alpr temp files from '{self.tempdir}'")
+            _file.unlink()
 
     def set_api_key(self, key):
         self.api_key = key
@@ -56,26 +53,25 @@ class AlprBase:
 
     def _prepare_image(self, alpr_object: Union[np.ndarray, str, Path]):
         if isinstance(alpr_object, np.ndarray):
-            logger.debug(f"{self.lp} the supplied object is a blob, creating temp file on disk")
+            logger.debug(f"{self.lp} the supplied image resides in memory, creating temp file on disk")
             if self.options.max_size:
-                logger.debug(f"{self.lp} resizing image blob using max_size={self.options.max_size}")
+                logger.debug(f"{self.lp} resizing image using max_size={self.options.max_size}")
                 alpr_object = resize_cv2_image(alpr_object, self.options.max_size)
-            # use png so there is no loss
-            self.filename = f"{self.tempdir}/ALPR-{uuid.uuid4()}.png"
+            self.filename = (self.tempdir / f"ALPR-{uuid.uuid4()}.png").expanduser().resolve().as_posix()
             cv2.imwrite(self.filename, alpr_object)
             self.remove_temp = True
         elif isinstance(alpr_object, str):
             logger.debug(f"{self.lp} the supplied object is a STRING assuming absolute file path -> '{alpr_object}'")
             file_ = Path(alpr_object)
             if not file_.is_file():
-                raise FileNotFoundError(f"{self.lp} the supplied file path does not exist -> '{file_}'")
-            self.filename = alpr_object
+                raise FileNotFoundError(f"{self.lp} the supplied file path does not exist or is not a valid file -> '{file_}'")
+            self.filename = file_.expanduser().resolve().as_posix()
             self.remove_temp = False
         elif isinstance(alpr_object, Path):
             logger.debug(f"{self.lp} the supplied object is a Path object -> '{alpr_object}'")
             if not alpr_object.is_file():
                 raise FileNotFoundError(f"{self.lp} the supplied file path does not exist -> '{alpr_object}'")
-            self.filename = alpr_object.as_posix()
+            self.filename = alpr_object.expanduser().resolve().as_posix()
             self.remove_temp = False
 
 
@@ -202,11 +198,12 @@ class PlateRecognizer(AlprBase):
 
 
 class OpenAlprCloud(AlprBase):
+    # FIXME: it is now Rekor. Need to update the name and logic.
     def __init__(self, model_config: ALPRModelConfig):
         """Wrapper class for Open ALPR Cloud service
         """
-        self.lp = f"OpenAlpr:Cloud:"
         super().__init__(model_config)
+        self.lp = f"OpenAlpr:Cloud:"
         if not self.config.api_url:
             self.url = "https://api.openalpr.com/v2/recognize"
 
@@ -288,13 +285,17 @@ class OpenAlprCloud(AlprBase):
 
 
 class OpenAlprCmdLine(AlprBase):
+    """Wrapper class for OpenALPR command line utility"""
     def __init__(self, model_config: ALPRModelConfig):
         """Wrapper class for OpenALPR command line utility
         """
-        self.lp = f"OpenAlpr:CmdLine:"
         super().__init__(model_config)
+        self.lp = f"OpenALPR:CmdLine:"
         cmd = self.options.alpr_binary
-        self.cmd = f"{cmd} {self.options.alpr_binary_params}"
+        if self.options.alpr_binary_params:
+            self.cmd = f"{cmd} {self.options.alpr_binary_params}"
+        else:
+            self.cmd = cmd
         if self.cmd.lower().find("-j") == -1:
             logger.debug(f"{self.lp} Adding -j to force JSON output")
             self.cmd = f"{self.cmd} -j"
@@ -313,21 +314,23 @@ class OpenAlprCmdLine(AlprBase):
         alpr_cmdline_exc_start = time.perf_counter()
         self._prepare_image(input_image)
         do_cmd = f"{self.cmd} {self.filename}"
-
         logger.debug(f"{self.lp} executing: '{do_cmd}'")
-        response = subprocess.check_output(do_cmd, shell=True)
-        # response = subprocess.check_output(do_cmd)
-        # this will cause the json.loads to fail if using gpu (haven't tested openCL)
-        from re import sub
-        response = response.decode("utf-8")
-        p = "--\(\!\)Loaded CUDA classifier\n"
-        response = sub(p, "", response)
-        logger.debug(f"perf:{self.lp} took {time.perf_counter() - alpr_cmdline_exc_start}")
-        logger.debug(f"{self.lp} JSON response -> {response}")
         try:
+            response = subprocess.check_output(do_cmd, shell=True, text=True)
+            # this will cause the json.loads to fail if using gpu (haven't tested openCL)
+            p = "--\(\!\)Loaded CUDA classifier\n"
+            if response.find(p) != -1:
+                logger.debug(f"{self.lp} CUDA was used for processing!")
+            response.replace(p, "")
+            logger.debug(f"perf:{self.lp} took {time.perf_counter() - alpr_cmdline_exc_start} seconds")
+            logger.debug(f"{self.lp} JSON response -> {response}")
             response = json.loads(response)
-        except ValueError as e:
-            logger.error(f"{self.lp} Error parsing JSON response -> {e}")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"{self.lp} Error executing command -> {e}")
+            response = b"{}"
+        # catch json parsing errors
+        except Exception as e:
+            logger.error(f"{self.lp} Error -> {e}")
             response = {}
 
         rescale = False

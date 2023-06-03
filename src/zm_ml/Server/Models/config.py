@@ -183,11 +183,11 @@ class ALPRModelOptions(BaseModelOptions):
     )
 
 
-class OpenALPRLocalModelOptions(ALPRModelOptions):
+class  OpenALPRLocalModelOptions(ALPRModelOptions):
     alpr_binary: str = Field(
         "alpr", description="OpenALPR binary name or absolute path"
     )
-    alpr_binary_params: str = Field(
+    alpr_binary_params: Optional[str] = Field(
         "-d",
         description="OpenALPR binary parameters (-j is ALWAYS passed)",
         example="-p ca -c US",
