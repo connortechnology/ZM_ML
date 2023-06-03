@@ -1,3 +1,9 @@
+# Support
+
+[![Join Slack](https://github.com/ozonesecurity/ozonebase/blob/master/img/slacksm.png?raw=true)](https://join.slack.com/t/zoneminder-chat/shared_invite/enQtNTU0NDkxMDM5NDQwLTdhZmQ5Y2M2NWQyN2JkYTBiN2ZkMzIzZGQ0MDliMTRmM2FjZWRlYzUwYTQ2MjMwMTVjMzQ1NjYxOTdmMjE2MTE "Join Slack")
+<a href="https://discord.gg/tHYyP9k66q" title="Join Discord Server"><img src="https://assets-global.website-files.com/6257adef93867e50d84d30e2/636e0a6a49cf127bf92de1e2_icon_clyde_blurple_RGB.png" alt="drawing" width="50"/></a>
+
+
 # Please support ZoneMinder if you can!
 If you use software from the [ZoneMinder organization](https://github.com/ZoneMinder)
 please consider [sponsoring ZoneMinder](https://github.com/sponsors/ZoneMinder). ZoneMinder has been free with
@@ -47,10 +53,11 @@ inference and then processes the results to annotate images, create animations a
 1. [**EventStartCommand**/**EventEndCommand**](https://zoneminder.readthedocs.io/en/latest/userguide/definemonitor.html#recording-tab:~:text=events%20are%20recorded.-,Event%20Start%20Command,the%20command%20will%20be%20the%20event%20id%20and%20the%20monitor%20id.,-Viewing%20Tab) is what runs the object detection script. Before, SHM was polled every \<X> seconds to see if a new event had been triggered.
 
 ## Installation
+### Docker
+See below for Docker image and instructions.
+
 ### Manual Install
 See the Wiki for [Manual Installation](https://github.com/baudneo/ZM_ML/wiki/Manual-Installation) instructions.
-
-**Try the GPU/TPU accelerated** [Docker image](https://hub.docker.com/repository/docker/baudneo/zm_ml)!
 
 ### Bootstrap (WIP)
 **NOTE: bootstrap is a WIP**
