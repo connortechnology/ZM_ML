@@ -1139,6 +1139,14 @@ def do_install(_inst_type: str):
                 ml_group,
                 0o755,
             )
+            test_msg(
+                f"Creating symlinks for ZM MLAPI: /usr/local/bin will contain zmmlapi symlink to {data_dir}/bin/mlapi.py",
+            )
+
+            if not testing:
+                Path("/usr/local/bin/zmmlapi").symlink_to(
+                    f"{data_dir}/bin/mlapi.py"
+                )
             # SERVER INSTALL ENVS FOR envsubst CMD
             if "ML_INSTALL_SERVER_ADDRESS" not in _ENV:
                 _ENV["ML_INSTALL_SERVER_ADDRESS"] = "0.0.0.0"
@@ -1478,6 +1486,8 @@ if __name__ == "__main__":
         "ML_INSTALL_CLIENT_ROUTE_NAME": route_name,
         "ML_INSTALL_CLIENT_ROUTE_HOST": route_host,
         "ML_INSTALL_CLIENT_ROUTE_PORT": route_port,
+        "ML_INSTALL_SERVER_ADDRESS": route_host,
+        "ML_INSTALL_SERVER_PORT": route_port,
     }
 
     if args.env_file:
