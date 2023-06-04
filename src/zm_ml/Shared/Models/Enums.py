@@ -31,6 +31,13 @@ class HTTPSubFrameWork(str, Enum):
     DEFAULT = VIREL
 
 
+class ALPRSubFrameWork(str, Enum):
+    OPENALPR = "openalpr"
+    PLATE_RECOGNIZER = "plate_recognizer"
+    REKOR = "rekor"
+    DEFAULT = OPENALPR
+
+
 class ModelFrameWork(str, Enum):
     OPENCV = "opencv"
     HTTP = "http"
