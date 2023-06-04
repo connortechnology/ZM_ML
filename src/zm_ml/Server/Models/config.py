@@ -31,6 +31,7 @@ from ...Shared.Models.Enums import (
     ALPRService,
     HTTPSubFrameWork,
     OpenCVSubFrameWork,
+    ALPRSubFrameWork,
 )
 from ...Shared.Models.config import Testing, LoggingSettings
 from ..Log import SERVER_LOGGER_NAME
@@ -292,9 +293,10 @@ class BaseModelConfig(BaseModel):
         ModelProcessor.CPU, description="Processor to use for model"
     )
 
-    sub_framework: Optional[Union[OpenCVSubFrameWork, HTTPSubFrameWork]] = Field(
-        OpenCVSubFrameWork.DARKNET, description="sub-framework to use for model"
-    )
+    # todo: add validator that detects framework and sets a default sub framework if it is None.
+    sub_framework: Optional[
+        Union[OpenCVSubFrameWork, HTTPSubFrameWork, ALPRSubFrameWork]
+    ] = Field(OpenCVSubFrameWork.DARKNET, description="sub-framework to use for model")
 
     detection_options: Union[
         BaseModelOptions,
@@ -727,7 +729,7 @@ class Settings(BaseModel):
                     _options = model.get("detection_options", {})
                     _type = model.get("model_type", "object")
                     logger.debug(
-                        f"DBG<<< {_framework} FRAMEWORK RAW options are :: {_options}"
+                        f"DBG<<< '{_framework}' FRAMEWORK RAW options are :: {_options}"
                     )
                     if _framework == ModelFrameWork.HTTP:
                         if _sub_fw == HTTPSubFrameWork.REKOGNITION:
@@ -747,13 +749,13 @@ class Settings(BaseModel):
 
                     elif _framework == ModelFrameWork.ALPR:
                         model["model_type"] = ModelType.ALPR
-                        api_type = model.get("api_type", "local")
                         api_service = model.get("service", "openalpr")
+                        api_type = model.get("api_type", "local")
                         logger.debug(
-                            f"DEBUG>>> FrameWork: {_framework}  Service: {api_service} [{api_type}]"
+                            f"DEBUG>>> FrameWork: {_framework}  Sub-FrameWork: {_sub_fw} [{api_type}]"
                         )
-                        config = ALPRModelConfig(**model)
-                        if api_service == ALPRService.OPENALPR:
+                        if _sub_fw == ALPRSubFrameWork.OPENALPR:
+                            config = ALPRModelConfig(**model)
                             if api_type == ALPRAPIType.LOCAL:
                                 config.detection_options = OpenALPRLocalModelOptions(
                                     **_options
@@ -763,12 +765,18 @@ class Settings(BaseModel):
                                 config.detection_options = OpenALPRCloudModelOptions(
                                     **_options
                                 )
-                        elif api_service == ALPRService.PLATE_RECOGNIZER:
+                        elif _sub_fw == ALPRSubFrameWork.PLATE_RECOGNIZER:
                             if api_service == ALPRAPIType.CLOUD:
                                 config.processor = ModelProcessor.NONE
-                            config.detection_options = PlateRecognizerModelOptions(
-                                **_options
-                            )
+                                config.detection_options = PlateRecognizerModelOptions(
+                                    **_options
+                                )
+                            elif api_service == ALPRAPIType.LOCAL:
+                                raise NotImplementedError(
+                                    "Plate Recognizer Local API not implemented"
+                                )
+
+
                         logger.debug(
                             f"DEBUG>>> FINAL ALPR OPTIONS {config.detection_options = }"
                         )
@@ -812,7 +820,7 @@ class Settings(BaseModel):
                         final_model = BaseModelConfig(**model)
                     # load model here
                     if final_model:
-                        logger.debug(f'Adding model: {final_model.name}')
+                        logger.debug(f"Adding model: {final_model.name}")
                         v.append(final_model)
                 else:
                     logger.debug(f"Skipping disabled model: {model.get('name')}")
