@@ -248,6 +248,11 @@ class PlateRecognizerModelOptions(BaseModelOptions):
         le=1.0,
         description="Minimal confidence for the translated text from the plate",
     )
+    max_size: int = Field(
+        1600,
+        ge=1,
+        description="Maximum size (Width) of image",
+    )
 
     @validator("config", "payload")
     def check_json_serializable(cls, v):
