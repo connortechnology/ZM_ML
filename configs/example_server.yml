@@ -113,227 +113,222 @@ locks:
 
 # Define what models the server will offer
 models:
-    - name: aws
-      description: "AWS Rekognition remote HTTP detection (PAID pre request!)"
-      enabled: no
-      framework: http
-      model_type: object
-      processor: none
-      sub_framework: rekognition
+  - name: aws
+    description: "AWS Rekognition remote HTTP detection (PAID pre request!)"
+    enabled: no
+    framework: http
+    model_type: object
+    processor: none
+    sub_framework: rekognition
 
-      detection_options:
-        confidence: 0.4455
+    detection_options:
+      confidence: 0.4455
 
-    - name: virel
-      description: "virel.ai remote HTTP detection (FREE atm but will be PAID)"
-      enabled: no
-      framework: http
-      model_type: object
-      processor: none
-      sub_framework: virel
+  - name: virel
+    description: "virel.ai remote HTTP detection (FREE atm but will be PAID)"
+    enabled: no
+    framework: http
+    model_type: object
+    processor: none
+    sub_framework: virel
 
-      detection_options:
-        confidence: 0.4567
+    detection_options:
+      confidence: 0.4567
 
-    # name is normalized to lowercase, spaces are preserved.
-    # name is used to call the model via the API
-    - name: tpu1
-      description: "SSD MobileNet V2 TensorFlow2 trained"
-      enabled: no
-      framework: coral
-      model_type: object
-      processor: tpu
+  # name is normalized to lowercase, spaces are preserved.
+  # name is used to call the model via the API
+  - name: tpu1
+    description: "SSD MobileNet V2 TensorFlow2 trained"
+    enabled: no
+    framework: coral
+    model_type: object
+    processor: tpu
 
-      input: "${MODEL_DIR}/coral_tpu/tf2_ssd_mobilenet_v2_coco17_ptq_edgetpu.tflite"
-      # All of the included TPU object detection models require the 90 label COCO dataset
-      # See https://coral.ai/models/object-detection/
-      classes: "${MODEL_DIR}/coral_tpu/coco-labels-paper.txt"
+    input: "${MODEL_DIR}/coral_tpu/tf2_ssd_mobilenet_v2_coco17_ptq_edgetpu.tflite"
+    # All of the included TPU object detection models require the 90 label COCO dataset
+    # See https://coral.ai/models/object-detection/
+    classes: "${MODEL_DIR}/coral_tpu/coco-labels-paper.txt"
 
-      detection_options:
-        # Non Max Suppressive threshold, lower will filter more overlapping bounding boxes out.
-        # Currently, only TPU model NMS can be enabled/disabled
-        nms:
-          # Enable Non Max Suppression
-          enabled: yes
-          threshold: .35
-        # Only return results >=
-        confidence: 0.2
+    detection_options:
+      # Non Max Suppressive threshold, lower will filter more overlapping bounding boxes out.
+      # Currently, only TPU model NMS can be enabled/disabled
+      nms:
+        # Enable Non Max Suppression
+        enabled: yes
+        threshold: .35
+      # Only return results >=
+      confidence: 0.2
 
-    # An example of an OpenCV YOLO model, name is what you will use to call the model
-    - name: YOLOv4 Tiny  # Name is converted to lowercase; 'yolov4 tiny'
-      enabled: true  # Optional. Defaults to True.
-      description: "yolov4 Tiny pretrained DarkNet model"  # Optional; metadata.
-      framework: opencv  # REQUIRED. Defaults to opencv/yolo.
+  # An example of an OpenCV YOLO model, name is what you will use to call the model
+  - name: YOLOv4 Tiny  # Name is converted to lowercase; 'yolov4 tiny'
+    enabled: true  # Optional. Defaults to True.
+    description: "yolov4 Tiny pretrained DarkNet model"  # Optional; metadata.
+    framework: opencv  # REQUIRED. Defaults to opencv/yolo.
 #      framework: opencv
-      # sub_framework can come in handy to possibly tune your model for a specific framework. opencv has different "readers" for models
-      # darknet is the default, but you can also use onnx, caffe, etc. See the OpenCV docs for more info.
-      sub_framework: darknet  # An example usage is for opencv framework, darknet/onnx/caffe are subsets of opencv.
-      model_type: object # REQUIRED. Defaults to object - object/face/alpr (for identification).
-      processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
-      square: yes
+    # sub_framework can come in handy to possibly tune your model for a specific framework. opencv has different "readers" for models
+    # darknet is the default, but you can also use onnx, caffe, etc. See the OpenCV docs for more info.
+    sub_framework: darknet  # An example usage is for opencv framework, darknet/onnx/caffe are subsets of opencv.
+    model_type: object # REQUIRED. Defaults to object - object/face/alpr (for identification).
+    processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
+    square: yes
 
-      input: "${MODEL_DIR}/yolo/yolov4-tiny.weights"  # REQUIRED - Model file.
-      config: "${MODEL_DIR}/yolo/yolov4-tiny.cfg"  # Optional - .weights requires .cfg, .onnx and .tflite does not.
+    input: "${MODEL_DIR}/yolo/yolov4-tiny.weights"  # REQUIRED - Model file.
+    config: "${MODEL_DIR}/yolo/yolov4-tiny.cfg"  # Optional - .weights requires .cfg, .onnx and .tflite does not.
 
-      detection_options:
-        # Non Max Suppressive threshold, lower will filter more overlapping bounding boxes out.
-        nms: 0.3
-        # Only return results >=
-        confidence: 0.2
+    detection_options:
+      # Non Max Suppressive threshold, lower will filter more overlapping bounding boxes out.
+      nms: 0.3
+      # Only return results >=
+      confidence: 0.2
 
-    - name: YOLOv4
-      enabled: no  # Optional. Defaults to True.
-      description: "yolov4 pretrained DarkNet model"  # Optional.
-      framework: yolo  # Optional. Defaults to yolo.
-      model_type: object # Optional. Defaults to object - object/face/alpr (for identification).
-      processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
+  - name: YOLOv4
+    enabled: no  # Optional. Defaults to True.
+    description: "yolov4 pretrained DarkNet model"  # Optional.
+    framework: yolo  # Optional. Defaults to yolo.
+    model_type: object # Optional. Defaults to object - object/face/alpr (for identification).
+    processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
 
-      input: "${MODEL_DIR}/yolo/yolov4_new.weights"  # Required if yolo framework.
-      config: "${MODEL_DIR}/yolo/yolov4_new.cfg"  # Optional (.weights requires .cfg, .onnx and .tflite does not).
+    input: "${MODEL_DIR}/yolo/yolov4_new.weights"  # Required if yolo framework.
+    config: "${MODEL_DIR}/yolo/yolov4_new.cfg"  # Optional (.weights requires .cfg, .onnx and .tflite does not).
 #      classes: "${MODEL_DIR}/coco.names"  # Optional. Default is COCO 2017 classes.
 
-      # Image will be resized to these dimensions before being passed to the model
-      height: 512  # Optional. Defaults to 416.
-      width: 512  # Optional. Defaults to 416.
-      # Square the image by zero-padding the shorter side to match the longer side before resize
-      square: no  # Optional. Defaults to False.
-      # EXPERIMENTAL!  - Only for OpenCV CUDA YOLO models - half precision FP16 target
-      # WIP!!!
-      cuda_fp_16: false  # Optional. Defaults to False.
+    # Image will be resized to these dimensions before being passed to the model
+    height: 512  # Optional. Defaults to 416.
+    width: 512  # Optional. Defaults to 416.
+    # Square the image by zero-padding the shorter side to match the longer side before resize
+    square: no  # Optional. Defaults to False.
+    # EXPERIMENTAL!  - Only for OpenCV CUDA YOLO models - half precision FP16 target
+    # WIP!!!
+    cuda_fp_16: false  # Optional. Defaults to False.
 
-      detection_options:
-        # The model will only return detections with a confidence score higher than this
-        confidence: 0.2  # Optional. Defaults to 0.2.
-        # Non Max Suppression threshold. Higher values will remove more overlapping boxes
-        nms: 0.4  # Optional. Defaults to 0.4.
+    detection_options:
+      # The model will only return detections with a confidence score higher than this
+      confidence: 0.2  # Optional. Defaults to 0.2.
+      # Non Max Suppression threshold. Higher values will remove more overlapping boxes
+      nms: 0.4  # Optional. Defaults to 0.4.
 
-    - name: YOLOv4-P6
-      enabled: false
-      processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
-      input: "${MODEL_DIR}/yolo/yolov4-p6.weights"
-      config: "${MODEL_DIR}/yolo/yolov4-p6.cfg"
-      description: "Scaled YOLO v4-P6 pretrained DarkNet 1280x1280"
-      height: 1280
-      width: 1280
+  - name: YOLOv4-P6
+    enabled: false
+    processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
+    input: "${MODEL_DIR}/yolo/yolov4-p6.weights"
+    config: "${MODEL_DIR}/yolo/yolov4-p6.cfg"
+    description: "Scaled YOLO v4-P6 pretrained DarkNet 1280x1280"
+    height: 1280
+    width: 1280
 
-    - name: yolov7 tiny
-      processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
-      description: "yolov7 tiny pretrained DarkNet model"
-      input: "${MODEL_DIR}/yolo/yolov7-tiny.weights"
-      config: "${MODEL_DIR}/yolo/yolov7-tiny.cfg"
-      square: yes
+  - name: yolov7 tiny
+    processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
+    description: "yolov7 tiny pretrained DarkNet model"
+    input: "${MODEL_DIR}/yolo/yolov7-tiny.weights"
+    config: "${MODEL_DIR}/yolo/yolov7-tiny.cfg"
+    square: yes
 
-    - name: yolov7
-      processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
-      enabled: no
-      description: "YOLO v7 pretrained DarkNet model"
-      input: "${MODEL_DIR}/yolo/yolov7.weights"
-      config: "${MODEL_DIR}/yolo/yolov7.cfg"
-      square: yes
-      height: 640
-      width: 640
+  - name: yolov7
+    processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
+    enabled: no
+    description: "YOLO v7 pretrained DarkNet model"
+    input: "${MODEL_DIR}/yolo/yolov7.weights"
+    config: "${MODEL_DIR}/yolo/yolov7.cfg"
+    square: yes
+    height: 640
+    width: 640
 
-    - name: yolov7x
-      processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
-      enabled: no
-      description: "YOLO v7-X pretrained DarkNet model"
-      input: "${MODEL_DIR}/yolo/yolov7x.weights"
-      config: "${MODEL_DIR}/yolo/yolov7x.cfg"
-      square: yes
-      height: 640
-      width: 640
+  - name: yolov7x
+    processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
+    enabled: no
+    description: "YOLO v7-X pretrained DarkNet model"
+    input: "${MODEL_DIR}/yolo/yolov7x.weights"
+    config: "${MODEL_DIR}/yolo/yolov7x.cfg"
+    square: yes
+    height: 640
+    width: 640
 
-#    - name: dlib face
-#      description: "dlib face model"
-#      model_type: face
-#      framework: face_recognition
-#
-#      detection_model: cnn
-#      training_model: cnn
-#      train_max_size: 500
-#      unknown_face_name: "Unknown"
-#      unknown_faces_leeway_pixels: 10
-#      unknown_faces_dir: "${DATA_DIR}/unknown_faces"
-#      known_faces_dir: "${DATA_DIR}/known_faces"
-#
-#      detection_options:
-#        confidence: 0.5
-#        upsample_times: 1
-#        num_jitters: 1
-#        max_size: 600
-#        recognition_threshold: 0.6
+  - name: dlib face
+    enabled: no
+    description: "dlib face model"
+    model_type: face
+    framework: face_recognition
 
-#    - name: "openalpr local cpu"
-#      description: "openalpr local SDK (binary) model"
-#      model_type: alpr
-#      framework: alpr
-##      processor: cpu
-#
-#      service: openalpr
-#      api_type: local
-##      api_url: "http://localhost:8080"
-##      api_key: "sk_1234567890"
-#
-#      detection_options:
-#        alpr_binary: alpr
-##        alpr_binary_params:
-#        confidence: 0.5
-#        max_size: 600
-#
-#    - name: "openalpr local gpu"
-#      description: "openalpr local SDK (binary) GPU CUDA model"
-#      model_type: alpr
-#      framework: alpr
-#      processor: gpu
-#
-#      service: openalpr
-#      api_type: local
-##      api_url: "http://localhost:8080"
-##      api_key: "sk_1234567890"
-#
-#      detection_options:
-#        alpr_binary: alpr
-#        alpr_binary_params: -GPU
-#        confidence: 0.5
-#        max_size: 600
-#
-#    - name: "openalpr cloud"
-#      description: "openalpr cloud API model"
-#      model_type: alpr
-#      framework: alpr
-#      processor: cpu
-#
-#      service: openalpr
-#      api_type: cloud
-##        api_url: "https://api.openalpr.com/v2/recognize_bytes"
-#      api_key: "sk_1234567890"
-#
-#      detection_options:
-#          confidence: 0.5
-#          max_size: 600
-##          recognize_vehicle: yes
-##          country: us
-##          state: ca
-#
-#    - name: 'Platerecognizer cloud'
-##      enabled: no
-#      model_type: alpr
-#      framework: alpr
-#      service: plate_recognizer
-#      api_type: cloud
-##      api_url: "https://api.platerecognizer.com/v1/plate-reader/"
-#      api_key: someAPIkeyHERE123
-#      detection_options:
-##        regions:
-#        stats: no
-#        min_dscore: 0.5
-#        min_score: 0.5
-#        max_size: 1600
-#
-#        payload:
-#          regions: ['us']
-#          camera_id: 12
-#
-#        config:
-#          region: 'strict'
-#          mode:  'fast'
+    detection_model: cnn
+    training_model: cnn
+    train_max_size: 500
+    unknown_face_name: "Unknown"
+    unknown_faces_leeway_pixels: 10
+    unknown_faces_dir: "${DATA_DIR}/unknown_faces"
+    known_faces_dir: "${DATA_DIR}/known_faces"
+
+    detection_options:
+      confidence: 0.5
+      upsample_times: 1
+      num_jitters: 1
+      max_size: 600
+      recognition_threshold: 0.6
+
+  - name: "openalpr cpu"
+    ## NOTE: OpenALPR is fairly powerful for being older.
+    ## You need to understand how to skew and warp images to make a plate readable by OCR.
+    ## You can also customize openalpr config files and only run them on certain cameras.
+    description: "openalpr local SDK (binary) model"
+    enabled: no
+
+
+    model_type: alpr
+    framework: alpr
+    processor: none
+    service: openalpr
+    api_type: local
+    # For cloud (WIP)
+#    api_url: "http://localhost:8080"
+#    api_key: "sk_1234567890"
+
+    detection_options:
+      alpr_binary: alpr
+      # The default config file uses CPU, no need to make a custom config file
+      alpr_binary_params:
+      confidence: 0.5
+      max_size: 600
+
+  - name: "openalpr gpu"
+    description: "openalpr local SDK (binary) GPU CUDA model"
+    enabled: no
+
+    model_type: alpr
+    framework: alpr
+    # openalpr config file controls processor
+    processor: None
+
+    service: openalpr
+    api_type: local
+#    api_url: "http://localhost:8080"
+#    api_key: "sk_1234567890"
+
+    detection_options:
+      alpr_binary: alpr
+      # Make a config file that uses the gpu instead of cpu
+      alpr_binary_params: "--config /etc/alpr/openalpr-gpu.conf"
+      alpr_binary_params:
+      confidence: 0.5
+      max_size: 600
+
+  - name: 'Platerec'  # = 'platerec' Remember, the model name is normalized by lower casing, spaces are preserved.
+    enabled: no
+    model_type: alpr
+    framework: alpr
+    service: plate_recognizer
+    api_type: cloud
+#      api_url: "https://api.platerecognizer.com/v1/plate-reader/"
+    api_key: ${PR_APIKEY}
+    detection_options:
+#        regions:
+      stats: no
+      min_dscore: 0.5
+      min_score: 0.5
+      max_size: 1600
+
+      payload:
+        regions: ['us']
+        camera_id: 12
+
+      config:
+        region: 'strict'
+        mode:  'fast'
