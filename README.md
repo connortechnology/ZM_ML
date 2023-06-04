@@ -54,13 +54,18 @@ inference and then processes the results to annotate images, create animations a
 
 ## Installation
 ### Docker
-See below for Docker image and instructions.
+See [below](https://github.com/baudneo/ZM_ML#server---docker) for **SERVER** Docker image and instructions. **Client** has no docker image.
 
 ### Manual Install
 See the Wiki for [Manual Installation](https://github.com/baudneo/ZM_ML/wiki/Manual-Installation) instructions.
 
 ### Bootstrap (WIP)
 **NOTE: bootstrap is a WIP**
+
+*NOTE 2: use `--dry-run` to see what will be installed*
+
+Bootstrap is for non docker installs.
+
 - Download the file first and read it before running
     - ```bash 
       curl -H 'Cache-Control: no-cache' -s https://raw.githubusercontent.com/baudneo/ZM_ML/master/examples/bootstrap > bootstrap && chmod +x bootstrap && ./bootstrap --help
@@ -80,44 +85,42 @@ See the Wiki for [Manual Installation](https://github.com/baudneo/ZM_ML/wiki/Man
 7. Run locally on ZoneMinder machine or deploy to a remote machine.
 8. Docker images! [Docker Hub](https://hub.docker.com/repository/docker/baudneo/zm_ml)
 
-## Server - Docker
+## _Server - Docker_
+See the Wiki [Docker](https://github.com/baudneo/ZM_ML/wiki/Docker) page for pre requisites, tags and instructions.
 
-A x86_64 image has been created that has OpenCV/face_recognition [DLib] with CUDA GPU support and also includes TPU libs.
-The plan is to have multiple other images for multiple archs. A RPi with a USB TPU doesnt need CUDA/OpenVINO
-accelerated OpenCV, a Jetson nano would need CUDA though. So, it's a WIP.
+A x86_64 image has been created that has:
+- OpenCV
+- face-recognition [DLib] (GPU Recommended)
+- OpenALPR local SDK binary.
+- CUDA GPU support for the 3 above.
+- TPU support
 
-### GPU/TPU x86_64 (amd64) Server docker image Pre-requisites
-- GPU:
-  - Nvidia drivers installed on the docker host (CUDA is not required on the docker host)
-  - Nvidia docker-container-toolkit installed and bound to the docker runtime on the docker host
-  - "Deploy" GPU(s) to the docker container using the `--gpus all` flag via `docker run` or follow the example in the supplied [docker-compose.yml](docker/docker-compose.yml) file.
-- TPU:
-  - Docker host may need to install coral libs with udev rules and run a detection on boot to 'init' the USB TPU for the Google udev rules to change the vendorId.
-  - Testing is needed to see if the host can not have any TPU related libs and let the container handle everything.
-  - Testing required to see if TPU passthrough will work in an unprivileged container
-  - Pass through `/dev/bus/usb` to allow the TPU to be detected by the container (can narrow down bus/id but those can change on reboots)
-
-### docker-compose.yaml and server.env files
-
-Located in the [docker](./docker) folder:
-- [docker-compose.yaml](docker/docker-compose.yml)
-- [server.env](docker/server.env)
 ```bash
-docker pull docker.io/baudneo/zm_ml:server-full
-```
+   docker pull docker.io/baudneo/zm_ml:server-full
+   ```
 
-## _NVIDIA GPU Accelerated Server_
+### Example docker-compose and .env files
+Located in the [docker](./docker) folder:
+- [docker-compose.yml](docker/docker-compose.yml)
+- [server.env](docker/server.env)
 
-For GPU acceleration, it is required to compile OpenCV with CUDA support. This includes knowing the 'Compute Capability' [_CUDA_ARCH_BIN_] of the cards you want to run the server on and also installing cuDNN libraries.
-**_To access cuDNN packages you will need to create a NVIDIA developers account._**
+## _NVIDIA GPU Acceleration_
+
+See the Wiki [Manual Installation Server GPU](https://github.com/baudneo/ZM_ML/wiki/Manual-Installation#gpu-support) page for pre requisites and instructions.
 
 ## _Coral EdgeTPU Accelerated Server_
 
-For TPU acceleration you will need to install the [edgetpu libraries](https://coral.ai/docs/accelerator/get-started/#runtime-on-linux) and [install pycoral](https://coral.ai/docs/accelerator/get-started/#pycoral-on-linux)  ([see Notes for Python3.10 TPU support](#server-notes "Notes")).
+See the Wiki [Manual Installation Server TPU](https://github.com/baudneo/ZM_ML/wiki/Manual-Installation#tpu-support) page for pre requisites and instructions.
 
 ## _Cloud ALPR_
 
-For Cloud ALPR you will need to create an account with the service you want to use [Plate Recognizer, OpenALPR(WIP)]. OpenALPR Cloud [now knows as Rekor] has changed since zmeventnotification days and needs to be rewritten, if someone can give me access to their Rekor API I can update the code.
+**NOTE:** Plate Recognizer has a free tier!
+
+For Cloud ALPR you will need to create an account with the service you want to use 
+- Plate Recognizer is partially supported
+- OpenALPR CLOUD - not supported, yet. 
+  - OpenALPR Cloud (*now knows as Rekor*) has changed since zmeventnotification days and needs to be rewritten.
+If someone can give me access to their Rekor API I can update the code.
 
 ## Server Notes:
 
@@ -125,16 +128,16 @@ For Cloud ALPR you will need to create an account with the service you want to u
 2. Intel ARC/iGPU's are __CURRENTLY NOT__ supported. (this may change)
 3. If you do not need GPU acceleration you can install OpenCV using pip. (`pip install opencv-contrib-python`)
 4. pycoral recently released wheels for Python3.10 See [here](https://github.com/google-coral/pycoral/issues/85#issuecomment-1305826142 "Pycoral 3.10 wheels")
-    - **NOTE:** It is recommended to use python **3.8** *or* **3.9** if you want to use TPU acceleration.
+   - **NOTE:** It is recommended to use python **3.8** *or* **3.9** if you want to use TPU acceleration.
 5. I am working on a script to make building OpenCV with GPU support easier.
 
 ---
 
 # Client
-The client side of ZM ML is a simple python script that uses a shell script wrapper to kick it off using ZoneMnider EventStartCommand option.
-This means ZM kicks of the ML chain instead of the ML chain scanning SHM looking for an event.
+The client side of ZM ML uses a python script that uses a shell script wrapper to kick it off using ZoneMnider EventStartCommand option.
+This means ZM kicks of the ML chain instead of the ML chain scanning SHM looking for an event, more efficient!
 
-The client grabs images, sends the images to mlapi servers, filters detected responses, post processes images and sends notifications. All the heavy lifting is done by the server!
+The client grabs images, sends the images to mlapi servers, filters detected responses, post processes images and sends notifications. All the heavy computation of ML models is done by the server!
 
 ## Client Pre-requisites
 - Client **MUST** be installed on same host as ZM server. Multi-server ZM installs will require a client install on each server.
