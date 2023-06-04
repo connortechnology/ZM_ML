@@ -57,12 +57,12 @@ class VirelAI:
                 except json.JSONDecodeError as e:
                     logger.error(f"Error decoding virelai api response: {e}")
                 else:
-
-                    logger.debug(
-                        f"perf:{LP} took {time.perf_counter() - t} -> detection response -> {response}"
-                    )
                     if "LabelModelVersion" in response:
                         self.name = f"{self.name} : {response['LabelModelVersion']}"
+                    logger.debug(
+                        f"perf:{LP} '{self.name}' took {time.perf_counter() - t}"
+                    )
+                    # annotated image
                     # Parse the returned labels
                     for item in response["Labels"]:
                         # {
