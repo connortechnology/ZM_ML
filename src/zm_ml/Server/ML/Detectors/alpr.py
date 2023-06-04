@@ -13,8 +13,12 @@ import numpy as np
 import requests
 from requests import Response
 
-from ...Models.config import OpenALPRLocalModelOptions, \
-    OpenALPRCloudModelOptions, PlateRecognizerModelOptions, ALPRModelConfig
+from ...Models.config import (
+    OpenALPRLocalModelOptions,
+    OpenALPRCloudModelOptions,
+    PlateRecognizerModelOptions,
+    ALPRModelConfig,
+)
 from ....Shared.Models.Enums import ModelProcessor, ALPRAPIType, ALPRService
 from ...utils import resize_cv2_image
 
@@ -30,21 +34,30 @@ class AlprBase:
             raise ValueError(f"{self.lp} no config passed!")
         # Model init params
         self.config: ALPRModelConfig = model_config
-        self.options: Union[PlateRecognizerModelOptions, OpenALPRLocalModelOptions, OpenALPRCloudModelOptions] = self.config.detection_options
+        self.options: Union[
+            PlateRecognizerModelOptions,
+            OpenALPRLocalModelOptions,
+            OpenALPRCloudModelOptions,
+        ] = self.config.detection_options
         self.processor: ModelProcessor = self.config.processor
         self.name: str = self.config.name
         self.api_key: Optional[str] = self.config.api_key
         import tempfile
+
         self.tempdir: Path = Path(tempfile.gettempdir())
         self.url: Optional[str] = self.config.api_url
         self.filename: Optional[Union[Path, str]] = None
         self.remove_temp: bool = False
         if not self.config.api_key and self.config.api_type == ALPRAPIType.CLOUD:
-            logger.debug(f"{self.lp} CLOUD API key not specified and you are not using the "
-                         f"command line ALPR, did you forget?")
+            logger.debug(
+                f"{self.lp} CLOUD API key not specified and you are not using the "
+                f"command line ALPR, did you forget?"
+            )
         # get rid of left over alpr temp files
         for _file in self.tempdir.glob("*-alpr.png"):
-            logger.debug(f"{self.lp} removing old alpr temp files from '{self.tempdir}'")
+            logger.debug(
+                f"{self.lp} removing old alpr temp files from '{self.tempdir}'"
+            )
             _file.unlink()
 
     def set_api_key(self, key):
@@ -53,24 +66,41 @@ class AlprBase:
 
     def _prepare_image(self, alpr_object: Union[np.ndarray, str, Path]):
         if isinstance(alpr_object, np.ndarray):
-            logger.debug(f"{self.lp} the supplied image resides in memory, creating temp file on disk")
+            logger.debug(
+                f"{self.lp} the supplied image resides in memory, creating temp file on disk"
+            )
             if self.options.max_size:
-                logger.debug(f"{self.lp} resizing image using max_size={self.options.max_size}")
+                logger.debug(
+                    f"{self.lp} resizing image using max_size={self.options.max_size}"
+                )
                 alpr_object = resize_cv2_image(alpr_object, self.options.max_size)
-            self.filename = (self.tempdir / f"ALPR-{uuid.uuid4()}.png").expanduser().resolve().as_posix()
+            self.filename = (
+                (self.tempdir / f"ALPR-{uuid.uuid4()}.png")
+                .expanduser()
+                .resolve()
+                .as_posix()
+            )
             cv2.imwrite(self.filename, alpr_object)
             self.remove_temp = True
         elif isinstance(alpr_object, str):
-            logger.debug(f"{self.lp} the supplied object is a STRING assuming absolute file path -> '{alpr_object}'")
+            logger.debug(
+                f"{self.lp} the supplied object is a STRING assuming absolute file path -> '{alpr_object}'"
+            )
             file_ = Path(alpr_object)
             if not file_.is_file():
-                raise FileNotFoundError(f"{self.lp} the supplied file path does not exist or is not a valid file -> '{file_}'")
+                raise FileNotFoundError(
+                    f"{self.lp} the supplied file path does not exist or is not a valid file -> '{file_}'"
+                )
             self.filename = file_.expanduser().resolve().as_posix()
             self.remove_temp = False
         elif isinstance(alpr_object, Path):
-            logger.debug(f"{self.lp} the supplied object is a Path object -> '{alpr_object}'")
+            logger.debug(
+                f"{self.lp} the supplied object is a Path object -> '{alpr_object}'"
+            )
             if not alpr_object.is_file():
-                raise FileNotFoundError(f"{self.lp} the supplied file path does not exist -> '{alpr_object}'")
+                raise FileNotFoundError(
+                    f"{self.lp} the supplied file path does not exist -> '{alpr_object}'"
+                )
             self.filename = alpr_object.expanduser().resolve().as_posix()
             self.remove_temp = False
 
@@ -110,7 +140,116 @@ class PlateRecognizer(AlprBase):
             response = response.json()
         return response
 
-    def detect(self, input_image=None):
+    def detect(self, input_image: Optional[np.ndarray] = None):
+        """Detects license plate using platerecognizer
+
+        Args:
+            input_image (image): image buffer
+
+        Returns:
+            boxes, labels, confidences: 3 objects, containing bounding boxes, labels and confidences
+        """
+        bbox = []
+        labels = []
+        confs = []
+        if self.options.stats:
+            logger.debug(f"{self.lp} API usage stats: {json.dumps(self.stats())}")
+        response: Optional[Union[requests.Response, Dict]] = None
+        try:
+            platerec_url = self.url
+            # if self.config.api_type == ALPRAPIType.CLOUD:
+            #     if not platerec_url.endswith("/plate-reader") or not platerec_url.endswith("/plate-reader/"):
+            #         logger.debug(f"{self.lp} cloud API, appending '/plate-reader' to url (currently: {platerec_url}")
+            #         platerec_url += "/plate-reader"
+
+            platerec_payload = {}
+            if self.options.regions:
+                platerec_payload["regions"] = self.options.regions
+            if self.options.payload:
+                logger.debug(
+                    f"{self.lp} found API payload, overriding existing payload"
+                )
+                platerec_payload = self.options.payload
+
+            if self.options.config:
+                logger.debug(f"{self.lp} found API config, using it")
+                platerec_payload["config"] = self.options.config
+            headers = {"Authorization": f"Token {self.api_key}"} if self.api_key else {}
+            logger.debug(
+                f"{self.lp} sending request to {platerec_url} with payload: {platerec_payload} and headers: {headers}"
+            )
+            response = requests.post(
+                platerec_url,
+                timeout=15,
+                files=dict(upload=cv2.imencode(".jpg", input_image)[1].tobytes()),
+                data=platerec_payload,
+                headers=headers,
+                stream=True,
+            )
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"{self.lp} request exception -> {e}")
+            if response:
+                c = response.content
+                response = {
+                    "error": f"{self.lp} rejected the upload with: {e}.",
+                    "results": [],
+                }
+                logger.error(f"{self.lp} API rejected the upload with {e} and body:{c}")
+            raise
+        except Exception as e:
+            logger.error(f"{self.lp} exception -> {e}")
+            raise
+        else:
+            resp_data: bytes = b""
+            if response:
+                try:
+                    for data in response.iter_content(chunk_size=1024):
+                        resp_data += data
+                except requests.exceptions.ChunkedEncodingError as ex:
+                    logger.error(f"Invalid chunk encoding: {ex}")
+                    raise
+                else:
+                    response = json.loads(resp_data)
+                    logger.debug(f"{self.lp} API response JSON={response}")
+
+        plates: Dict
+        if response:
+            if response.get("results"):
+                for plates in response.get("results"):
+                    label = plates["plate"]
+                    dscore = plates["dscore"]
+                    score = float(plates["score"])
+
+                    if (
+                        dscore >= self.options.min_dscore
+                        and score >= self.options.min_score
+                    ):
+                        x1 = round(int(plates["box"]["xmin"]))
+                        y1 = round(int(plates["box"]["ymin"]))
+                        x2 = round(int(plates["box"]["xmax"]))
+                        y2 = round(int(plates["box"]["ymax"]))
+                        labels.append(label)
+                        bbox.append([x1, y1, x2, y2])
+                        confs.append(score)
+                    else:
+                        logger.debug(
+                            f"{self.lp} discarding plate:{label} because its dscore:{dscore}/score:{score} are not in "
+                            f"range of configured dscore:{self.options.min_dscore} score:"
+                            f"{self.options.min_score}"
+                        )
+
+        return {
+            "success": True if labels else False,
+            "type": self.config.model_type,
+            "processor": self.processor,
+            "model_name": self.name,
+            "label": labels,
+            "confidence": confs,
+            "bounding_box": bbox,
+        }
+
+    def detectORIG(self, input_image=None):
         """Detects license plate using platerecognizer
 
         Args:
@@ -126,6 +265,7 @@ class PlateRecognizer(AlprBase):
         self._prepare_image(inf_object)
         if self.options.stats:
             logger.debug(f"{self.lp} API usage stats: {json.dumps(self.stats())}")
+        response: Optional[Union[requests.Response, Dict]] = None
         with open(self.filename, "rb") as fp:
             try:
                 platerec_url = self.url
@@ -154,37 +294,52 @@ class PlateRecognizer(AlprBase):
                 )
                 response.raise_for_status()
             except requests.exceptions.RequestException as e:
-                c = response.content
-                response = {"error": f"{self.lp} rejected the upload with: {e}.", "results": []}
-                logger.error(f"{self.lp} API rejected the upload with {e} and body:{c}")
+                logger.error(f"{self.lp} request exception -> {e}")
+                if response:
+                    c = response.content
+                    response = {
+                        "error": f"{self.lp} rejected the upload with: {e}.",
+                        "results": [],
+                    }
+                    logger.error(
+                        f"{self.lp} API rejected the upload with {e} and body:{c}"
+                    )
+                raise
+            except Exception as e:
+                logger.error(f"{self.lp} exception -> {e}")
+                raise
             else:
                 response = response.json()
                 logger.debug(f"{self.lp} API response JSON={response}")
 
         if self.remove_temp:
             os.remove(self.filename)
-        response: Union[Dict, Response]
-        plates: Dict
-        if response.get("results"):
-            for plates in response.get("results"):
-                label = plates["plate"]
-                dscore = plates["dscore"]
-                score = plates["score"]
 
-                if dscore >= self.options.min_dscore and score >= self.options.min_score:
-                    x1 = round(int(plates["box"]["xmin"]))
-                    y1 = round(int(plates["box"]["ymin"]))
-                    x2 = round(int(plates["box"]["xmax"]))
-                    y2 = round(int(plates["box"]["ymax"]))
-                    labels.append(label)
-                    bbox.append([x1, y1, x2, y2])
-                    confs.append(score)
-                else:
-                    logger.debug(
-                        f"{self.lp} discarding plate:{label} because its dscore:{dscore}/score:{score} are not in "
-                        f"range of configured dscore:{self.options.min_dscore} score:"
-                        f"{self.options.min_score}"
-                    )
+        plates: Dict
+        if response:
+            if response.get("results"):
+                for plates in response.get("results"):
+                    label = plates["plate"]
+                    dscore = plates["dscore"]
+                    score = float(plates["score"])
+
+                    if (
+                        dscore >= self.options.min_dscore
+                        and score >= self.options.min_score
+                    ):
+                        x1 = round(int(plates["box"]["xmin"]))
+                        y1 = round(int(plates["box"]["ymin"]))
+                        x2 = round(int(plates["box"]["xmax"]))
+                        y2 = round(int(plates["box"]["ymax"]))
+                        labels.append(label)
+                        bbox.append([x1, y1, x2, y2])
+                        confs.append(score)
+                    else:
+                        logger.debug(
+                            f"{self.lp} discarding plate:{label} because its dscore:{dscore}/score:{score} are not in "
+                            f"range of configured dscore:{self.options.min_dscore} score:"
+                            f"{self.options.min_score}"
+                        )
 
         return {
             "success": True if labels else False,
@@ -200,8 +355,7 @@ class PlateRecognizer(AlprBase):
 class OpenAlprCloud(AlprBase):
     # FIXME: it is now Rekor. Need to update the name and logic.
     def __init__(self, model_config: ALPRModelConfig):
-        """Wrapper class for Open ALPR Cloud service
-        """
+        """Wrapper class for Open ALPR Cloud service"""
         super().__init__(model_config)
         self.lp = f"OpenAlpr:Cloud:"
         if not self.config.api_url:
@@ -229,14 +383,19 @@ class OpenAlprCloud(AlprBase):
                 if self.options.state:
                     params = f"{params}&state={self.options.state}"
                 if self.options.recognize_vehicle:
-                    params = f"{params}&recognize_vehicle={self.options.recognize_vehicle}"
+                    params = (
+                        f"{params}&recognize_vehicle={self.options.recognize_vehicle}"
+                    )
 
                 cloud_url = f"{self.url}?secret_key={self.api_key}{params}"
                 logger.debug(f"{self.lp} trying with url: {cloud_url}")
                 response = requests.post(cloud_url, files={"image": fp})
                 response.raise_for_status()
             except requests.exceptions.RequestException as e:
-                response = {"error": f"Open ALPR rejected the upload with {e}", "results": []}
+                response = {
+                    "error": f"Open ALPR rejected the upload with {e}",
+                    "results": [],
+                }
                 logger.debug(f"{self.lp} rejected the upload with {e}")
             else:
                 response = response.json()
@@ -286,9 +445,9 @@ class OpenAlprCloud(AlprBase):
 
 class OpenAlprCmdLine(AlprBase):
     """Wrapper class for OpenALPR command line utility"""
+
     def __init__(self, model_config: ALPRModelConfig):
-        """Wrapper class for OpenALPR command line utility
-        """
+        """Wrapper class for OpenALPR command line utility"""
         super().__init__(model_config)
         self.lp = f"OpenALPR:CmdLine:"
         cmd = self.options.alpr_binary
@@ -322,7 +481,9 @@ class OpenAlprCmdLine(AlprBase):
             if response.find(p) != -1:
                 logger.debug(f"{self.lp} CUDA was used for processing!")
             response.replace(p, "")
-            logger.debug(f"perf:{self.lp} took {time.perf_counter() - alpr_cmdline_exc_start} seconds")
+            logger.debug(
+                f"perf:{self.lp} took {time.perf_counter() - alpr_cmdline_exc_start} seconds"
+            )
             logger.debug(f"{self.lp} JSON response -> {response}")
             response = json.loads(response)
         except subprocess.CalledProcessError as e:
