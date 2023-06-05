@@ -8,7 +8,7 @@ from logging import getLogger
 
 import numpy as np
 
-from ...Models.config import FaceRecognitionLibModelOptions, BaseModelConfig, FaceRecognitionLibModelConfig, ALPRModelConfig
+from ...Models.config import FaceRecognitionLibModelDetectionOptions, BaseModelConfig, FaceRecognitionLibModelConfig, ALPRModelConfig
 from ....Shared.Models.Enums import ModelFrameWork, ModelProcessor, FaceRecognitionLibModelTypes
 
 import cv2
@@ -31,7 +31,7 @@ class FaceRecognitionLibDetector(FileLock):
             raise ValueError(f"{LP} no config passed!")
         # Model init params
         self.config: Union[BaseModelConfig, FaceRecognitionLibModelConfig, ALPRModelConfig] = model_config
-        self.options: FaceRecognitionLibModelOptions = self.config.detection_options
+        self.options: FaceRecognitionLibModelDetectionOptions = self.config.detection_options
         self.processor: ModelProcessor = self.config.processor
         self.name: str = self.config.name
         self.knn: Optional[neighbors.KNeighborsClassifier] = None
