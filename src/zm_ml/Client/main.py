@@ -2118,7 +2118,7 @@ class ZMClient:
                     )
             elif new_notes == old_notes:
                 logger.debug(
-                    f"{lp} {'PAST EVENT ->' if g.past_event else ''} new notes are the same as old notes"
+                    f"{lp} {'PAST EVENT ->' if g.past_event else ''} new notes are the same as old notes, not updating"
                     f" -> {new_notes}"
                 )
         # send notifications
