@@ -33,7 +33,7 @@ from .imports import (
 )
 from .Models.config import (
     BaseModelOptions,
-    FaceRecognitionLibModelOptions,
+    FaceRecognitionLibModelDetectionOptions,
     OpenALPRLocalModelOptions,
     BaseModelConfig,
     APIDetector,
@@ -235,7 +235,7 @@ async def available_models_proc(framework: ModelFrameWork):
 async def modify_model(
     model_hint: str,
     model_options: Union[
-        BaseModelOptions, FaceRecognitionLibModelOptions, OpenALPRLocalModelOptions
+        BaseModelOptions, FaceRecognitionLibModelDetectionOptions, OpenALPRLocalModelOptions
     ],
 ):
     model = get_model(model_hint)
