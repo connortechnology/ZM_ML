@@ -151,28 +151,34 @@ class TPUModelOptions(BaseModelOptions):
         extra = "allow"
 
 
-class FaceRecognitionLibModelOptions(BaseModelOptions):
+class FaceRecognitionLibModelDetectionOptions(BaseModelOptions):
     # face_recognition lib config Options
-    upsample_times: int = Field(
+    model: Optional[FaceRecognitionLibModelTypes] = Field(
+        FaceRecognitionLibModelTypes.DEFAULT,
+        examples=["hog", "cnn"],
+        description="Face Detection Model to use. 'cnn' is more accurate but slower on CPUs. "
+                    "'hog' is faster but less accurate",
+    )
+    upsample_times: Optional[int] = Field(
         1,
         ge=0,
         description="How many times to upsample the image looking for faces. "
         "Higher numbers find smaller faces but take longer.",
     )
-    num_jitters: int = Field(
+    num_jitters: Optional[int] = Field(
         1,
         ge=0,
         description="How many times to re-sample the face when calculating encoding. "
         "Higher is more accurate, but slower (i.e. 100 is 100x slower)",
     )
 
-    max_size: int = Field(
+    max_size: Optional[int] = Field(
         600,
         ge=100,
         description="Maximum size (Width) of image to load into memory for "
         "face detection (image will be scaled)",
     )
-    recognition_threshold: float = Field(
+    recognition_threshold: Optional[float] = Field(
         0.6,
         ge=0.0,
         le=1.0,
@@ -181,7 +187,7 @@ class FaceRecognitionLibModelOptions(BaseModelOptions):
 
 
 class ALPRModelOptions(BaseModelOptions):
-    max_size: int = Field(
+    max_size: Optional[int] = Field(
         600,
         ge=1,
         description="Maximum size (Width) of image to load into memory",
@@ -189,10 +195,10 @@ class ALPRModelOptions(BaseModelOptions):
 
 
 class OpenALPRLocalModelOptions(ALPRModelOptions):
-    alpr_binary: str = Field(
+    binary_path: Optional[str] = Field(
         "alpr", description="OpenALPR binary name or absolute path"
     )
-    alpr_binary_params: Optional[str] = Field(
+    binary_params: Optional[str] = Field(
         "-d",
         description="OpenALPR binary parameters (-j is ALWAYS passed)",
         example="-p ca -c US",
@@ -201,30 +207,30 @@ class OpenALPRLocalModelOptions(ALPRModelOptions):
 
 class OpenALPRCloudModelOptions(ALPRModelOptions):
     # For an explanation of params, see http://doc.openalpr.com/api/?api=cloudapi
-    recognize_vehicle: bool = Field(
+    recognize_vehicle: Optional[bool] = Field(
         True,
         description="If True, will attempt to recognize the vehicle type (ie: Ford Mustang)",
     )
-    country: str = Field(
+    country: Optional[str] = Field(
         "us",
         description="Country of license plate to recognize.",
     )
-    state: str = Field(
+    state: Optional[str] = Field(
         None,
         description="State of license plate to recognize.",
     )
 
 
 class PlateRecognizerModelOptions(BaseModelOptions):
-    stats: bool = Field(
+    stats: Optional[bool] = Field(
         False,
         description="Return stats about the plate recognition request",
     )
-    payload: Dict = Field(
-        None,
+    payload: Optional[Dict] = Field(
+        default_factory=dict,
         description="Override the payload sent to the Plate Recognizer API, must be a JSON serializable string",
     )
-    config: Dict = Field(
+    config: Optional[Dict] = Field(
         None,
         description="Override the config sent to the Plate Recognizer API, must be a JSON serializable string",
     )
@@ -300,7 +306,7 @@ class BaseModelConfig(BaseModel):
 
     detection_options: Union[
         BaseModelOptions,
-        FaceRecognitionLibModelOptions,
+        FaceRecognitionLibModelDetectionOptions,
         OpenALPRLocalModelOptions,
         OpenALPRCloudModelOptions,
         PlateRecognizerModelOptions,
@@ -463,45 +469,57 @@ class CV2YOLOModelConfig(BaseModelConfig):
 class FaceRecognitionLibModelConfig(BaseModelConfig):
     """Config cant be changed after loading - Options can be changed"""
 
-    detection_options: FaceRecognitionLibModelOptions = Field(
-        default_factory=FaceRecognitionLibModelOptions,
+    class UnknownFaceSettings(BaseModel):
+        enabled: Optional[bool] = Field(
+            True,
+            description="If True, unknown faces will be saved to disk for possible training",
+        )
+        label_as: Optional[str] = Field(
+            "Unknown",
+            description="Label to use for unknown faces. If 'enabled' is False, this is ignored",
+        )
+        dir: Optional[Path] = Field(
+            None,
+            description="Directory to save unknown faces to. If 'enabled' is False, this is ignored",
+        )
+        leeway_pixels: int = Field(
+            0,
+            description="Unknown faces leeway pixels, used when cropping the image to capture a face",
+        )
+
+    class FaceRecognitionLibTrainingOptions(BaseModel):
+        model: Optional[FaceRecognitionLibModelTypes] = Field(
+            FaceRecognitionLibModelTypes.DEFAULT,
+            examples=["hog", "cnn"],
+            description="Face Detection Model to use. 'cnn' is more accurate but slower on CPUs. "
+                        "'hog' is faster but less accurate",
+        )
+        max_size: Optional[int] = Field(
+            800,
+            description="Maximum size of image to load into memory for face training, "
+                        "Larger will consume more memory!",
+        )
+
+        dir: Optional[Path] = Field(
+            None,
+            description="Directory to load training images from. If None, the default directory will be used",
+        )
+
+
+
+    detection_options: FaceRecognitionLibModelDetectionOptions = Field(
+        default_factory=FaceRecognitionLibModelDetectionOptions,
         description="Default Configuration for the model",
     )
-    model: FaceRecognitionLibModelTypes = Field(
-        FaceRecognitionLibModelTypes.DEFAULT,
-        description="Face Detection Model to use. 'cnn' is more accurate but slower on CPUs. "
-        "'hog' is faster but less accurate",
+
+    training_options: Optional[FaceRecognitionLibTrainingOptions] = Field(
+        default_factory=FaceRecognitionLibTrainingOptions,
+        description="Configuration for training faces",
     )
-    train_max_size: int = Field(
-        800,
-        description="Maximum size of image to load into memory for face training, "
-        "Larger will consume more memory!",
-    )
-    unknown_face_name: str = Field(
-        "Unknown", description="Name to use for unknown faces"
-    )
-    save_unknown_faces: bool = Field(
-        False,
-        description="Save cropped unknown faces to disk, can be "
-        "used to train a model",
-    )
-    unknown_faces_leeway_pixels: int = Field(
-        0,
-        description="Unknown faces leeway pixels, used when cropping the image to capture a face",
-    )
-    unknown_faces_dir: Optional[Union[Path, str]] = Field(
-        None, description="Directory to save unknown faces to"
-    )
-    detection_model: FaceRecognitionLibModelTypes = Field(
-        FaceRecognitionLibModelTypes.DEFAULT,
-        description="Face model to use for detection",
-    )
-    training_model: FaceRecognitionLibModelTypes = Field(
-        FaceRecognitionLibModelTypes.DEFAULT,
-        description="Face model to use for training",
-    )
-    known_faces_dir: Optional[Union[Path, str]] = Field(
-        None, description="Path to parent directory of known faces for training"
+
+    unknown_faces: UnknownFaceSettings = Field(
+        default_factory=UnknownFaceSettings,
+        description="Settings for handling unknown faces",
     )
 
 
@@ -742,14 +760,13 @@ class Settings(BaseModel):
                             final_model = VirelAIModelConfig(**model)
                     elif _framework == ModelFrameWork.FACE_RECOGNITION:
                         model["model_type"] = ModelType.FACE
-                        model["detection_options"] = FaceRecognitionLibModelOptions(
+                        model["detection_options"] = FaceRecognitionLibModelDetectionOptions(
                             **_options
                         )
                         final_model = FaceRecognitionLibModelConfig(**model)
 
                     elif _framework == ModelFrameWork.ALPR:
                         model["model_type"] = ModelType.ALPR
-                        api_service = model.get("service", "openalpr")
                         api_type = model.get("api_type", "local")
                         logger.debug(
                             f"DEBUG>>> FrameWork: {_framework}  Sub-FrameWork: {_sub_fw} [{api_type}]"
@@ -766,16 +783,15 @@ class Settings(BaseModel):
                                     **_options
                                 )
                         elif _sub_fw == ALPRSubFrameWork.PLATE_RECOGNIZER:
-                            if api_service == ALPRAPIType.CLOUD:
+                            if api_type == ALPRAPIType.CLOUD:
                                 config.processor = ModelProcessor.NONE
                                 config.detection_options = PlateRecognizerModelOptions(
                                     **_options
                                 )
-                            elif api_service == ALPRAPIType.LOCAL:
+                            elif api_type == ALPRAPIType.LOCAL:
                                 raise NotImplementedError(
                                     "Plate Recognizer Local API not implemented"
                                 )
-
 
                         logger.debug(
                             f"DEBUG>>> FINAL ALPR OPTIONS {config.detection_options = }"
@@ -790,16 +806,15 @@ class Settings(BaseModel):
                             logger.debug(
                                 f"DEBUG>>> FINAL OpenCV:Darknet OPTIONS {config.detection_options = }"
                             )
-                        elif _sub_fw == OpenCVSubFrameWork.ONNX:
-                            pass
-                        elif _sub_fw == OpenCVSubFrameWork.TENSORFLOW:
-                            pass
-                        elif _sub_fw == OpenCVSubFrameWork.TORCH:
-                            pass
-                        elif _sub_fw == OpenCVSubFrameWork.CAFFE:
-                            pass
-                        elif _sub_fw == OpenCVSubFrameWork.VINO:
-                            pass
+                            not_impl = [
+                                OpenCVSubFrameWork.ONNX,
+                                OpenCVSubFrameWork.TENSORFLOW,
+                                OpenCVSubFrameWork.TORCH,
+                                OpenCVSubFrameWork.CAFFE,
+                                OpenCVSubFrameWork.VINO,
+                            ]
+                        elif _sub_fw in not_impl:
+                            raise NotImplementedError(f"{_sub_fw} not implemented")
                         else:
                             logger.debug(
                                 f"DEBUG>>> this SUB FRAMEWORK is NOT IMPLEMENTED -> {_sub_fw}"
@@ -857,9 +872,9 @@ def parse_client_config_file(cfg_file: Path) -> Optional[Settings]:
 
     logger.debug(f"Replacing ${{VARS}} in config:substitutions")
     substitutions = _replace_vars(search_str=str(substitutions), var_pool=substitutions)
-    logger.debug(f"AFTER FIRST SUBSTITUTION: {substitutions = }")
+    # logger.debug(f"AFTER FIRST SUBSTITUTION: {substitutions = }")
     substitutions = _replace_vars(search_str=str(substitutions), var_pool=substitutions)
-    logger.debug(f"AFTER SECOND SUBSTITUTION: {substitutions = }")
+    # logger.debug(f"AFTER SECOND SUBSTITUTION: {substitutions = }")
     if inc_file := substitutions.get("IncludeFile"):
         inc_file = Path(inc_file)
         logger.debug(f"PARSING IncludeFile: {inc_file.as_posix()}")
@@ -867,9 +882,9 @@ def parse_client_config_file(cfg_file: Path) -> Optional[Settings]:
             inc_vars = yaml.safe_load(inc_file.read_text())
             if "server" in inc_vars:
                 inc_vars = inc_vars["server"]
-                logger.debug(
-                    f"Loaded {len(inc_vars)} substitution from IncludeFile {inc_file} => {inc_vars}"
-                )
+                # logger.debug(
+                #     f"Loaded {len(inc_vars)} substitution from IncludeFile {inc_file} => {inc_vars}"
+                # )
                 # check for duplicates
                 for k in inc_vars:
                     if k in substitutions:
@@ -915,7 +930,7 @@ class APIDetector:
         OpenALPRCloudModelOptions,
         PlateRecognizerModelOptions,
         ALPRModelOptions,
-        FaceRecognitionLibModelOptions,
+        FaceRecognitionLibModelDetectionOptions,
         CV2YOLOModelOptions,
     ]
 
@@ -969,7 +984,7 @@ class APIDetector:
         OpenALPRCloudModelOptions,
         PlateRecognizerModelOptions,
         ALPRModelOptions,
-        FaceRecognitionLibModelOptions,
+        FaceRecognitionLibModelDetectionOptions,
     ]:
         return self._options
 
@@ -982,7 +997,7 @@ class APIDetector:
             OpenALPRCloudModelOptions,
             PlateRecognizerModelOptions,
             ALPRModelOptions,
-            FaceRecognitionLibModelOptions,
+            FaceRecognitionLibModelDetectionOptions,
         ],
     ):
         self._options = options
