@@ -117,3 +117,7 @@ class Gotify(CoolDownBase):
                 logger.debug(
                     f"{lp} Gotify FAILURE STATUS_CODE: {resp.status_code} -> {resp.json()}"
                 )
+            else:
+                logger.debug(f"{lp} Gotify FAILURE NO RESPONSE")
+                logger.warning(f"{lp} Gotify failure no response - Possible 401 unauthorized, is the token correct?")
+
