@@ -2,21 +2,20 @@ import os
 import pickle
 import time
 import uuid
+from logging import getLogger
 from pathlib import Path
 from typing import Optional, Union
-from logging import getLogger
-
-import numpy as np
-
-from ...Models.config import FaceRecognitionLibModelDetectionOptions, BaseModelConfig, FaceRecognitionLibModelConfig, ALPRModelConfig
-from ....Shared.Models.Enums import ModelFrameWork, ModelProcessor, FaceRecognitionLibModelTypes
 
 import cv2
+import numpy as np
 from sklearn import neighbors
+from zm_ml.Server.Log import SERVER_LOGGER_NAME
 
 from ..file_locks import FileLock
+from ...Models.config import FaceRecognitionLibModelDetectionOptions, BaseModelConfig, FaceRecognitionLibModelConfig, \
+    ALPRModelConfig, FaceRecognitionLibModelTrainingOptions
+from ....Shared.Models.Enums import ModelProcessor, FaceRecognitionLibModelTypes
 
-from zm_ml.Server.Log import SERVER_LOGGER_NAME
 logger = getLogger(SERVER_LOGGER_NAME)
 
 face_recognition = None
@@ -31,7 +30,8 @@ class FaceRecognitionLibDetector(FileLock):
             raise ValueError(f"{LP} no config passed!")
         # Model init params
         self.config: Union[BaseModelConfig, FaceRecognitionLibModelConfig, ALPRModelConfig] = model_config
-        self.options: FaceRecognitionLibModelDetectionOptions = self.config.detection_options
+        self.detection_options: Optional[FaceRecognitionLibModelDetectionOptions] = self.config.detection_options
+        self.training_options: Optional[FaceRecognitionLibModelTrainingOptions] = self.config.training_options
         self.processor: ModelProcessor = self.config.processor
         self.name: str = self.config.name
         self.knn: Optional[neighbors.KNeighborsClassifier] = None
@@ -50,7 +50,7 @@ class FaceRecognitionLibDetector(FileLock):
             global dlib
 
             import dlib
-        except ImportError as e:
+        except ImportError:
             logger.error(f"{LP} UNABLE to import D-Lib library, is it installed?")
             return
         else:
@@ -61,7 +61,7 @@ class FaceRecognitionLibDetector(FileLock):
             global face_recognition
 
             import face_recognition
-        except ImportError as e:
+        except ImportError:
             logger.error(
                 f"{LP} Could not import face_recognition, is the face-recognition library installed?)"
             )
@@ -87,7 +87,7 @@ class FaceRecognitionLibDetector(FileLock):
             self.trained_faces_file = faces_file
         else:
             self.trained_faces_file = Path(
-                f"{self.config.known_faces_dir}/trained_faces.dat"
+                f"{self.training_options.dir}/trained_faces.dat"
             )
         # to increase performance, read encodings from file
         if self.trained_faces_file.is_file():
@@ -110,26 +110,32 @@ class FaceRecognitionLibDetector(FileLock):
 
     def processor_check(self):
         if self.processor == ModelProcessor.GPU:
-            if dlib.DLIB_USE_CUDA and dlib.cuda.get_num_devices() >= 1:
-                logger.debug(
-                    f"{LP} dlib was compiled with CUDA support and there is an available GPU "
-                    f"to use for processing! (Total GPUs dlib could use: {dlib.cuda.get_num_devices()})"
-                )
-            elif dlib.DLIB_USE_CUDA and not dlib.cuda.get_num_devices() >= 1:
+            try:
+                if dlib.DLIB_USE_CUDA and dlib.cuda.get_num_devices() >= 1:
+                    logger.debug(
+                        f"{LP} dlib was compiled with CUDA support and there is an available GPU "
+                        f"to use for processing! (Total GPUs dlib could use: {dlib.cuda.get_num_devices()})"
+                    )
+                elif dlib.DLIB_USE_CUDA and not dlib.cuda.get_num_devices() >= 1:
+                    logger.error(
+                        f"{LP} It appears dlib was compiled with CUDA support but there is not an available GPU "
+                        f"for dlib to use! Using CPU for dlib detections..."
+                    )
+                    self.config.processor = self.processor = ModelProcessor.CPU
+                elif not dlib.DLIB_USE_CUDA:
+                    logger.error(
+                        f"{LP} It appears dlib was not compiled with CUDA support! "
+                        f"Using CPU for dlib detections..."
+                    )
+                    self.config.processor = self.processor = ModelProcessor.CPU
+            except Exception as e:
                 logger.error(
-                    f"{LP} It appears dlib was compiled with CUDA support but there is not an available GPU "
-                    f"for dlib to use! Using CPU for dlib detections..."
-                )
-                self.config.processor = self.processor = ModelProcessor.CPU
-            elif not dlib.DLIB_USE_CUDA:
-                logger.error(
-                    f"{LP} It appears dlib was not compiled with CUDA support! "
-                    f"Using CPU for dlib detections..."
+                    f"{LP} Error checking for CUDA support in dlib! Using CPU for dlib detections... -> {e}"
                 )
                 self.config.processor = self.processor = ModelProcessor.CPU
 
     def get_options(self):
-        return self.options
+        return self.detection_options
 
     def get_classes(self):
         if self.knn:
@@ -139,7 +145,7 @@ class FaceRecognitionLibDetector(FileLock):
     def detect(self, input_image: np.ndarray):
         detect_start_timer = time.perf_counter()
         h, w = input_image.shape[:2]
-        max_size: int = self.options.max_size or w
+        max_size: int = self.detection_options.max_size or w
         resized_w, resized_h = None, None
         labels, b_boxes = [], []
 
@@ -166,13 +172,13 @@ class FaceRecognitionLibDetector(FileLock):
         self.acquire_lock()
         self.face_locations = face_recognition.face_locations(
             rgb_image,
-            model=self.config.detection_model,
-            number_of_times_to_upsample=self.options.upsample_times,
+            model=self.detection_options.model,
+            number_of_times_to_upsample=self.detection_options.upsample_times,
         )
         logger.debug(f"{LP}detect: found {len(self.face_locations)} faces")
         if not len(self.face_locations):
             logger.debug(
-                f"perf:{LP}{self.processor}: computing locations took "
+                f"perf:{LP}{self.processor}: computing face locations took "
                 f"{time.perf_counter() - detect_start_timer:.5f} s"
             )
         else:
@@ -180,7 +186,7 @@ class FaceRecognitionLibDetector(FileLock):
             self.face_encodings = face_recognition.face_encodings(
                 rgb_image,
                 known_face_locations=self.face_locations,
-                num_jitters=self.options.num_jitters,
+                num_jitters=self.detection_options.num_jitters,
                 model="small",  # small is default but faster, large is more accurate
             )
 
@@ -194,13 +200,13 @@ class FaceRecognitionLibDetector(FileLock):
             if not self.knn:
                 logger.debug(f"{LP} no trained faces found, skipping recognition")
                 for loc in self.face_locations:
-                    label = self.config.unknown_face_name
+                    label = self.config.unknown_faces.label_as
                     if self.scaled:
                         logger.debug(f"{LP} scaling bounding boxes as image was resized for detection")
                         input_image = self.original_image
                         self.face_locations = self.scale_by_factor(self.face_locations, self.x_factor, self.y_factor)
                     # image is the originally supplied image, not the resized one to crop if needed
-                    if self.config.save_unknown_faces:
+                    if self.config.unknown_faces.enabled:
                         self.save_unknown_faces(loc, input_image)
                     b_boxes.append([loc[3], loc[0], loc[1], loc[2]])
                     labels.append(f"face: {label}")
@@ -213,7 +219,7 @@ class FaceRecognitionLibDetector(FileLock):
                     f"{LP} closest KNN match indexes (smaller is better): {closest_distances}",
                 )
                 are_matches = [
-                    closest_distances[0][i][0] <= self.options.recognition_threshold
+                    closest_distances[0][i][0] <= self.detection_options.recognition_threshold
                     for i in range(len(self.face_locations))
                 ]
                 prediction_labels = self.knn.predict(self.face_encodings)
@@ -226,12 +232,12 @@ class FaceRecognitionLibDetector(FileLock):
                 )
 
                 for pred, loc, rec in zip(prediction_labels, self.face_locations, are_matches):
-                    label = pred if rec else self.config.unknown_face_name
+                    label = pred if rec else self.config.unknown_faces.label_as
                     if self.scaled:
                         logger.debug(f"{LP} scaling bounding boxes as image was resized for detection")
                         input_image = self.original_image
                         self.face_locations = self.scale_by_factor(self.face_locations, self.x_factor, self.y_factor)
-                    if not rec and self.config.save_unknown_faces:
+                    if not rec and self.config.unknown_faces.enabled:
                         self.save_unknown_faces(loc, input_image)
 
                     b_boxes.append([loc[3], loc[0], loc[1], loc[2]])
@@ -264,28 +270,29 @@ class FaceRecognitionLibDetector(FileLock):
 
     def train(self, face_resize_width: Optional[int] = None):
         t = time.perf_counter()
-        train_model = self.config.training_model
+        train_model = self.config.training_options.model
         knn_algo = "ball_tree"
-        upsample_times = self.options.upsample_times
-        num_jitters = self.options.num_jitters
+        upsample_times = self.training_options.upsample_times
+        num_jitters = self.training_options.num_jitters
 
         ext = (".jpg", ".jpeg", ".png")
         known_face_encodings = []
         known_face_names = []
         try:
-            known_parent_dir = Path(self.config.known_faces_dir)
+            known_parent_dir = Path(self.config.training_options.dir)
             for train_person_dir in known_parent_dir.glob("*"):
                 if train_person_dir.is_dir():
+
                     for file in train_person_dir.glob("*"):
-                        if file.suffix.lower() in ext:
-                            logger.info(f"{LP} training on {file}")
-                            known_face_image = cv2.imread(file.as_posix())
+                        if file.suffix.casefold() in ext:
+                            logger.info(f"{LP} training in dir '{train_person_dir}' on '{file}'")
+                            known_face_image = cv2.imread(file.expanduser().resolve().as_posix())
                             # known_face_image = face_recognition.load_image_file(file)
                             if known_face_image is None or known_face_image.size == 0:
                                 logger.error(f"{LP} Error reading file, skipping")
                                 continue
                             if not face_resize_width:
-                                face_resize_width = self.config.train_max_size
+                                face_resize_width = self.training_options.max_size
                             logger.debug(f"{LP} resizing to {face_resize_width}")
                             from ...utils import resize_cv2_image
 
@@ -303,7 +310,7 @@ class FaceRecognitionLibDetector(FileLock):
                             )
                             if len(face_locations) != 1:
                                 extra_err_msg: str = ""
-                                if self.config.training_model == FaceRecognitionLibModelTypes.HOG:
+                                if self.config.training_options.model == FaceRecognitionLibModelTypes.HOG:
                                     extra_err_msg = (
                                         "If you think you have only 1 face try using 'cnn' "
                                         "for training mode. "
@@ -371,7 +378,7 @@ class FaceRecognitionLibDetector(FileLock):
         )
 
     def save_unknown_faces(self, loc: list, input_image: np.ndarray):
-        save_dir = Path(self.config.unknown_faces_dir)
+        save_dir = Path(self.config.unknown_faces.dir)
         if save_dir.is_dir() and os.access(
                 save_dir.as_posix(), os.W_OK
         ):
@@ -380,7 +387,7 @@ class FaceRecognitionLibDetector(FileLock):
                 f"{save_dir.as_posix()}/{time_str}{uuid.uuid4()}.jpg"
             )
             h, w = input_image.shape[:2]
-            leeway = self.config.unknown_faces_leeway_pixels
+            leeway = self.config.unknown_faces.leeway_pixels
             x1 = max(
                 loc[3] - leeway,
                 0,
@@ -399,7 +406,7 @@ class FaceRecognitionLibDetector(FileLock):
             )
             crop_img = input_image[y1:y2, x1:x2]
             logger.info(
-                f"{LP} saving cropped UNKNOWN '{self.config.unknown_face_name}' face "
+                f"{LP} saving cropped UNKNOWN '{self.config.unknown_faces.label_as}' face "
                 f"at [{x1},{y1},{x2},{y2} - includes leeway of {leeway}px] to {unf}"
             )
             # cv2.imwrite won't throw an exception it outputs a C language WARN to console

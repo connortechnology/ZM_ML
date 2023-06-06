@@ -186,6 +186,39 @@ class FaceRecognitionLibModelDetectionOptions(BaseModelOptions):
     )
 
 
+class FaceRecognitionLibModelTrainingOptions(BaseModelOptions):
+    model: Optional[FaceRecognitionLibModelTypes] = Field(
+        FaceRecognitionLibModelTypes.DEFAULT,
+        examples=["hog", "cnn"],
+        description="Face Detection Model to use. 'cnn' is more accurate but slower on CPUs. "
+                    "'hog' is faster but less accurate",
+    )
+    upsample_times: Optional[int] = Field(
+        1,
+        ge=0,
+        description="How many times to upsample the image while detecting faces. "
+        "Higher numbers find smaller faces but take longer.",
+    )
+    num_jitters: Optional[int] = Field(
+        1,
+        ge=0,
+        description="How many times to re-sample the face when calculating encoding. "
+        "Higher is more accurate, but slower (i.e. 100 is 100x slower)",
+    )
+
+    max_size: Optional[int] = Field(
+        600,
+        ge=100,
+        description="Maximum size (Width) of image to load into memory for "
+        "face detection (image will be scaled)",
+    )
+    dir: Optional[Path] = Field(
+        None,
+        description="Directory to load training images from. If None, the default directory will be used",
+    )
+
+
+
 class ALPRModelOptions(BaseModelOptions):
     max_size: Optional[int] = Field(
         600,
@@ -487,33 +520,14 @@ class FaceRecognitionLibModelConfig(BaseModelConfig):
             description="Unknown faces leeway pixels, used when cropping the image to capture a face",
         )
 
-    class FaceRecognitionLibTrainingOptions(BaseModel):
-        model: Optional[FaceRecognitionLibModelTypes] = Field(
-            FaceRecognitionLibModelTypes.DEFAULT,
-            examples=["hog", "cnn"],
-            description="Face Detection Model to use. 'cnn' is more accurate but slower on CPUs. "
-                        "'hog' is faster but less accurate",
-        )
-        max_size: Optional[int] = Field(
-            800,
-            description="Maximum size of image to load into memory for face training, "
-                        "Larger will consume more memory!",
-        )
-
-        dir: Optional[Path] = Field(
-            None,
-            description="Directory to load training images from. If None, the default directory will be used",
-        )
-
-
 
     detection_options: FaceRecognitionLibModelDetectionOptions = Field(
         default_factory=FaceRecognitionLibModelDetectionOptions,
         description="Default Configuration for the model",
     )
 
-    training_options: Optional[FaceRecognitionLibTrainingOptions] = Field(
-        default_factory=FaceRecognitionLibTrainingOptions,
+    training_options: Optional[FaceRecognitionLibModelTrainingOptions] = Field(
+        default_factory=FaceRecognitionLibModelTrainingOptions,
         description="Configuration for training faces",
     )
 

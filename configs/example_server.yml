@@ -264,8 +264,13 @@ models:
       # 'cnn' is more accurate but slower on CPUs. 'hog' is faster but less accurate
       # NOTE: if you use cnn here you MUST use cnn for detection
       model: cnn
+      # How many times to upsample the image looking for faces.
+      # Higher numbers find smaller faces but take longer.
+      upsample_times: 1
+      # How many times to re-sample the face when calculating encoding.
+      # Higher is more accurate, but slower (i.e. 100 is 100x slower)
+      num_jitters: 1
       # Max width of image to feed the model (scaling applied)
-      # If you run out of memory during training, lower this
       max_size: 600
       # Source dir where known faces are stored.
       dir: "${DATA_DIR}/known_faces"
