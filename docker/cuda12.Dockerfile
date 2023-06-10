@@ -328,18 +328,18 @@ RUN set -x \
       && git clone https://github.com/google-coral/pycoral.git \
       && cd pycoral \
       && bash examples/install_requirements.sh classify_image.py \
-      && cp examples/classify_image.py /tpu_test/ \
-      && cp test_data/mobilenet_v2_1.0_224_inat_bird_quant_edgetpu.tflite /tpu_test/ \
-      && cp test_data/inat_bird_labels.txt /tpu_test/ \
-      && cp test_data/parrot.jpg /tpu_test/ \
-      && echo "python3 /tpu_test/classify_image.py \
---model /tpu_test/mobilenet_v2_1.0_224_inat_bird_quant_edgetpu.tflite \
---labels /tpu_test/inat_bird_labels.txt \
---input /tpu_test/parrot.jpg" > /tpu_test/tpu_test \
-      && chmod +x /tpu_test/tpu_test \
-      && wget "http://plates.openalpr.com/h786poj.jpg" -O /tpu_test/lp.jpg \
-      && echo "alpr /tpu_test/lp.jpg" > /tpu_test/alpr_test \
-      && chmod +x /tpu_test/alpr_test \
+      && cp examples/classify_image.py /testing/ \
+      && cp test_data/mobilenet_v2_1.0_224_inat_bird_quant_edgetpu.tflite /testing/ \
+      && cp test_data/inat_bird_labels.txt /testing/ \
+      && cp test_data/parrot.jpg /testing/ \
+      && echo "python3 /testing/classify_image.py \
+--model /testing/mobilenet_v2_1.0_224_inat_bird_quant_edgetpu.tflite \
+--labels /testing/inat_bird_labels.txt \
+--input /testing/parrot.jpg" > /testing/tpu_test \
+      && chmod +x /testing/tpu_test \
+      && wget "http://plates.openalpr.com/h786poj.jpg" -O /testing/lp.jpg \
+      && echo "alpr /testing/lp.jpg" > /testing/alpr_test \
+      && chmod +x /testing/alpr_test \
       # face recognition test
       && wget https://github.com/ageitgey/face_recognition/blob/master/examples/biden.jpg -O /testing/biden.jpg \
       && wget https://github.com/ageitgey/face_recognition/blob/master/examples/obama.jpg -O /testing/obama.jpg \
@@ -364,7 +364,7 @@ COPY --from=build-env /tmp/face_recognition/bin/* /usr/local/bin/
 COPY --from=build-env /tmp/alpr_export /usr
 COPY --from=build-env /tmp/etc /etc
 COPY --from=build-env /tmp/apt_pkg /tmp/apt_pkg
-COPY --from=build-env /tpu_test /tpu_test
+COPY --from=build-env /testing /testing
 COPY --from=build-env /tmp/deps /usr/local/lib/python3.9/dist-packages
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -378,7 +378,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
   && mv /usr/local/lib/python3.9/site-packages/dlib* /usr/local/lib/python3.9/dist-packages/ \
   && mv /usr/local/lib/python3.9/dist-packages/bin/* /usr/local/bin \
   && rm -rf /usr/local/lib/python3.9/site-packages/bin \
-  && mv /tpu_test/tpu_test /tpu_test/alpr_test /tpu_test/face_test /usr/local/bin \
+  && mv /testing/tpu_test /testing/alpr_test /testing/face_test /usr/local/bin \
   && apt-get update \
   && apt-get install -y --no-install-recommends \
     tree git wget curl gettext-base \
