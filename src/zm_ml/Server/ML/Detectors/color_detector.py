@@ -79,6 +79,6 @@ class ColorDetector:
             # color_name = webcolors.rgb_to_name(requested_colors)
         except ValueError:
             color_names = [
-                closest_color(requested_color) for requested_color in requested_colors
+                self.closest_color(requested_color) for requested_color in requested_colors
             ]
         return color_names
