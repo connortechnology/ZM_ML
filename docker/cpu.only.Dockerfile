@@ -203,7 +203,7 @@ RUN set -x \
 #        -D WITH_CUDA=ON \
 #        -D WITH_CUDNN=ON \
 #        -D OPENCV_DNN_CUDA=ON \
-#        -D ENABLE_FAST_MATH=1 \
+        -D ENABLE_FAST_MATH=1 \
 #        -D CUDA_FAST_MATH=1 \
         -D WITH_CUBLAS=1 \
 #        -D PYTHON3_EXECUTABLE=/usr/bin/python3.9 \
