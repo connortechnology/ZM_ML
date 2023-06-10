@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import pickle
 import time
@@ -13,7 +15,7 @@ from zm_ml.Server.Log import SERVER_LOGGER_NAME
 
 from ..file_locks import FileLock
 from ...Models.config import FaceRecognitionLibModelDetectionOptions, BaseModelConfig, FaceRecognitionLibModelConfig, \
-    ALPRModelConfig, FaceRecognitionLibModelTrainingOptions
+    FaceRecognitionLibModelTrainingOptions
 from ....Shared.Models.Enums import ModelProcessor, FaceRecognitionLibModelTypes
 
 logger = getLogger(SERVER_LOGGER_NAME)
@@ -25,11 +27,11 @@ LP = "Face_Recognition:"
 
 # Class to handle face recognition
 class FaceRecognitionLibDetector(FileLock):
-    def __init__(self, model_config: Union[BaseModelConfig, FaceRecognitionLibModelConfig, ALPRModelConfig]):
+    def __init__(self, model_config: Union[BaseModelConfig, FaceRecognitionLibModelConfig]):
         if not model_config:
             raise ValueError(f"{LP} no config passed!")
         # Model init params
-        self.config: Union[BaseModelConfig, FaceRecognitionLibModelConfig, ALPRModelConfig] = model_config
+        self.config: Union[BaseModelConfig, FaceRecognitionLibModelConfig] = model_config
         self.detection_options: Optional[FaceRecognitionLibModelDetectionOptions] = self.config.detection_options
         self.training_options: Optional[FaceRecognitionLibModelTrainingOptions] = self.config.training_options
         self.processor: ModelProcessor = self.config.processor
@@ -52,6 +54,7 @@ class FaceRecognitionLibDetector(FileLock):
             import dlib
         except ImportError:
             logger.error(f"{LP} UNABLE to import D-Lib library, is it installed?")
+            dlib = None
             return
         else:
             logger.debug(f"{LP} successfully imported D-Lib library")
@@ -133,14 +136,6 @@ class FaceRecognitionLibDetector(FileLock):
                     f"{LP} Error checking for CUDA support in dlib! Using CPU for dlib detections... -> {e}"
                 )
                 self.config.processor = self.processor = ModelProcessor.CPU
-
-    def get_options(self):
-        return self.detection_options
-
-    def get_classes(self):
-        if self.knn:
-            return self.knn.classes_
-        return []
 
     def detect(self, input_image: np.ndarray):
         detect_start_timer = time.perf_counter()
