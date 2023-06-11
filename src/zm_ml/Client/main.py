@@ -1012,7 +1012,7 @@ class ZMClient:
                 break
         logger.debug(f"{lp} OUT OF WHILE LOOP (image/image_name while loop)")
         logger.debug(
-            f"perf:: Total detections time {perf_counter() - _start:.5f} seconds"
+            f"perf:: MID: {g.mid} :: Total detections time {perf_counter() - _start:.5f} seconds"
         )
         # logger.debug(f"\n\n\nFINAL RESULTS: {final_detections}\n\n\n")
         if matched_l:
@@ -1593,12 +1593,13 @@ class ZMClient:
         ignore_labels: Optional[List[str]] = (
             g.config.matching.static_objects.ignore_labels or []
         )
-        if mon_filt and mon_filt.static_objects.labels:
-            for lbl in mon_filt.static_objects.labels:
+        logger.debug(f"DBG: {lp} GLOBAL ignore_labels={ignore_labels}")
+        if mon_filt and mon_filt.static_objects.ignore_labels:
+            for lbl in mon_filt.static_objects.ignore_labels:
                 if lbl not in ignore_labels:
                     ignore_labels.append(lbl)
         if zone_filt and zone_filt.static_objects.difference:
-            for lbl in zone_filt.static_objects.labels:
+            for lbl in zone_filt.static_objects.ignore_labels:
                 if lbl not in ignore_labels:
                     ignore_labels.append(lbl)
 
