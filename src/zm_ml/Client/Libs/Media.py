@@ -9,7 +9,7 @@ from enum import IntEnum
 import logging
 from sys import maxsize as sys_maxsize
 from time import sleep
-from typing import Optional, IO, Union, TYPE_CHECKING, Set, Tuple, Any, Dict
+from typing import Optional, IO, Union, TYPE_CHECKING, Set, Tuple, Any, Dict, List
 
 from ..Log import CLIENT_LOGGER_NAME
 
@@ -47,9 +47,9 @@ class APIImagePipeLine:
         logger.debug(f"{lp} options: {self.options}")
 
         #  FRAME IDS 
-        self._attempted_fids: Set[int] = set()  # All tried
-        self._processed_fids: Set[int] = set()  # All successful
-        self._skipped_fids: Set[int] = set()  # All skipped
+        self._attempted_fids: List[int] = list()  # All tried
+        self._processed_fids: List[int] = list()  # All successful
+        self._skipped_fids: List[int] = list()  # All skipped
 
         #  FRAME BUFFER 
         self.total_min_frames: int = 1
@@ -123,9 +123,9 @@ class APIImagePipeLine:
         lp = f"{LP}read:"
         if self.frames_processed > 0:
             logger.debug(
-                f"{lp} [{self.frames_processed}/{self.total_max_frames} frames processed: {sorted(list(self._processed_fids), reverse=True)}] "
-                f"- [{self.frames_skipped}/{self.total_max_frames} frames skipped: {sorted(list(self._skipped_fids), reverse=True)}] - "
-                f"[{self.frames_attempted}/{self.total_max_frames} frames attempted: {sorted(list(self._attempted_fids), reverse=True)}]"
+                f"{lp} [{self.frames_processed}/{self.total_max_frames} frames processed: {self._processed_fids}] "
+                f"- [{self.frames_skipped}/{self.total_max_frames} frames skipped: {self._skipped_fids}] - "
+                f"[{self.frames_attempted}/{self.total_max_frames} frames attempted: {self._attempted_fids}]"
             )
         else:
             logger.debug(f"{lp} processing first frame!")
@@ -230,11 +230,11 @@ class APIImagePipeLine:
         """Process the frame, increment counters, and return the image if there is one"""
         lp = f"{LP}API::processed_frame:"
         self.last_fid_read = self.current_frame
-        self._attempted_fids.add(self.current_frame)
+        self._attempted_fids.append(self.current_frame)
         if skip:
-            self._skipped_fids.add(self.current_frame)
+            self._skipped_fids.append(self.current_frame)
         else:
-            self._processed_fids.add(self.current_frame)
+            self._processed_fids.append(self.current_frame)
 
         if end or self.frames_processed > self.total_max_frames:
             _msg = (
