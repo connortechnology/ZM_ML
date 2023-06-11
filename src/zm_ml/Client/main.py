@@ -1593,7 +1593,6 @@ class ZMClient:
         ignore_labels: Optional[List[str]] = (
             g.config.matching.static_objects.ignore_labels or []
         )
-        logger.debug(f"DBG: {lp} GLOBAL ignore_labels={ignore_labels}")
         if mon_filt and mon_filt.static_objects.ignore_labels:
             for lbl in mon_filt.static_objects.ignore_labels:
                 if lbl not in ignore_labels:
