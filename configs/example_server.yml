@@ -17,19 +17,10 @@ substitutions:
   IncludeFile: ${ML_INSTALL_CFG_DIR}/secrets.yml
 
   # --------- Example
-  EXAMPLE99: "World!"
-  # It is a good idea to quote your values,
-  # especially if they contain spaces/semicolons/exclamations/etc
-  EXAMPLE_PASSWORD99: "string!with#chars:that&may*cause^issues.if,'unquoted'"
-  # You can nest substitutions as long as they are specified in logical order
-  EXAMPLE_NESTED_SUBSTITUTION: "Hello, ${EXAMPLE99}. Here is a password: ${EXAMPLE_PASSWORD99}"
-  EXAMPLE_FAIL: "This will fail because ${EXAMPLE_FOR_SINGLE_QUOTES} is not defined yet"
-
-  EXAMPLE_FOR_DOUBLE_QUOTES: 'I would like to use "double quotes" in a string'
-  EXAMPLE_FOR_SINGLE_QUOTES: "I would like to use 'single quotes' in a string"
+  EXAMPLE: "World!"
 
 THIS IS AN EXAMPLE:
-  of substitution variables: "Hello, ${EXAMPLE99}. Here is a password: ${EXAMPLE_PASSWORD99}"
+  of substitution variables: "Hello, ${EXAMPLE}"
 
 system:
   # Path where the system will store configuration files
