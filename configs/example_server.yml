@@ -100,7 +100,6 @@ locks:
 
 # -- Define what models the server will offer
 models:
-  -
   # -- The model name is how you will call it in the API request
   - name: YOLOv4  # Name will be lower cased, spaces are preserved; 'yolov4'
     enabled: no  # Optional. Defaults to True.
