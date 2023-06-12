@@ -157,7 +157,7 @@ class FaceRecognitionLibModelDetectionOptions(BaseModelOptions):
         FaceRecognitionLibModelTypes.DEFAULT,
         examples=["hog", "cnn"],
         description="Face Detection Model to use. 'cnn' is more accurate but slower on CPUs. "
-                    "'hog' is faster but less accurate",
+        "'hog' is faster but less accurate",
     )
     upsample_times: Optional[int] = Field(
         1,
@@ -191,7 +191,7 @@ class FaceRecognitionLibModelTrainingOptions(BaseModelOptions):
         FaceRecognitionLibModelTypes.DEFAULT,
         examples=["hog", "cnn"],
         description="Face Detection Model to use. 'cnn' is more accurate but slower on CPUs. "
-                    "'hog' is faster but less accurate",
+        "'hog' is faster but less accurate",
     )
     upsample_times: Optional[int] = Field(
         1,
@@ -216,7 +216,6 @@ class FaceRecognitionLibModelTrainingOptions(BaseModelOptions):
         None,
         description="Directory to load training images from. If None, the default directory will be used",
     )
-
 
 
 class ALPRModelOptions(BaseModelOptions):
@@ -520,7 +519,6 @@ class FaceRecognitionLibModelConfig(BaseModelConfig):
             description="Unknown faces leeway pixels, used when cropping the image to capture a face",
         )
 
-
     detection_options: FaceRecognitionLibModelDetectionOptions = Field(
         default_factory=FaceRecognitionLibModelDetectionOptions,
         description="Default Configuration for the model",
@@ -745,6 +743,11 @@ class Settings(BaseModel):
         if models:
             v = []
             for model in models:
+                if not model:
+                    logger.warning(
+                        f"Model is empty, this usually means there is a formatting error in your config file! Skipping"
+                    )
+                    continue
                 final_model = None
                 if model.get("enabled", True) is True:
                     # logger.debug(f"Adding model: {type(model) = } ------ {model = }")
@@ -774,9 +777,9 @@ class Settings(BaseModel):
                             final_model = VirelAIModelConfig(**model)
                     elif _framework == ModelFrameWork.FACE_RECOGNITION:
                         model["model_type"] = ModelType.FACE
-                        model["detection_options"] = FaceRecognitionLibModelDetectionOptions(
-                            **_options
-                        )
+                        model[
+                            "detection_options"
+                        ] = FaceRecognitionLibModelDetectionOptions(**_options)
                         final_model = FaceRecognitionLibModelConfig(**model)
 
                     elif _framework == ModelFrameWork.ALPR:
