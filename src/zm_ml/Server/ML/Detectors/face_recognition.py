@@ -92,6 +92,7 @@ class FaceRecognitionLibDetector(FileLock):
             self.trained_faces_file = Path(
                 f"{self.training_options.dir}/trained_faces.dat"
             )
+        logger.debug(f"{LP} loading trained faces from: {self.trained_faces_file}")
         # to increase performance, read encodings from file
         if self.trained_faces_file.is_file():
             logger.debug(
@@ -236,7 +237,7 @@ class FaceRecognitionLibDetector(FileLock):
                         self.save_unknown_faces(loc, input_image)
 
                     b_boxes.append([loc[3], loc[0], loc[1], loc[2]])
-                    labels.append(f"face: {label}")
+                    labels.append(f"{label}")
                 logger.debug(
                     f"perf:{LP} recognition sequence took {time.perf_counter() - comparing_timer:.5f} s"
                 )
