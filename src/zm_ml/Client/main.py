@@ -1233,7 +1233,8 @@ class ZMClient:
                     #
                     lp = f"{__lp}pattern match::"
                     if match := pattern.match(label):
-                        if label in match.groups():
+                        # When using .* in the pattern, the match.groups() will return an empty tuple
+                        if label in match.groups() or pattern.pattern == ".*":
                             logger.debug(
                                 f"{lp} matched ReGex pattern [{pattern.pattern}] ALLOWING..."
                             )
@@ -1477,7 +1478,7 @@ class ZMClient:
 
                                     else:
                                         logger.debug(
-                                            f"{__lp} FAILED the static object check"
+                                            f"{__lp} FAILED the static object check, continuing to next zone..."
                                         )
                                         # failed
                                         continue
@@ -1494,19 +1495,19 @@ class ZMClient:
                             else:
                                 logger.debug(
                                     f"{lp} confidence={confidence} IS LESS THAN "
-                                    f"min_confidence={type_filter.min_conf}, "
+                                    f"min_confidence={type_filter.min_conf}, continuing to next zone..."
                                 )
                                 continue
 
                         else:
                             logger.debug(
-                                f"{lp} NOT matched in RegEx pattern [{pattern.pattern}], "
+                                f"{lp} NOT matched in RegEx pattern [{pattern.pattern}], continuing to next zone..."
                             )
                             continue
 
                     else:
                         logger.debug(
-                            f"{lp} NOT matched in RegEx pattern [{pattern.pattern}], "
+                            f"{lp} NOT matched in RegEx pattern [{pattern.pattern}], continuing to next zone..."
                         )
                         continue
                 else:
