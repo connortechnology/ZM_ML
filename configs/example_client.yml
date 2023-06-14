@@ -51,20 +51,10 @@ zoneminder:
   password: ${ZM_PASS}
   # a value of 'no' will allow self-signed certs
   ssl_verify: no
-  # CloudFlare Zero Trust Access (ZTA) headers for bypassing the WAF
-  # Use these if you use CF ZTA over cloudflared (argo tunnels)
-  # and don't want these requests to be blocked/challenged/parsed by the WAF
-  # *** THIS ONLY APPLIES TO ZM API CALLS ***
-  # THIS MAY BE DEPRECATED IN FAVOR OF PLACING THIS INFO IN headers: section
-  cf_0trust_secret: ${ZM_CF_0TRUST_SECRET}
-  cf_0trust_header: ${ZM_CF_0TRUST_HEADER}
-  # Not used yet
-  cf_0trust_expires: ${ZM_CF_0TRUST_EXPIRES}
-
   headers:
     # Add custom headers to all requests
-    # This is useful for adding custom headers to ZM API requests
-    # You can put CloudFlare ZeroTrust Access headers here as well
+    # This is useful for adding headers to ZM API requests
+    # Example: CloudFlare ZeroTrust Access headers
 
     CF-Access-Client-Secret: ${ZM_CF_0TRUST_SECRET}
     CF-Access-Client-Id: ${ZM_CF_0TRUST_HEADER}
@@ -96,7 +86,7 @@ logging:
     # directory where log files will be stored
     path: ${LOGGING_DIR}
     # prefix logname with this string, 'zmml' will become zmml_m1.log for monitor 1
-    filename_prefix: zmmlclient
+    filename_prefix: zmmlC
     # Do not suffix logs with monitor id, log everything to a single file (Leave blank to disable)
     # If this has a value, filename_prefix is ignored.
     file_name:
@@ -147,27 +137,24 @@ animations:
     enabled: no
 
 
-
 notifications:
   ########################
   #  NOTIFICATIONS ARE WIP
   ########################
   mqtt:
-    #-- use python mqtt client to
+    #-- use python mqtt client to publish a message to a broker
     #-- Options to use no encryption or secure/insecure TLS/mTLS
     #-- Default ports: for TCP: non-TLS: 1883  TLS:8883 .
     enabled: no
 
     #-- Send image to MQTT topic
+    #-- Home Assistant can ingest images from MQTT
     image:
-      enabled: yes
+      enabled: no
+      type: bytes # bytes or base64
       topic: "zm_ml/image"
 
-    animation:
-      enabled: yes
-      topic: "zm_ml/animation"
-
-    # Force mqtt to send pic and data even if it's a PAST event
+    # Force mqtt to send data even if it's a PAST event
     force: no
 
     #-- Allow you to set a custom MQTT topic name, formats for topics are: name/sub-name/sub-sub-name
@@ -176,7 +163,6 @@ notifications:
     #topic:  myown_topic/here
 
     #-- if using tls remember about host verification (tls_insecure :  no host verification but still encrypted)
-    #broker:  brokers.hostname
     broker: ${MQTT_BROKER}
 
     #-- Only use this if not using standard tcp ports, it defaults to 1883 if no TLS and 8883 if TLS, this setting will override
@@ -212,6 +198,7 @@ notifications:
 
 
   zmninja:
+    # Attempt to send a push notification to zmNinja clients
     enabled: no
 
     fcm:
@@ -266,6 +253,9 @@ notifications:
       android_ttl: 0
 
   gotify:
+    # Gotify is a self hosted push notification server with an Android app (no iOS)
+    # Attempt to send a push notification to Gotify clients
+
     enabled: no
     # If you are not receiving images in gotify notifications, set this to yes to set image to a publicly available URL
     # This will tell you if your gotify android clients are not able to access your ZM server from outside the LAN
@@ -313,6 +303,7 @@ notifications:
       replay: single
 
   pushover:
+    # Pushover is a paid push notification service with an Android and iOS app
     enabled: no
     # This Pushover app will send a jpeg notification
     token: ${PUSHOVER_TOKEN}
@@ -419,6 +410,7 @@ detection_settings:
     # NOTE: You can override these settings per monitor
     yolov4 tiny:
     yolov7 tiny:
+
   # Detect color of most dominant object by cropping its bounding box and finding top_n dominant colors
   detect_color:
     # GLOBAL:: This will detect color for all monitors, can be overridden per monitor and per zone.
@@ -431,15 +423,18 @@ detection_settings:
       - vehicles
 
   # GLOBAL:: Import zones that have been defined in ZM Web GUI
-  # NOTE: can override per monitor
   import_zones: no
+
   # object must be in one of the zones that triggered the motion event
-  # 1 pixel is enough to trigger this.
+  # 1 pixel inside the zone is enough to trigger this.
   # IMPLIES: import_zones MEANING, it will import zm zones and use them
   match_origin_zone: no
 
   images:
     pull_method:
+      zms:
+        # ZMS is the CGI api that comes with ZM
+        enabled: no
       # Precedence: 1. shm 2. api 3. zmu
       #################
       # SHM IS WIP, it will raise not implemented error
