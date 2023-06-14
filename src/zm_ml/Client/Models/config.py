@@ -209,11 +209,10 @@ class MLNotificationSettings(BaseModel):
         I_AM_AWARE_OF_THE_DANGER_OF_RUNNING_SHELL_SCRIPTS: str = "No I am not"
 
     class MQTTNotificationSettings(BaseModel):
-        class MQTTAnimationSettings(DefaultNotEnabled):
-            topic: str = Field("zm_ml/animation")
 
         class MQTTImageSettings(DefaultNotEnabled):
             topic: str = Field("zm_ml/image")
+            format: Optional[str] = Field("bytes", regex="^(bytes|base64)$")
 
         enabled: bool = Field(False)
         force: bool = Field(False)
@@ -231,7 +230,6 @@ class MLNotificationSettings(BaseModel):
         qos: int = Field(0)
 
         image: MQTTImageSettings = Field(default_factory=MQTTImageSettings)
-        animation: MQTTAnimationSettings = Field(default_factory=MQTTAnimationSettings)
 
         # validators
         _validate_host_broker = validator("broker", allow_reuse=True, pre=True)(

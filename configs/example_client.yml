@@ -151,7 +151,7 @@ notifications:
     #-- Home Assistant can ingest images from MQTT
     image:
       enabled: no
-      type: bytes # bytes or base64
+      format: bytes # bytes or base64
       topic: "zm_ml/image"
 
     # Force mqtt to send data even if it's a PAST event
