@@ -109,7 +109,7 @@ models:
     # -- sub_framework is the various backends the framework can make use of
     # -- darknet is the default for opencv, but you can also use onnx, caffe, etc.
     # -- See the OpenCV docs and ZM ML wiki for more info.
-    sub_frameowrk: darknet  # Optional, defaults to darknet for opencv. (onnx, caffe, etc.) **WIP**
+    sub_framework: darknet  # Optional, defaults to darknet for opencv. (onnx, caffe, etc.) **WIP**
     # -- object/face/alpr (for identification)
     model_type: object # Required. Defaults to object
     # -- cpu/gpu/tpu, for now.
@@ -153,7 +153,7 @@ models:
     enabled: no
 
     framework: coral
-    sub_frameowrk: none
+    sub_framework: none
     model_type: object
     # -- Change to TPU!
     processor: tpu
