@@ -278,6 +278,94 @@ async def single_detection(
     logger.info(f"single_detection: ENDPOINT {model_hint}")
     return await detect(model_hint, image)
 
+def init_logs(config: Settings) -> None:
+    """Initialize the logging system."""
+    import getpass
+    import grp
+    import os
+    from ..Shared.Log.handlers import BufferedLogHandler
+
+    sys_user: str = getpass.getuser()
+    sys_gid: int = os.getgid()
+    sys_group: str = grp.getgrgid(sys_gid).gr_name
+    sys_uid: int = os.getuid()
+    from ..Shared.Models.config import LoggingSettings
+
+    cfg: LoggingSettings = config.logging
+    root_level = cfg.level
+    logger.debug(f"Setting root logger level to {logging._levelToName[root_level]}")
+    logger.setLevel(root_level)
+
+    if cfg.console.enabled is False:
+        for h in logger.handlers:
+            if isinstance(h, logging.StreamHandler):
+                logger.info(f"Removing console log output!")
+                logger.removeHandler(h)
+
+    if cfg.file.enabled:
+        if cfg.file.file_name:
+            _filename = cfg.file.file_name
+        else:
+            _filename = f"zmmlServer.log"
+        abs_logfile = (cfg.file.path / _filename).expanduser().resolve()
+        try:
+            if not abs_logfile.exists():
+                logger.info(f"Creating log file [{abs_logfile}]")
+                abs_logfile.touch(exist_ok=True, mode=0o644)
+            else:
+                with abs_logfile.open("a") as f:
+                    pass
+        except PermissionError:
+            logger.warning(
+                f"Logging to file disabled due to permissions"
+                f" - No write access to '{abs_logfile.as_posix()}' for user: "
+                f"{sys_uid} [{sys_user}] group: {sys_gid} [{sys_group}]"
+            )
+        else:
+            # todo: add timed rotating log file handler if configured
+            file_handler = logging.FileHandler(abs_logfile.as_posix(), mode="a")
+            # file_handler = logging.handlers.TimedRotatingFileHandler(
+            #     file_from_config, when="midnight", interval=1, backupCount=7
+            # )
+            file_handler.setFormatter(SERVER_LOG_FORMAT)
+            if cfg.file.level:
+                logger.debug(
+                    f"File logger level CONFIGURED AS {cfg.file.level}"
+                )
+                # logger.debug(f"Setting file log level to '{logging._levelToName[g.config.logging.file.level]}'")
+                file_handler.setLevel(cfg.file.level)
+            logger.addHandler(file_handler)
+            # get the buffered handler and call flush with file_handler as a kwarg
+            # this will flush the buffer to the file handler
+            for h in logger.handlers:
+                if isinstance(h, BufferedLogHandler):
+                    logger.debug(
+                        f"Flushing buffered log handler to file {h=} ---- {file_handler=}"
+                    )
+                    h.flush(file_handler=file_handler)
+                    # Close the buffered handler
+                    h.close()
+                    break
+            logger.debug(
+                f"Logging to file '{abs_logfile}' with user: "
+                f"{sys_uid} [{sys_user}] group: {sys_gid} [{sys_group}]"
+            )
+    if cfg.syslog.enabled:
+        # enable syslog logging
+        syslog_handler = logging.handlers.SysLogHandler(
+            address=cfg.syslog.address,
+        )
+        syslog_handler.setFormatter(SERVER_LOG_FORMAT)
+        if cfg.syslog.level:
+            logger.debug(
+                f"Syslog logger level CONFIGURED AS {logging._levelToName[cfg.syslog.level]}"
+            )
+            syslog_handler.setLevel(cfg.syslog.level)
+        logger.addHandler(syslog_handler)
+        logger.debug(f"Logging to syslog at {cfg.syslog.address}")
+
+    logger.info(f"Logging initialized...")
+
 
 class MLAPI:
     cached_settings: Settings
@@ -312,6 +400,11 @@ class MLAPI:
 
         self.cached_settings = parse_client_config_file(self.cfg_file)
         get_global_config().config = self.cached_settings
+        init_logs(self.cached_settings)
+
+        # Complete logging initialization, file handler and flush buffers into the file
+
+
         # logger.debug(f"{g.settings = }")
         logger.info(f"should be loading models")
 

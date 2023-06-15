@@ -3,7 +3,7 @@
 # vim:fenc=utf-8
 
 """A Script to start the MLAPI server."""
-from zm_ml.Server.app import create_logs, MLAPI
+from zm_ml.Server.app import create_logs, MLAPI, init_logs
 
 logger = create_logs()
 
