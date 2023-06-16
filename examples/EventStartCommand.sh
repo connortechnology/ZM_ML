@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 trap 'cleanup' SIGINT SIGTERM
 cleanup() {
   exit 1
