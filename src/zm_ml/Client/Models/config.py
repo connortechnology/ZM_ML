@@ -326,7 +326,6 @@ class ObjectFilters(BaseObjectFilters):
 
 class FaceFilters(BaseModel):
     pattern: Optional[Pattern] = Field(default=re.compile("(.*)"))
-    min_conf: Optional[float] = Field(ge=0.0, le=1.0, default=0.35)
 
 
 class OverRideFaceFilters(BaseModel):
