@@ -1098,6 +1098,8 @@ class ZMClient:
         **kwargs,
     ):
         """Filter detections using 2 loops, first loop is filter by object label, second loop is to filter by zone."""
+        from ..Server.Models.config import ModelType
+
         r_label, r_conf, r_bbox = [], [], []
         zones = self.zones.copy()
         zone_filters = self.zone_filters
@@ -1238,6 +1240,10 @@ class ZMClient:
                             logger.debug(
                                 f"{lp} matched ReGex pattern [{pattern.pattern}] ALLOWING..."
                             )
+                            if type_ == ModelType.FACE:
+                                logger.debug(f"DBG>> This model is typed as {type_} is not OBJECT, skipping non face filters like min_conf, total_max_area, etc.")
+                                found_match = True
+                                break
 
                             lp = f"{__lp}min conf::"
                             if confidence >= type_filter.min_conf:
@@ -1245,6 +1251,10 @@ class ZMClient:
                                     f"{lp} {confidence} IS GREATER THAN OR EQUAL TO "
                                     f"min_conf={type_filter.min_conf}, ALLOWING..."
                                 )
+                                if type_ == ModelType.ALPR:
+                                    logger.debug(f"DBG>> This model is typed as {type_} is not OBJECT, skipping non alpr filters like total_max_area, etc.")
+                                    found_match = True
+                                    break
                                 w, h = g.mon_width, g.mon_height
                                 max_object_area_of_image: Optional[
                                     Union[float, int]
@@ -1258,6 +1268,7 @@ class ZMClient:
                                 min_object_area_of_zone: Optional[
                                     Union[float, int]
                                 ] = None
+
 
                                 # check total max area
                                 lp = f"{__lp}total max area::"
