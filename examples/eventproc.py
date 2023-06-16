@@ -1,7 +1,6 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 # vim:fenc=utf-8
-
 from __future__ import annotations
 import logging.handlers
 import sys
@@ -21,6 +20,7 @@ from zm_ml.Client.main import (
     create_global_config,
     create_logs,
 )
+
 if TYPE_CHECKING:
     from zm_ml.Client.main import ZMClient
 
@@ -33,6 +33,7 @@ __version_type__ = "dev"
 # Setup basic console logging (hook into library logging)
 logger: logging.Logger = create_logs()
 zm_client: Optional[ZMClient] = None
+
 
 def _parse_cli():
     from argparse import ArgumentParser
@@ -186,4 +187,3 @@ if __name__ == "__main__":
     if not loop.is_closed():
         loop.close()
     logger.info(f"perf::FINAL:: Total: {time.perf_counter() - _start:.5f} seconds")
-
