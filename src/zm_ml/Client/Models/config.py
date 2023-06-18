@@ -14,10 +14,10 @@ from pydantic import (
     BaseSettings,
 )
 
-from .validators import validate_percentage_or_pixels
+from .validators import validate_percentage_or_pixels, validate_resolution, validate_points
 from ...Shared.Models.validators import (
     validate_no_scheme_url,
-    _validate_replace_localhost,
+    validate_replace_localhost,
     _validate_file,
     _validate_dir,
 )
@@ -31,6 +31,22 @@ from ..Log import CLIENT_LOGGER_NAME
 from ..Models.DEFAULTS import *
 
 logger = logging.getLogger(CLIENT_LOGGER_NAME)
+
+
+class ZMDBSettings(BaseSettings):
+    host: Union[IPvAnyAddress, AnyUrl, None] = Field(None, env="ML_CLIENT_DB_HOST")
+    port: Optional[int] = Field(None, env="ML_CLIENT_DB_PORT")
+    user: Optional[str] = Field(None, env="ML_CLIENT_DB_USER")
+    password: Optional[SecretStr] = Field(None, env="PASSWORD")
+    name: Optional[str] = Field(None, env="ML_CLIENT_DB_NAME")
+    driver: Optional[str] = Field(None, env="ML_CLIENT_DB_DRIVER")
+
+    _validate_host = validator("host", allow_reuse=True, pre=True)(
+        validate_replace_localhost
+    )
+
+    class Config:
+        extra = "allow"
 
 
 class SystemSettings(BaseModel):
@@ -48,16 +64,24 @@ class ZoneMinderSettings(BaseSettings):
         class Config:
             extra = "allow"
 
-    misc: ZMMisc = Field(default_factory=ZMMisc)
-    portal: Optional[AnyUrl] = Field(None, env="ML_CLIENT_ZONEMINDER_PORTAL")
-    api: Optional[AnyUrl] = Field(None, env="ML_CLIENT_ZONEMINDER_API")
-    user: Optional[SecretStr] = Field(None, env="ML_CLIENT_ZONEMINDER_USER")
-    password: Optional[SecretStr] = Field(None, env="ML_CLIENT_ZONEMINDER_PASSWORD")
-    ssl_verify: bool = Field(True, env="ML_CLIENT_ZONEMINDER_SSL_VERIFY")
-    headers: Optional[Dict[str, str]] = Field(default_factory=dict)
 
-    # validators
-    _validate_api_portal = validator("api", "portal", allow_reuse=True, pre=True)(
+    class ZMAPISettings(BaseSettings):
+        api_url: Optional[AnyUrl] = Field(None, env="ML_CLIENT_ZONEMINDER_API_URL")
+        user: Optional[SecretStr] = Field(None, env="ML_CLIENT_ZONEMINDER_API_USER")
+        password: Optional[SecretStr] = Field(None, env="ML_CLIENT_ZONEMINDER_API_PASSWORD")
+        ssl_verify: bool = Field(True, env="ML_CLIENT_ZONEMINDER_API_SSL_VERIFY")
+        headers: Optional[Dict[str, str]] = Field(default_factory=dict, env="ML_CLIENT_ZONEMINDER_API_HEADERS")
+
+        _validate_api_url = validator("api_url", allow_reuse=True, pre=True)(
+            validate_no_scheme_url
+        )
+
+    portal_url: Optional[AnyUrl] = Field(None, env="ML_CLIENT_ZONEMINDER_PORTAL_URL")
+    misc: ZMMisc = Field(default_factory=ZMMisc)
+    api: ZMAPISettings = Field(default_factory=ZMAPISettings)
+    db: ZMDBSettings = Field(default_factory=ZMDBSettings)
+
+    _validate_portal_url = validator("portal_url", allow_reuse=True, pre=True)(
         validate_no_scheme_url
     )
 
@@ -401,9 +425,6 @@ class MonitorZones(BaseModel):
     filters: Union[MatchFilters, OverRideMatchFilters] = Field(
         default_factory=OverRideMatchFilters
     )
-
-    from .validators import validate_resolution, validate_points
-
     __validate_resolution = validator("resolution", pre=True, allow_reuse=True)(
         validate_resolution
     )
@@ -420,22 +441,6 @@ class MonitorsSettings(BaseModel):
         default_factory=OverRideMatchFilters
     )
     zones: Optional[Dict[str, MonitorZones]] = Field(default_factory=dict)
-
-
-class ZMDBSettings(BaseSettings):
-    host: Union[IPvAnyAddress, AnyUrl, None] = Field(None, env="ML_CLIENT_DB_HOST")
-    port: Optional[int] = Field(None, env="ML_CLIENT_DB_PORT")
-    user: Optional[str] = Field(None, env="ML_CLIENT_DB_USER")
-    password: Optional[SecretStr] = Field(None, env="PASSWORD")
-    name: Optional[str] = Field(None, env="ML_CLIENT_DB_NAME")
-    driver: Optional[str] = Field(None, env="ML_CLIENT_DB_DRIVER")
-
-    _validate_host = validator("host", allow_reuse=True, pre=True)(
-        _validate_replace_localhost
-    )
-
-    class Config:
-        extra = "allow"
 
 
 class ConfigFileModel(BaseModel):
