@@ -19,32 +19,35 @@ else:
     logger = logging.getLogger(CLIENT_LOGGER_NAME)
 
 
-def _validate_replace_localhost(
+def validate_replace_localhost(
     v,
     field: Optional[pydantic.fields.ModelField] = None,
     values: Optional[Dict] = None,
     config=None,
 ):
-    logger.debug(f"Validating ENVVAR {field}: {v}")
+    """Replace 'localhost' with 127.0.0.1"""
+    # logger.debug(f"Validating ENVVAR {field}: {v}")
     if v:
-        if v == "localhost":
-            v = "127.0.0.1"
+        if isinstance(v, str):
+            if v == "localhost":
+                v = "127.0.0.1"
     return v
 
 
 def validate_no_scheme_url(v, field, values, config):
+    """Validate and transform a URL/IP string into a URL with a scheme"""
     _name_ = inspect.currentframe().f_code.co_name
-    # logger.debug(f"{_name_}:: Validating '{field.name}' -> {v}")
+    logger.debug(f"{_name_}:: Validating '{field.name}' -> {v}")
     if v:
         import re
 
         if re.match(r"^(http(s)?)://", v):
             pass
-            # logger.debug(f"'{field.name}' is valid with schema: {v}")
+            logger.debug(f"'{field.name}' is valid with schema: {v}")
         else:
-            # logger.debug(
-            #     f"No schema in '{field.name}', prepending http:// to make {field.name} a valid URL"
-            # )
+            logger.debug(
+                f"No schema in '{field.name}', prepending http:// to make {field.name} a valid URL"
+            )
             v = f"http://{v}"
     return v
 

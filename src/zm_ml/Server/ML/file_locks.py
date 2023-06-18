@@ -1,12 +1,10 @@
-"""Helper class that adds file locking to a class."""
-import time
+"""Helper class that adds file locking to a class that inherits from it."""
 from logging import getLogger
 from typing import Optional
 from os import getuid
 
 from portalocker import BoundedSemaphore, AlreadyLocked
 
-from ..app import locks_enabled, get_global_config
 
 from zm_ml.Server.Log import SERVER_LOGGER_NAME
 logger = getLogger(SERVER_LOGGER_NAME)
@@ -23,8 +21,9 @@ class FileLock:
     lock_name = None
     lock_dir = None
 
-
     def create_lock(self):
+        from ..app import locks_enabled, get_global_config
+
         if locks_enabled():
             if self.lock:
                 if isinstance(self.lock, BoundedSemaphore):
@@ -59,6 +58,8 @@ class FileLock:
                 raise RuntimeError(f"{LP} No locks defined in config file?!?! DEFAULTS FAILED?!?!?! HELP")
 
     def acquire_lock(self):
+        from ..app import locks_enabled
+
         if locks_enabled():
             if self.is_locked:
                 logger.debug(f"{LP} '{self.name}' lock for '{self.lock.name}' already acquired")
@@ -68,7 +69,7 @@ class FileLock:
                     logger.debug(
                         f"{LP} '{self.name}' attempting to acquire lock for '{self.lock.name}'..."
                     )
-                    timer = time.perf_counter()
+                    # timer = time.perf_counter()
                     self.lock.acquire()
                     # logger.debug(
                     #     f"perf:{LP} '{self.name}' lock acquired for '{self.lock.name}' in "
@@ -105,6 +106,8 @@ class FileLock:
         return self.lock
 
     def release_lock(self):
+        from ..app import locks_enabled
+
         if locks_enabled():
             if self.lock:
                 if not self.is_locked:

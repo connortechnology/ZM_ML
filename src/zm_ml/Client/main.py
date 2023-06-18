@@ -21,7 +21,7 @@ except ImportError:
     cv2 = None
     warnings.warn(
         "OpenCV is not installed. This is required for image processing. "
-        "Please install OpenCV to enable image processing."
+        "Please install OpenCV to enable image processing.", ImportWarning
     )
 try:
     import numpy as np
@@ -31,7 +31,7 @@ try:
 except ImportError as e:
     warnings.warn(
         f"Some dependencies are not installed. Please install them to enable "
-        f"all features. {e}"
+        f"all features. {e}", ImportWarning
     )
 
 from .Libs.Media import APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine

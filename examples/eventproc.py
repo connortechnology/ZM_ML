@@ -28,7 +28,7 @@ __doc__ = """
 An example that uses ZM's EventStartCommand/EventEndCommand mechanism to run 
 object detection on a ZM event using ZM ML library.
 """
-__version__ = "0.0.0-a1"
+__version__ = "0.0.0-a2"
 __version_type__ = "dev"
 # Setup basic console logging (hook into library logging)
 logger: logging.Logger = create_logs()
@@ -129,10 +129,6 @@ async def main():
         if eid == 0:
             logger.error(f"{lp} Event ID is required for event mode")
             sys.exit(1)
-        if mid == 0:
-            logger.warning(
-                f"{lp} When monitor ID is not supplied in event mode, ZoneMinder DB is queried for it"
-            )
 
     if "config" in args and args.config:
         # logger.info(f"Configuration file supplied as: {args.config}")
