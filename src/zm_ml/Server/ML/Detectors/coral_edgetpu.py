@@ -1,25 +1,19 @@
+from __future__ import annotations
 import time
 from logging import getLogger
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 import warnings
 
 from PIL import Image
 import numpy as np
-
-from ..file_locks import FileLock
-from ...Models.config import TPUModelConfig, TPUModelOptions
-from ....Shared.Models.Enums import ModelType, ModelProcessor
-
-from zm_ml.Server.app import SERVER_LOGGER_NAME
-logger = getLogger(SERVER_LOGGER_NAME)
-LP: str = "Coral:"
-
 try:
     import cv2
 except ImportError:
     warnings.warn(
-        "OpenCV not installed, please install OpenCV!"
+        "OpenCV not installed, please install OpenCV!", ImportWarning
     )
+    cv2 = None
+    raise
 try:
     import pycoral
     from pycoral.adapters import common, detect
@@ -27,15 +21,30 @@ try:
 except ImportError:
     warnings.warn(
         "pycoral not installed, this is ok if you do not plan to use TPU as detection processor. "
-        "If you intend to use a TPU please install the TPU libs and pycoral!"
+        "If you intend to use a TPU please install the TPU libs and pycoral!", ImportWarning
     )
+    pycoral = None
+    make_interpreter = None
+    common = None
+    detect = None
 try:
     from tflite_runtime.interpreter import Interpreter
 except ImportError:
     warnings.warn(
         "tflite_runtime not installed, this is ok if you do not plan to use TPU as detection processor. "
-        "If you intend to use a TPU please install the TPU libs and pycoral!"
+        "If you intend to use a TPU please install the TPU libs and pycoral!", ImportWarning
     )
+    Interpreter = None
+
+from ..file_locks import FileLock
+from ....Shared.Models.Enums import ModelType, ModelProcessor
+
+from zm_ml.Server.app import SERVER_LOGGER_NAME
+if TYPE_CHECKING:
+    from ...Models.config import TPUModelConfig, TPUModelOptions
+
+logger = getLogger(SERVER_LOGGER_NAME)
+LP: str = "Coral:"
 
 
 class TpuDetector(FileLock):
@@ -50,8 +59,6 @@ class TpuDetector(FileLock):
         if self.config.model_type == ModelType.FACE:
             logger.debug(f"{LP} ModelType=Face, this is for identification purposes only")
             LP = f"{LP}Face:"
-        # Fixme: the way the TPU and its cache work, models will be pingponging each other out if there are more than 1.
-        ## Figure this out, maybe a lock on the TPU itself? Daddy, chill.
         self.load_model()
 
     def load_model(self):

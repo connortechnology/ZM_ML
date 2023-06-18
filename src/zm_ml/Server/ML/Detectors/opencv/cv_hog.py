@@ -1,12 +1,20 @@
+from __future__ import annotations
 from logging import getLogger
+from typing import TYPE_CHECKING
 
-import cv2
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+    raise
 
-from ....imports import CV2HOGModelConfig
 from .cv_base import CV2Base
+from zm_ml.Server.Log import SERVER_LOGGER_NAME
+
+if TYPE_CHECKING:
+    from ....Models.config import CV2HOGModelConfig
 
 LP: str = "OpenCV:HOG:"
-from zm_ml.Server.Log import SERVER_LOGGER_NAME
 logger = getLogger(SERVER_LOGGER_NAME)
 
 
@@ -14,7 +22,7 @@ class CV2HOG(CV2Base):
     def __init__(self, model_config: CV2HOGModelConfig):
         self.config = model_config
         self.options = self.config.detection_options
-        self.model = cv2.HOGDescriptor()
+        self.model: cv2.HOGDescriptor = cv2.HOGDescriptor()
         self.model.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
 
         self.winStride = self.config.stride

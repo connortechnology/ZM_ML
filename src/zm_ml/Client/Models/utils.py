@@ -12,7 +12,7 @@ try:
     import requests
     from shapely.geometry import Polygon
 except ImportError as e:
-    warnings.warn(f"ImportError: {e}")
+    warnings.warn(f"ImportError: {e}", ImportWarning)
 
 from ..Log import CLIENT_LOGGER_NAME
 

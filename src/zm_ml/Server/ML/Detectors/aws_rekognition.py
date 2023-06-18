@@ -10,7 +10,7 @@ try:
     import boto3
 except ImportError:
     warnings.warn(
-        f"the 'boto3' package is not available! it is needed for aws rekognition support!"
+        f"the 'boto3' package is not available! it is needed for aws rekognition support!", ImportWarning
     )
     boto3 = None
 

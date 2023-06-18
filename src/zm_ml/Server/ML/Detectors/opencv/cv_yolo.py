@@ -1,6 +1,7 @@
+from __future__ import annotations
 import time
 from logging import getLogger
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from warnings import warn
 try:
     import cv2
@@ -9,14 +10,17 @@ except ImportError:
     raise
 import numpy as np
 
-from ....Models.config import BaseModelOptions, BaseModelConfig, CV2YOLOModelConfig
 from .....Shared.Models.Enums import ModelProcessor
 from .cv_base import CV2Base
+
+if TYPE_CHECKING:
+    from ....Models.config import CV2YOLOModelConfig
 
 LP: str = "OpenCV:YOLO:"
 from ....Log import SERVER_LOGGER_NAME
 logger = getLogger(SERVER_LOGGER_NAME)
 # TODO: Choose what models to load and keep in memory and which to load and drop for memory constraints
+
 
 class CV2YOLODetector(CV2Base):
     def __init__(self, model_config: CV2YOLOModelConfig):

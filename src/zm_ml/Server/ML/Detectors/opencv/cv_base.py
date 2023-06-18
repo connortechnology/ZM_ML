@@ -1,8 +1,7 @@
+from __future__ import annotations
 from logging import getLogger
-from typing import Optional, Union
+from typing import Optional, Union, TYPE_CHECKING
 
-from ....Models.config import BaseModelOptions, CV2YOLOModelOptions, CV2TFModelOptions, BaseModelConfig, \
-    CV2YOLOModelConfig, CV2HOGModelConfig, CV2TFModelConfig
 from .....Shared.Models.Enums import ModelProcessor
 
 import cv2
@@ -11,6 +10,11 @@ import numpy as np
 from ...file_locks import FileLock
 
 from zm_ml.Server.Log import SERVER_LOGGER_NAME
+if TYPE_CHECKING:
+    from ....Models.config import BaseModelOptions, CV2YOLOModelOptions, CV2TFModelOptions, BaseModelConfig, \
+        CV2YOLOModelConfig, CV2HOGModelConfig, CV2TFModelConfig
+
+
 logger = getLogger(SERVER_LOGGER_NAME)
 LP: str = "OpenCV DNN:"
 

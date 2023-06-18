@@ -12,7 +12,7 @@ try:
 except ImportError:
     warnings.warn(
         "Unable to import 'jose' and/or 'passlib.context' modules. "
-        "JWT and password hashing will not be available."
+        "JWT and password hashing will not be available.", ImportWarning
     )
 
 from .Log import SERVER_LOGGER_NAME
