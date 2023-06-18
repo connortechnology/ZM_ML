@@ -14,7 +14,7 @@ try:
     from urllib3 import disable_warnings
     from urllib3.exceptions import InsecureRequestWarning
 except ImportError as e:
-    warnings.warn(f"ImportError: {e}")
+    warnings.warn(f"ImportError: {e}", ImportWarning)
     aiohttp: Optional[aiohttp] = None
     jwt: Optional[jwt] = None
     SecretStr: Optional[SecretStr] = None
@@ -172,9 +172,9 @@ class ZMAPI:
         self.token_file = g.config.system.variable_data_path / "api_access_token"
         self.access_token: Optional[str] = ""
         self.refresh_token: Optional[str] = ""
-        self.config: ZoneMinderSettings = config
-        self.api_url: Optional[str] = config.api
-        self.portal_url: Optional[str] = config.portal
+        self.config: ZoneMinderSettings.ZMAPISettings = config.api
+        self.api_url: Optional[str] = config.api.api_url
+        self.portal_url: Optional[str] = config.portal_url
 
         self.api_version: Optional[str] = ""
         self.zm_version: Optional[str] = ""
@@ -182,15 +182,15 @@ class ZMAPI:
 
         self.session: Session = Session()
         self.async_session: Optional[aiohttp.ClientSession] = None
-        self.username: Optional[SecretStr] = config.user
-        self.password: Optional[SecretStr] = config.password
+        self.username: Optional[SecretStr] = self.config.user
+        self.password: Optional[SecretStr] = self.config.password
 
         # Sanitize logs of urls, passwords, tokens, etc. Makes for easier copy+paste
         self.sanitize = g.config.logging.sanitize.enabled
         self.sanitize_str: str = g.config.logging.sanitize.replacement_str
         if self.config.ssl_verify is False:
             self.session.verify = False
-            logger.debug(
+            logger.warning(
                 f"{lp} SSL certificate verification disabled (encryption enabled, vulnerable to MITM attacks)",
             )
             disable_warnings(category=InsecureRequestWarning)

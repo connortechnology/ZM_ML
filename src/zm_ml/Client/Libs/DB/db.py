@@ -32,9 +32,9 @@ from ...main import get_global_config
 
 if TYPE_CHECKING:
     from ....Shared.configs import GlobalConfig
-    from sqlalchemy import MetaData, create_engine, select
-    from sqlalchemy.engine import Engine, Connection, CursorResult, ResultProxy
-    from sqlalchemy.exc import SQLAlchemyError
+    # from sqlalchemy import MetaData, create_engine, select
+    # from sqlalchemy.engine import Engine, Connection, CursorResult, ResultProxy
+    # from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(CLIENT_LOGGER_NAME)
 LP = "zmdb::"
@@ -54,7 +54,7 @@ class ZMDB:
         global g
         g = get_global_config()
 
-
+        # TODO: integrate better
         if env:
             self.env = env
         else:
