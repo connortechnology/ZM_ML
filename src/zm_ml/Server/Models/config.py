@@ -1,13 +1,13 @@
 import json
 import logging
+import tempfile
 import time
 import uuid
 from pathlib import Path
-import tempfile
-from typing import Union, Dict, List, Optional, IO, Any
+from typing import Union, Dict, List, Optional, Any
 
-import yaml
 import numpy as np
+import yaml
 from pydantic import (
     BaseModel,
     Field,
@@ -16,15 +16,16 @@ from pydantic import (
     PositiveInt,
     SecretStr,
     BaseSettings,
+    AnyUrl,
 )
 from pydantic.fields import ModelField
 
-from ..ML.coco17_cv2 import COCO17
+from .validators import validate_model_labels
+from ..Log import SERVER_LOGGER_NAME
+from ...Server.Models.DEFAULTS import *
 from ...Shared.Models.Enums import (
     ModelType,
     ModelFrameWork,
-    OpenCVSubFrameWork,
-    HTTPSubFrameWork,
     ModelProcessor,
     FaceRecognitionLibModelTypes,
     ALPRAPIType,
@@ -34,10 +35,7 @@ from ...Shared.Models.Enums import (
     ALPRSubFrameWork,
 )
 from ...Shared.Models.config import Testing, LoggingSettings
-from ..Log import SERVER_LOGGER_NAME
-from ...Server.Models.DEFAULTS import *
-from .validators import validate_model_labels
-
+from ...Shared.Models.validators import validate_no_scheme_url, validate_replace_localhost
 
 logger = logging.getLogger(SERVER_LOGGER_NAME)
 
@@ -105,8 +103,11 @@ class ServerSettings(BaseModel):
         sign_key: SecretStr = Field("CHANGE ME!!!!", description="JWT Sign Key")
         algorithm: str = Field("HS256", description="JWT Algorithm")
 
-    address: IPvAnyAddress = Field("0.0.0.0", description="Server listen address")
-    port: PositiveInt = Field(8000, description="Server listen port")
+    address: Union[IPvAnyAddress] = Field(
+        "0.0.0.0", description="Server listen address"
+    )
+
+    port: PositiveInt = Field(5000, description="Server listen port")
     reload: bool = Field(
         default=False, description="Uvicorn reload - For development only"
     )
@@ -114,6 +115,8 @@ class ServerSettings(BaseModel):
         default=False, description="Uvicorn debug mode - For development only"
     )
     jwt: JWTSettings = Field(default_factory=JWTSettings, description="JWT Settings")
+
+    _validate_address = validator("address", allow_reuse=True, pre=True)(validate_replace_localhost)
 
 
 class DetectionResult(BaseModel):
@@ -381,7 +384,9 @@ class TPUModelConfig(BaseModelConfig):
         exclude=True,
     )
 
-    _validate_labels = validator("labels", always=True, allow_reuse=True)(validate_model_labels)
+    _validate_labels = validator("labels", always=True, allow_reuse=True)(
+        validate_model_labels
+    )
 
     @validator("config", "input", "classes", pre=True, always=True)
     def str_to_path(cls, v, values, field: ModelField) -> Optional[Path]:
@@ -427,7 +432,9 @@ class CV2YOLOModelConfig(BaseModelConfig):
         exclude=True,
     )
 
-    _validate_labels = validator("labels", always=True, allow_reuse=True)(validate_model_labels)
+    _validate_labels = validator("labels", always=True, allow_reuse=True)(
+        validate_model_labels
+    )
 
     @validator("config", "input", "classes", pre=True, always=True)
     def str_to_path(cls, v, values, field: ModelField) -> Optional[Path]:
@@ -548,7 +555,9 @@ class CV2TFModelConfig(BaseModelConfig):
         exclude=True,
     )
 
-    _validate_labels = validator("labels", always=True, allow_reuse=True)(validate_model_labels)
+    _validate_labels = validator("labels", always=True, allow_reuse=True)(
+        validate_model_labels
+    )
 
     @validator("config", "input", "classes", pre=True, always=True)
     def str_to_path(cls, v, values, field: ModelField) -> Optional[Path]:
@@ -566,7 +575,6 @@ class CV2TFModelConfig(BaseModelConfig):
             if values["input"].suffix == ".weights":
                 msg = f"'{field.name}' is required when 'input' is a DarkNet .weights file"
         return v
-
 
 
 class PyTorchModelConfig(BaseModelConfig):
@@ -671,11 +679,13 @@ class Settings(BaseModel):
     def validate_available_models(cls, v, values):
         models = values.get("models")
         if models:
+            disabled_models: list = []
             v = []
             for model in models:
                 if not model:
                     logger.warning(
-                        f"Model is empty, this usually means there is a formatting error in your config file! Skipping"
+                        f"Model is empty, this usually means there is a formatting error "
+                        f"(or an empty model; just a '-') in your config file! Skipping"
                     )
                     continue
                 final_model = None
@@ -692,10 +702,7 @@ class Settings(BaseModel):
                     _framework = model.get("framework", "opencv")
                     _sub_fw = model.get("sub_framework", "darknet")
                     _options = model.get("detection_options", {})
-                    _type = model.get("model_type", "object")
-                    logger.debug(
-                        f"DBG<<< '{_framework}' FRAMEWORK RAW options are :: {_options}"
-                    )
+                    _type = model.get("model_type", ModelType.OBJECT)
                     if _framework == ModelFrameWork.HTTP:
                         if _sub_fw == HTTPSubFrameWork.REKOGNITION:
                             model["model_type"] = ModelType.OBJECT
@@ -715,9 +722,6 @@ class Settings(BaseModel):
                     elif _framework == ModelFrameWork.ALPR:
                         model["model_type"] = ModelType.ALPR
                         api_type = model.get("api_type", "local")
-                        logger.debug(
-                            f"DEBUG>>> FrameWork: {_framework}  Sub-FrameWork: {_sub_fw} [{api_type}]"
-                        )
                         if _sub_fw == ALPRSubFrameWork.OPENALPR:
                             config = ALPRModelConfig(**model)
                             if api_type == ALPRAPIType.LOCAL:
@@ -740,9 +744,6 @@ class Settings(BaseModel):
                                     "Plate Recognizer Local API not implemented"
                                 )
 
-                        logger.debug(
-                            f"DEBUG>>> FINAL ALPR OPTIONS {config.detection_options = }"
-                        )
                         # todo: init models and check if success?
                         final_model = config
                     elif _framework == ModelFrameWork.OPENCV:
@@ -750,9 +751,6 @@ class Settings(BaseModel):
                         if _sub_fw == OpenCVSubFrameWork.DARKNET:
                             config = CV2YOLOModelConfig(**model)
                             config.detection_options = CV2YOLOModelOptions(**_options)
-                            logger.debug(
-                                f"DEBUG>>> FINAL OpenCV:Darknet OPTIONS {config.detection_options = }"
-                            )
                             not_impl = [
                                 OpenCVSubFrameWork.ONNX,
                                 OpenCVSubFrameWork.TENSORFLOW,
@@ -763,37 +761,31 @@ class Settings(BaseModel):
                         elif _sub_fw in not_impl:
                             raise NotImplementedError(f"{_sub_fw} not implemented")
                         else:
-                            logger.debug(
-                                f"DEBUG>>> this SUB FRAMEWORK is NOT IMPLEMENTED -> {_sub_fw}"
-                            )
+                            raise ValueError(f"Unknown OpenCV sub-framework: {_sub_fw}")
                         if config:
                             final_model = config
                     elif _framework == ModelFrameWork.CORAL:
                         config = TPUModelConfig(**model)
                         config.detection_options = TPUModelOptions(**_options)
-                        logger.debug(
-                            f"DEBUG>>> FINAL TPU OPTIONS {str(config.detection_options) = }"
-                        )
                         final_model = config
                     else:
-                        logger.debug(
-                            f"DEBUG>>> this FRAMEWORK is NOT IMPLEMENTED -> {_framework}"
+                        raise NotImplementedError(
+                            f"Framework {_framework} not implemented"
                         )
-                        final_model = BaseModelConfig(**model)
+
                     # load model here
                     if final_model:
                         logger.debug(f"Adding model: {final_model.name}")
                         v.append(final_model)
                 else:
-                    logger.debug(f"Skipping disabled model: {model.get('name')}")
-
-                # logger.info(f"Settings._validate_available_models: {model = }")
+                    disabled_models.append(model.get("name"))
+            if disabled_models:
+                logger.debug(f"Skipped these disabled models: {disabled_models}")
         return v
 
 
 def parse_client_config_file(cfg_file: Path) -> Optional[Settings]:
     """Parse the YAML configuration file."""
-    import yaml
 
     cfg: Dict = {}
     _start = time.perf_counter()
@@ -965,27 +957,28 @@ class APIDetector:
         ] = None,
     ):
         """Load the model"""
+
+        from ..ML.Detectors.face_recognition import FaceRecognitionLibDetector
+        from ..ML.Detectors.alpr import PlateRecognizer, OpenAlprCmdLine, OpenAlprCloud
+        from ..ML.Detectors.virelai import VirelAI
+        from ..ML.Detectors.aws_rekognition import AWSRekognition
         self.model = None
         if config:
             self.config = config
         if self.config.processor and not self.is_processor_available():
+            # Fixme: force CPU and continue
             raise RuntimeError(
                 f"{self.config.processor} is not available on this system"
             )
         if self.config.framework == ModelFrameWork.OPENCV:
             if self.config.sub_framework == OpenCVSubFrameWork.DARKNET:
                 from ..ML.Detectors.opencv.cv_yolo import CV2YOLODetector
-
                 self.model = CV2YOLODetector(self.config)
         elif self.config.framework == ModelFrameWork.HTTP:
             sub_fw = self.config.sub_framework
             if sub_fw == HTTPSubFrameWork.REKOGNITION:
-                from ..ML.Detectors.aws_rekognition import AWSRekognition
-
                 self.model = AWSRekognition(self.config)
             elif sub_fw == HTTPSubFrameWork.VIREL:
-                from ..ML.Detectors.virelai import VirelAI
-
                 self.model = VirelAI(self.config)
             elif sub_fw == HTTPSubFrameWork.NONE:
                 raise RuntimeError(
@@ -994,18 +987,8 @@ class APIDetector:
             else:
                 raise RuntimeError(f"Invalid HTTP sub framework: {sub_fw}")
         elif self.config.framework == ModelFrameWork.FACE_RECOGNITION:
-            from ..ML.Detectors.face_recognition import (
-                FaceRecognitionLibDetector,
-            )
-
             self.model = FaceRecognitionLibDetector(self.config)
         elif self.config.framework == ModelFrameWork.ALPR:
-            from ..ML.Detectors.alpr import (
-                OpenAlprCmdLine,
-                OpenAlprCloud,
-                PlateRecognizer,
-            )
-
             if self.config.service == ALPRService.PLATE_RECOGNIZER:
                 self.model = PlateRecognizer(self.config)
             elif self.config.service == ALPRService.OPENALPR:
@@ -1120,10 +1103,18 @@ class APIDetector:
                         "dlib not installed, cannot load any models that use dlib GPU processor"
                     )
                 else:
-                    if dlib.DLIB_USE_CUDA and dlib.cuda.get_num_devices() >= 1:
-                        available = True
+                    try:
+                        if dlib.DLIB_USE_CUDA and dlib.cuda.get_num_devices() >= 1:
+                            available = True
+                    except Exception as dlib_cuda_exception:
+                        logger.warning(
+                            f"Error getting CUDA device count: {dlib_cuda_exception}"
+                        )
+                        raise dlib_cuda_exception
+
             elif framework == ModelFrameWork.DEEPFACE:
                 logger.warning("WORKING ON DeepFace models!")
+                raise NotImplementedError
                 pass
         return available
 
@@ -1165,11 +1156,10 @@ class GlobalConfig(BaseModel):
 class ServerEnvVars(BaseSettings):
     """Server Environment Variables"""
 
-    conf_file: str = Field(None, env="CONF_FILE", description="Server YAML config file")
+    conf_file: str = Field(None, env="ML_SERVER_CONF_FILE", description="Server YAML config file")
 
     class Config:
         # env_file = ".env"
         # env_file_encoding = "utf-8"
         case_sensitive = True
         # extra = "forbid"
-        env_prefix = "ML_SERVER_"
