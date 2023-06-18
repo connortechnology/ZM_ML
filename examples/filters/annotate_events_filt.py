@@ -35,30 +35,32 @@ try:
         validator,
     )
 except ImportError:
-    warnings.warn("pydantic not installed, please install it to use this script")
+    warnings.warn("pydantic not installed, please install it to use this script", ImportWarning)
     raise
 try:
     import ffmpegcv
 except ImportError:
-    warnings.warn("ffmpegcv not installed, please install it to use this script")
+    warnings.warn("ffmpegcv not installed, please install it to use this script", ImportWarning)
     raise
 try:
     import cv2
 except ImportError:
     warnings.warn(
-        "OpenCV not installed, please install it to use this script (opencv-contrib-python or compile from source with CUDA)"
+        "OpenCV not installed, please install it to use this script (opencv-contrib-python or compile from source with CUDA)",
+        ImportError
     )
     raise
 try:
     import numpy as np
 except ImportError:
-    warnings.warn("numpy not installed, please install it to use this script")
+    warnings.warn("numpy not installed, please install it to use this script", ImportWarning)
     raise
 try:
     import zm_ml
 except ImportError:
     warnings.warn(
-        "zm_ml not installed, please install it to use this script (see https://github.com/baudneo/ZM_ML/wiki/Manual-Installation#client)"
+        "zm_ml not installed, please install it to use this script (see https://github.com/baudneo/ZM_ML/wiki/Manual-Installation#client)",
+        ImportError
     )
     raise
 
