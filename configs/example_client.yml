@@ -40,24 +40,46 @@ system:
   thread_workers: 4
 
 zoneminder:
+  # The web portal URL. (https://zm.myDomain.com/zm , http://localhost/zm, etc.)
+  portal_url: ${ZM_PORTAL}
+  api:
+    # The ZM API URL (https://zm.myDomain.com/zm/api , http://localhost/zm/api, etc.)
+    api_url: ${ZM_API}
+    # If you have authentication, set the user and password
+    user: ${ZM_USER}
+    password: ${ZM_PASS}
+    # a value of 'no' will allow self-signed certs
+    ssl_verify: no
+    headers:
+      # Add custom headers to all portal and api requests
+      #Name-Of-Header: Value Of Header
+
+      # Example: CloudFlare ZeroTrust Access headers
+      CF-Access-Client-Secret: ${ZM_CF_0TRUST_SECRET}
+      CF-Access-Client-Id: ${ZM_CF_0TRUST_HEADER}
+
   misc:
     # Write detection results to the 'Notes' section if the trigger is an event
-    # This will only work if the ZM user has permission to write to the notes section
+    # This will only work if the ZM API user has permission to write to the notes section
     write_notes: yes
 
-  api: ${ZM_API}
-  portal: ${ZM_PORTAL}
-  user: ${ZM_USER}
-  password: ${ZM_PASS}
-  # a value of 'no' will allow self-signed certs
-  ssl_verify: no
-  headers:
-    # Add custom headers to all requests
-    # This is useful for adding headers to ZM API requests
-    # Example: CloudFlare ZeroTrust Access headers
+  db:
+    # You only need to configure this in extreme cases.
+    # Default: the system will first look in ENV,
+    # then look in ZM .conf files,
+    # then use the configured values below. Meaning the below values take precedence.
 
-    CF-Access-Client-Secret: ${ZM_CF_0TRUST_SECRET}
-    CF-Access-Client-Id: ${ZM_CF_0TRUST_HEADER}
+    # DB Host/Port
+#    host: ${ZM_DB_HOST}
+#    port: ${ZM_DB_PORT}
+    # DB Creds
+#    user: ${ZM_DB_USER}
+#    password: ${ZM_DB_PASS}
+    # DB name
+#    name: ${ZM_DB_NAME}
+
+    # Python database driver to use, mysql+pymysql is the default
+    #driver: mysql+pymysql
 
 logging:
 #  root logging level
