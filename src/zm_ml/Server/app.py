@@ -1,14 +1,18 @@
+from __future__ import annotations
+
+import datetime
 import logging
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from platform import python_version
-from typing import Union, Dict, List, Optional, Any
+from typing import Union, Dict, List, Optional, Any, TYPE_CHECKING
 
 try:
     import cv2
 except ImportError:
+    cv2 = None
     raise ImportError(
         "OpenCV is not installed, please install it by compiling it for "
         "CUDA/cuDNN GPU support/OpenVINO Intel CPU/iGPU/dGPU support or "
@@ -28,28 +32,33 @@ from fastapi import (
 )
 from fastapi.responses import RedirectResponse
 
-from .imports import (
-    Settings,
-)
-from .Models.config import (
-    BaseModelOptions,
-    FaceRecognitionLibModelDetectionOptions,
-    OpenALPRLocalModelOptions,
-    BaseModelConfig,
-    APIDetector,
-    GlobalConfig,
-)
+
 from ..Shared.Models.Enums import ModelType, ModelFrameWork, ModelProcessor
-from .Log import SERVER_LOGGER_NAME, SERVER_LOG_FORMAT, SERVER_LOG_FORMAT_S6
+from .Log import SERVER_LOGGER_NAME, SERVER_LOG_FORMAT
 from zm_ml.Shared.Log.handlers import BufferedLogHandler
 from .ML.Detectors.color_detector import ColorDetector
 
+if TYPE_CHECKING:
+    from .Models.config import (
+        GlobalConfig,
+        Settings,
+        BaseModelConfig,
+        APIDetector,
+    )
+
 __version__ = "0.0.1a"
 __version_type__ = "dev"
-
 logger = logging.getLogger(SERVER_LOGGER_NAME)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.NullHandler())
+# Control uvicorn logging, what a mess!
+uvi_logger = logging.getLogger("uvicorn")
+uvi_error_logger = logging.getLogger("uvicorn.error")
+uvi_access_logger = logging.getLogger("uvicorn.access")
+uvi_loggers = (uvi_logger, uvi_error_logger, uvi_access_logger)
+for _ul in uvi_loggers:
+    _ul.setLevel(logging.DEBUG)
+    _ul.propagate = False
 
 logger.info(
     f"ZM_MLAPI: {__version__} (type: {__version_type__}) [Python: {python_version()} - "
@@ -63,11 +72,7 @@ LP: str = "mlapi:"
 
 
 def create_logs() -> logging.Logger:
-    import os
-
     formatter = SERVER_LOG_FORMAT
-    if os.environ.get("INSIDE_DOCKER", 0) in ("1", 1):
-        formatter = SERVER_LOG_FORMAT_S6
     logger = logging.getLogger(SERVER_LOGGER_NAME)
     console_handler = logging.StreamHandler(stream=sys.stdout)
     console_handler.setFormatter(formatter)
@@ -76,7 +81,102 @@ def create_logs() -> logging.Logger:
     logger.setLevel(logging.DEBUG)
     logger.addHandler(console_handler)
     logger.addHandler(buffered_log_handler)
+    for _ul in uvi_loggers:
+        _ul.setLevel(logging.DEBUG)
+        _ul.addHandler(console_handler)
+
     return logger
+
+
+def init_logs(config: Settings) -> None:
+    """Initialize the logging system."""
+    import getpass
+    import grp
+    import os
+    from ..Shared.Log.handlers import BufferedLogHandler
+
+    lp: str = "init:logs:"
+    sys_user: str = getpass.getuser()
+    sys_gid: int = os.getgid()
+    sys_group: str = grp.getgrgid(sys_gid).gr_name
+    sys_uid: int = os.getuid()
+    from ..Shared.Models.config import LoggingSettings
+
+    cfg: LoggingSettings = config.logging
+    root_level = cfg.level
+    logger.debug(f"{lp} Setting root logger level to {logging._levelToName[root_level]}")
+    logger.setLevel(root_level)
+    for _ul in uvi_loggers:
+        _ul.setLevel(root_level)
+
+    if cfg.console.enabled is False:
+        for h in logger.handlers:
+            if isinstance(h, logging.StreamHandler):
+                logger.info(f"{lp} Removing console log output!")
+                logger.removeHandler(h)
+
+    if cfg.file.enabled:
+        if cfg.file.file_name:
+            _filename = cfg.file.file_name
+        else:
+            _filename = f"zmmlServer.log"
+        abs_logfile = (cfg.file.path / _filename).expanduser().resolve()
+        try:
+            if not abs_logfile.exists():
+                logger.info(f"{lp} Creating log file [{abs_logfile}]")
+                abs_logfile.touch(exist_ok=True, mode=0o644)
+            else:
+                with abs_logfile.open("a") as f:
+                    pass
+        except PermissionError:
+            logger.warning(
+                f"{lp} Logging to file disabled due to permissions"
+                f" - No write access to '{abs_logfile.as_posix()}' for user: "
+                f"{sys_uid} [{sys_user}] group: {sys_gid} [{sys_group}]"
+            )
+        else:
+            # todo: add timed rotating log file handler if configured
+            file_handler = logging.FileHandler(abs_logfile.as_posix(), mode="a")
+            # file_handler = logging.handlers.TimedRotatingFileHandler(
+            #     file_from_config, when="midnight", interval=1, backupCount=7
+            # )
+            file_handler.setFormatter(SERVER_LOG_FORMAT)
+            if cfg.file.level:
+                logger.debug(f"File logger level CONFIGURED AS {cfg.file.level}")
+                # logger.debug(f"Setting file log level to '{logging._levelToName[g.config.logging.file.level]}'")
+                file_handler.setLevel(cfg.file.level)
+            logger.addHandler(file_handler)
+            for _ul in uvi_loggers:
+                _ul.addHandler(file_handler)
+
+            # get the buffered handler and call flush with file_handler as a kwarg
+            # this will flush the buffer to the file handler
+            for h in logger.handlers:
+                if isinstance(h, BufferedLogHandler):
+                    logger.debug(f"Flushing buffered log handler to file")
+                    h.flush(file_handler=file_handler)
+                    # Close the buffered handler
+                    h.close()
+                    break
+            logger.debug(
+                f"Logging to file '{abs_logfile}' with user: "
+                f"{sys_uid} [{sys_user}] group: {sys_gid} [{sys_group}]"
+            )
+    if cfg.syslog.enabled:
+        # enable syslog logging
+        syslog_handler = logging.handlers.SysLogHandler(
+            address=cfg.syslog.address,
+        )
+        syslog_handler.setFormatter(SERVER_LOG_FORMAT)
+        if cfg.syslog.level:
+            logger.debug(
+                f"Syslog logger level CONFIGURED AS {logging._levelToName[cfg.syslog.level]}"
+            )
+            syslog_handler.setLevel(cfg.syslog.level)
+        logger.addHandler(syslog_handler)
+        logger.debug(f"Logging to syslog at {cfg.syslog.address}")
+
+    logger.info(f"Logging initialized...")
 
 
 def get_global_config() -> GlobalConfig:
@@ -85,6 +185,8 @@ def get_global_config() -> GlobalConfig:
 
 def create_global_config() -> GlobalConfig:
     """Create the global config object"""
+    from .Models.config import GlobalConfig
+
     global g
     if not isinstance(g, GlobalConfig):
         g = GlobalConfig()
@@ -166,9 +268,7 @@ async def threaded_detect(model_hints: List[str], image) -> List[Dict]:
             futures.append(executor.submit(detector.detect, image))
     for future in futures:
         detections.append(future.result())
-    logger.info(
-        f"{LP} ThreadPool detections -> {detections}"
-    )
+    logger.info(f"{LP} ThreadPool detections -> {detections}")
     return detections
 
 
@@ -231,21 +331,22 @@ async def available_models_proc(framework: ModelFrameWork):
     }
 
 
-@app.post("/models/modify/{model_hint}", summary="Change a models options")
-async def modify_model(
-    model_hint: str,
-    model_options: Union[
-        BaseModelOptions, FaceRecognitionLibModelDetectionOptions, OpenALPRLocalModelOptions
-    ],
-):
-    model = get_model(model_hint)
-    old_options = model.detection_options
-    detector = get_global_config().get_detector(model)
-    logger.info(
-        f"modify_model: '{model.name}' original: {old_options}  -> new: {model_options}"
-    )
-    detector.config.detection_options = model.detection_options = model_options
-    return {"original": old_options, "new": model.detection_options}
+# FUCK YOU FAST API and your bullshit inheritance annotations issue. built a whole fucking app on your frameowrk to find out the fastapi dev is a fucking moron.
+# @app.post("/models/modify/{model_hint}", summary="Change a models options")
+# async def modify_model(
+#     model_hint: str,
+#     model_options: Union[
+#         FaceRecognitionLibModelDetectionOptions, OpenALPRLocalModelOptions
+#     ]
+# ):
+#     model = get_model(model_hint)
+#     old_options = model.detection_options
+#     detector = get_global_config().get_detector(model)
+#     logger.info(
+#         f"modify_model: '{model.name}' original: {old_options}  -> new: {model_options}"
+#     )
+#     detector.config.detection_options = model.detection_options = model_options
+#     return {"original": old_options, "new": model.detection_options}
 
 
 @app.post(
@@ -277,94 +378,6 @@ async def single_detection(
 ):
     logger.info(f"single_detection: ENDPOINT {model_hint}")
     return await detect(model_hint, image)
-
-def init_logs(config: Settings) -> None:
-    """Initialize the logging system."""
-    import getpass
-    import grp
-    import os
-    from ..Shared.Log.handlers import BufferedLogHandler
-
-    sys_user: str = getpass.getuser()
-    sys_gid: int = os.getgid()
-    sys_group: str = grp.getgrgid(sys_gid).gr_name
-    sys_uid: int = os.getuid()
-    from ..Shared.Models.config import LoggingSettings
-
-    cfg: LoggingSettings = config.logging
-    root_level = cfg.level
-    logger.debug(f"Setting root logger level to {logging._levelToName[root_level]}")
-    logger.setLevel(root_level)
-
-    if cfg.console.enabled is False:
-        for h in logger.handlers:
-            if isinstance(h, logging.StreamHandler):
-                logger.info(f"Removing console log output!")
-                logger.removeHandler(h)
-
-    if cfg.file.enabled:
-        if cfg.file.file_name:
-            _filename = cfg.file.file_name
-        else:
-            _filename = f"zmmlServer.log"
-        abs_logfile = (cfg.file.path / _filename).expanduser().resolve()
-        try:
-            if not abs_logfile.exists():
-                logger.info(f"Creating log file [{abs_logfile}]")
-                abs_logfile.touch(exist_ok=True, mode=0o644)
-            else:
-                with abs_logfile.open("a") as f:
-                    pass
-        except PermissionError:
-            logger.warning(
-                f"Logging to file disabled due to permissions"
-                f" - No write access to '{abs_logfile.as_posix()}' for user: "
-                f"{sys_uid} [{sys_user}] group: {sys_gid} [{sys_group}]"
-            )
-        else:
-            # todo: add timed rotating log file handler if configured
-            file_handler = logging.FileHandler(abs_logfile.as_posix(), mode="a")
-            # file_handler = logging.handlers.TimedRotatingFileHandler(
-            #     file_from_config, when="midnight", interval=1, backupCount=7
-            # )
-            file_handler.setFormatter(SERVER_LOG_FORMAT)
-            if cfg.file.level:
-                logger.debug(
-                    f"File logger level CONFIGURED AS {cfg.file.level}"
-                )
-                # logger.debug(f"Setting file log level to '{logging._levelToName[g.config.logging.file.level]}'")
-                file_handler.setLevel(cfg.file.level)
-            logger.addHandler(file_handler)
-            # get the buffered handler and call flush with file_handler as a kwarg
-            # this will flush the buffer to the file handler
-            for h in logger.handlers:
-                if isinstance(h, BufferedLogHandler):
-                    logger.debug(
-                        f"Flushing buffered log handler to file {h=} ---- {file_handler=}"
-                    )
-                    h.flush(file_handler=file_handler)
-                    # Close the buffered handler
-                    h.close()
-                    break
-            logger.debug(
-                f"Logging to file '{abs_logfile}' with user: "
-                f"{sys_uid} [{sys_user}] group: {sys_gid} [{sys_group}]"
-            )
-    if cfg.syslog.enabled:
-        # enable syslog logging
-        syslog_handler = logging.handlers.SysLogHandler(
-            address=cfg.syslog.address,
-        )
-        syslog_handler.setFormatter(SERVER_LOG_FORMAT)
-        if cfg.syslog.level:
-            logger.debug(
-                f"Syslog logger level CONFIGURED AS {logging._levelToName[cfg.syslog.level]}"
-            )
-            syslog_handler.setLevel(cfg.syslog.level)
-        logger.addHandler(syslog_handler)
-        logger.debug(f"Logging to syslog at {cfg.syslog.address}")
-
-    logger.info(f"Logging initialized...")
 
 
 class MLAPI:
@@ -404,7 +417,6 @@ class MLAPI:
 
         # Complete logging initialization, file handler and flush buffers into the file
 
-
         # logger.debug(f"{g.settings = }")
         logger.info(f"should be loading models")
 
@@ -429,6 +441,7 @@ class MLAPI:
         return self.cached_settings
 
     def restart(self):
+        self.server.shutdown()
         self.read_settings()
         self.start()
 
@@ -437,62 +450,37 @@ class MLAPI:
         for model in get_global_config().available_models:
             _avail[normalize_id(model.name)] = str(model.id)
         logger.info(f"AVAILABLE MODELS! --> {_avail}")
-        """LOGGING_CONFIG: Dict[str, Any] = {
-            "version": 1,
-            "disable_existing_loggers": False,
-            "formatters": {
-                "default": {
-                    "()": "uvicorn.logging.DefaultFormatter",
-                    "fmt": "%(levelprefix)s %(message)s",
-                    "use_colors": None,
-                },
-                "access": {
-                    "()": "uvicorn.logging.AccessFormatter",
-                    "fmt": '%(levelprefix)s %(client_addr)s - "%(request_line)s" %(status_code)s',  # noqa: E501
-                },
-            },
-            "handlers": {
-                "default": {
-                    "formatter": "default",
-                    "class": "logging.StreamHandler",
-                    "stream": "ext://sys.stderr",
-                },
-                "access": {
-                    "formatter": "access",
-                    "class": "logging.StreamHandler",
-                    "stream": "ext://sys.stdout",
-                },
-            },
-            "loggers": {
-                "uvicorn": {"handlers": ["default"], "level": "INFO"},
-                "uvicorn.error": {"level": "ERROR"},
-                "uvicorn.access": {"handlers": ["access"], "level": "INFO", "propagate": False},
-            },
-        }
-        """
-        uvicorn.config.LOGGING_CONFIG["formatters"]["default"][
-            "fmt"
-        ] = "%(asctime)s %(name)s[%(process)s] %(levelname)s %(module)s:%(lineno)d -> %(message)s"
-        uvicorn.config.LOGGING_CONFIG["formatters"]["default"]["use_colors"] = True
-        uvicorn.config.LOGGING_CONFIG["handlers"]["default"]["level"] = "DEBUG"
-        uvicorn.config.LOGGING_CONFIG["loggers"]["uvicorn"]["level"] = "DEBUG"
-        uvicorn.config.LOGGING_CONFIG["loggers"]["uvicorn.error"]["level"] = "ERROR"
         server_cfg = get_global_config().config.server
+        logger.debug(f"Server Config: {server_cfg}")
         config = uvicorn.Config(
-            "zm_ml.Server.app:app",
+            app="zm_ml.Server.app:app",
             host=str(server_cfg.address),
             port=server_cfg.port,
-            reload=False,
-            log_config=uvicorn.config.LOGGING_CONFIG,
+            log_config={
+                "version": 1,
+                "disable_existing_loggers": False,
+            },
             log_level="debug",
             proxy_headers=True,
+            # forwarded_allow_ips="*",
+            # reload=False,
             # reload_dirs=[
             #     str(self.cfg_file.parent.parent / "src/zm_ml/Server"),
             #     str(self.cfg_file.parent.parent / "src/zm_ml/Shared"),
             # ],
         )
-        start = time.perf_counter()
-        self.server = uvicorn.Server(config)
-        self.server.run()
-        lifetime = time.perf_counter() - start
-        logger.debug(f"server ran for {lifetime:.2f} seconds")
+        self.server = uvicorn.Server(config=config)
+        try:
+            self.server.run()
+        except KeyboardInterrupt:
+            logger.info("Keyboard Interrupt, shutting down")
+            self.server.shutdown()
+        except BrokenPipeError:
+            logger.info("Broken Pipe, shutting down")
+            self.server.shutdown()
+        except Exception as e:
+            logger.exception(f"Shutting down because of Exception: {e}")
+            self.server.shutdown()
+        finally:
+            logger.info("Shutting down")
+            self.server.shutdown()
