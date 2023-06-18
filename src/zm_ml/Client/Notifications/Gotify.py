@@ -49,8 +49,8 @@ class Gotify(CoolDownBase):
         event_auth = ""
         event_url = ""
 
-        zm_user = g.config.zoneminder.user
-        zm_pass = g.config.zoneminder.password
+        zm_user = g.config.zoneminder.api.user
+        zm_pass = g.config.zoneminder.api.password
         _link_url = ""
         _embedded_event = ""
         from urllib.parse import urlencode, quote_plus
