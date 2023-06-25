@@ -169,22 +169,18 @@ notifications:
     #-- Default ports: for TCP: non-TLS: 1883  TLS:8883 .
     enabled: no
 
-    #-- Send image to MQTT topic
+    #-- Send image to "<topic>/image/<format>" where topic is the mqtt topic and format is either bytes or base64
     #-- Home Assistant can ingest images from MQTT
     image:
       enabled: no
       format: bytes # bytes or base64
-      topic: "zm_ml/image"
-
-    # Force mqtt to send data even if it's a PAST event
-    force: no
 
     #-- Allow you to set a custom MQTT topic name, formats for topics are: name/sub-name/sub-sub-name
     #-- notice no leading or trailing '/'
-    #-- python mqtt default topic: zm_ml/detection
-    #topic:  myown_topic/here
+    #-- Default topic: zm_ml
+    #topic:  topic_here/sub_topic_here
 
-    #-- if using tls remember about host verification (tls_insecure :  no host verification but still encrypted)
+    #-- if using TLS remember about host verification (tls_secure: no = no host verification but still encrypted)
     broker: ${MQTT_BROKER}
 
     #-- Only use this if not using standard tcp ports, it defaults to 1883 if no TLS and 8883 if TLS, this setting will override
@@ -196,17 +192,14 @@ notifications:
 
     #-- MQTT over TLS
     #-- Location to MQTT broker CA certificate. Uncomment this line will enable MQTT over TLS.
-    #-- Strict certificate checking
-    #-- [Default: no]
-    allow_self_signed: yes
+    #-- Also used to set mTLS CA
+#    tls_ca: /path_to/mqtt_certs/ca.crt
 
-    #-- To allow insecure TLS - disable peer verifier/don't verify hostname in COMMON NAME (CN:  field), [Default: no]
-    #-- if using ip address in cert's COMMON NAME field then this needs to be 'yes'
-    #-- [Default: no]
-    tls_insecure: yes
+    #-- secure TLS - Enable peer verifier/verify hostname in COMMON NAME (CN:  field)
+    #-- if using ip address in CN field or self-signed certs then this needs to be 'no'
+    #-- [Default: yes]
+    tls_secure: yes
 
-    #-- mTLS CA (self signed?)
-    tls_ca: /path_to/mqtt_certs/ca.crt
 
     #-- Here is a good guide on setting up a CA and signing server/client certificates for MQTT, even if you're using mqtt over your LAN only,
     #-- it is always good to enable encryption and learn about it -> http://www.steves-internet-guide.com/creating-and-using-client-certificates-with-mqtt-and-mosquitto/
@@ -215,12 +208,12 @@ notifications:
     #-- To enable 2-ways TLS, add client certificate and private key, Meaning you had a CA sign your broker's server key/cert
     #-- and also had the CA sign the client key/cert that you are using here
     #-- Location to client certificate and private key
-    tls_cert :  /path_to/mqtt_certs/client-zm.crt
-    tls_key :  /path_to/mqtt_certs/client-zm.key
+#    tls_cert :  /path_to/mqtt_certs/client-zm.crt
+#    tls_key :  /path_to/mqtt_certs/client-zm.key
 
 
   zmninja:
-    # Attempt to send a push notification to zmNinja clients
+    # Attempt to send a push notification to zmNinja clients (WIP as zmninja is been moved to ZoneMinder app signatures)
     enabled: no
 
     fcm:
@@ -274,33 +267,34 @@ notifications:
       # while others say it won't. YMMV.
       android_ttl: 0
 
+  # Gotify is a self-hosted push notification server with an Android app (no iOS)
   gotify:
-    # Gotify is a self hosted push notification server with an Android app (no iOS)
     # Attempt to send a push notification to Gotify clients
-
     enabled: no
     # If you are not receiving images in gotify notifications, set this to yes to set image to a publicly available URL
     # This will tell you if your gotify android clients are not able to access your ZM server from outside the LAN
     test_image: no
+
+    # Gotify server URL
     host: ${GOTI_HOST}
     # Gotify App token
     token: ${GOTI_TOKEN}
     # Override the ZM Portal URL for gotify image grabbing (useful behind a reverse proxy)
-    # say portal is http://zm.example.com/zm due to being on internal network but
-    # Gotify needs https://zm.example.com/zm to grab the images.
+    # say ZoneMinder web portal is http:///10.0.1.25 due to being on internal network but
+    # Gotify needs https://zm.example.com/zm to grab the images from a public URL.
     portal: ${GOTI_PORTAL}
-    # REMEMBER that Gotify grabs the image from a URL instead of having it sent directly to it like pushover does.
+    # REMEMBER that Gotify grabs the image from a URL it can access instead of having it sent directly to it like pushover does.
 
     # Show a clickable link to view the event in a browser (only once inside the Gotify App).
     # this is handy if the notification goes out to a device without zmNinja installed.
     # They can just click the link and view the event in a regular browser.
     # -- NOTE: Your ZM server may need to be accessible externally for this to work correctly.
 
-    # !! WARNING: If you use this, you are sending your ZM user and password to the Gotify server/clients,
+    # !! WARNING: If you use this, you are POTENTIALLY sending your ZM user and password (or JWT access token) to the Gotify server/clients,
     # if no SSL is used IT WILL BE CLEAR TEXT! So USE SSL!
 
     # [Default: no]
-    link_url: yes
+    clickable_link: yes
 
     # The ZM API user for the clickable URL link in the pushover notification. I HIGHLY recommend HTTPS on your ZM host,
     # making a user with VIEW privileges of stream and events only and using that for push_user and pas
@@ -371,18 +365,18 @@ notifications:
     # if no SSL is used IT WILL BE CLEAR TEXT! So USE SSL!
 
     # [Default: no]
-    link_url: yes
+    clickable_link: yes
 
     # The ZM API user for the clickable URL link in the pushover notification. I HIGHLY recommend HTTPS on your ZM host,
     # making a user with VIEW privileges of stream and events only and using that for link_user and link_pass
-    # example: make a user named 'PushView' with VIEW privs only for STREAM and EVENT
+    # example: make a user named 'notifications' with VIEW privileges only for STREAM and EVENT
     # [Default: None]
     link_user: ${LINKURL_USER}
     link_pass: ${LINKURL_PASS}
 
     # Control the 'View event in browser' video URL params ->
     # zm.example.com/zm/cgi-bin/nph-zms? ----- continued next line ------
-    # mode={_mode}&scale={_scale}&maxfps={_max_fps}&buffer={_buffer}&replay={_replay}
+    # mode={mode}&scale={scale}&maxfps={max_fps}&buffer={buffer}&replay={replay}
     url_opts:
       # [Default: jpeg]
       mode: jpeg
@@ -401,6 +395,15 @@ notifications:
     # You and you alone are solely responsible for the contents of the script you are running.
     I AM AWARE OF THE DANGER OF RUNNING SHELL SCRIPTS: NO I AM NOT
     script: ${DATA_DIR}/scripts/notify.sh
+    args:
+      # A list of arguments to pass to the script, order matters
+      - mid
+      - eid
+      - fmt_str  # "[166] :detected:person(54%-yolov7x[gpu])"
+      - event_url
+      - event_system_path # /var/lib/zoneminder/events/1/etc
+      - results  # { }
+      - errors
 
 label_groups:
   # These are 'groups' of labels that can be used for per monitor filtering
