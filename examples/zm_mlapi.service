@@ -23,6 +23,10 @@ Restart=always
 RestartSec=5
 # We need this to get logs correctly
 Environment=PYTHONUNBUFFERED=1
+# These 2 lines stop the console output being forwarded to syslog
+# You can enable syslog logging in client config if you want
+StandardOutput=null
+StandardError=null
 
 # Change to the user that ZM MLAPI was installed for
 User=www-data
