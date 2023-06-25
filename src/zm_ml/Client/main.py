@@ -57,6 +57,11 @@ from .Log import CLIENT_LOGGER_NAME, CLIENT_LOG_FORMAT
 
 if TYPE_CHECKING:
     from .Libs.DB import ZMDB
+    from .Notifications.Pushover import Pushover
+    from .Notifications.Gotify import Gotify
+    from .Notifications.zmNinja import ZMNinja
+    from .Notifications.MQTT import MQTT
+    from .Notifications.ShellScript import ShellScriptNotification
 
 _PR: str = "print():"
 __version__: str = "0.0.1"
@@ -389,14 +394,11 @@ class StaticObjects(BaseModel):
 
 
 class Notifications:
-    from .Notifications.Pushover import Pushover
-    from .Notifications.Gotify import Gotify
-    from .Notifications.zmNinja import ZMNinja
-
+    mqtt: Optional[MQTT] = None
     zmninja: Optional[ZMNinja] = None
     gotify: Optional[Gotify] = None
     pushover: Optional[Pushover] = None
-    shell_script = None
+    shell_script: Optional[ShellScriptNotification] = None
     webhook = None
 
     def __init__(self):
@@ -404,6 +406,7 @@ class Notifications:
         from .Notifications.Gotify import Gotify
         from .Notifications.zmNinja import ZMNinja
         from .Notifications.MQTT import MQTT
+        from .Notifications.ShellScript import ShellScriptNotification
 
         config = g.config.notifications
         if config.zmninja.enabled:
@@ -419,7 +422,7 @@ class Notifications:
             has_https = True
             if not re.compile(r"^https://").match(_portal):
                 has_https = False
-            if config.gotify.link_url:
+            if config.gotify.clickable_link:
                 self.gotify._push_auth = get_push_auth(
                     g.api, config.gotify.link_user, config.gotify.link_pass, has_https
                 )
@@ -430,7 +433,7 @@ class Notifications:
             if not re.compile(r"^https://").match(g.api.portal_base_url):
                 has_https = False
             self.pushover = Pushover()
-            if config.pushover.link_url:
+            if config.pushover.clickable_link:
                 self.pushover._push_auth = get_push_auth(
                     g.api,
                     config.pushover.link_user,
@@ -439,9 +442,10 @@ class Notifications:
                 )
 
         if config.shell_script.enabled:
-            self.shell_script = None
+            self.shell_script = ShellScriptNotification()
         if config.mqtt.enabled:
             self.mqtt = MQTT()
+            self.mqtt.connect()
 
 
 class ZMClient:
@@ -868,6 +872,9 @@ class ZMClient:
                         async with session.post(
                             url,
                             data=mpwriter,
+                            timeout=aiohttp.ClientTimeout(
+                                total=10
+                            )
                         ) as r:
                             status = r.status
                             if status == 200:
@@ -1913,7 +1920,7 @@ class ZMClient:
                     po.request_data.priority = _cfg.priority
                     po.request_data.html = 1
                     po.request_data.timestamp = time()
-                    if noti_cfg.pushover.link_url:
+                    if noti_cfg.pushover.clickable_link:
                         po.request_data.url_title = "View event in browser"
                         push_url_opts: NotificationZMURLOptions = (
                             noti_cfg.pushover.url_opts
@@ -1960,7 +1967,10 @@ class ZMClient:
                     # self.notifications.zmninja.send()
                 if noti_cfg.mqtt.enabled:
                     logger.debug(f"{lp} MQTT notification configured, sending")
-                    # self.notifications.mqtt.send()
+                    self.notifications.mqtt.publish(message=prediction_str, image=noti_img)
+                if noti_cfg.shell_script.enabled:
+                    logger.debug(f"{lp} Shell Script notification configured, sending")
+                    self.notifications.shell_script.send()
             for future in concurrent.futures.as_completed(futures):
                 try:
                     exc_ = future.exception(timeout=10)

@@ -18,6 +18,8 @@ except ImportError:
 from .Log import SERVER_LOGGER_NAME
 
 logger = getLogger(SERVER_LOGGER_NAME)
+
+
 ACCESS_TOKEN_EXPIRE_MINUTES = 30  # 30 minutes
 REFRESH_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 ALGORITHM = "HS256"

@@ -41,7 +41,7 @@ class Gotify(CoolDownBase):
         portal = self.config.portal or g.api.portal_base_url
         host = self.config.host
         token = self.config.token
-        link_url = self.config.link_url
+        link_url = self.config.clickable_link
         link_user = self.config.link_user
         link_pass = self.config.link_pass
 

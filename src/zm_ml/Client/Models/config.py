@@ -175,7 +175,7 @@ class MLNotificationSettings(BaseModel):
         host: AnyUrl = None
         token: Optional[str] = None
         portal: AnyUrl = None
-        link_url: bool = Field(False)
+        clickable_link: bool = Field(False)
         link_user: Optional[SecretStr] = None
         link_pass: Optional[SecretStr] = None
         _push_auth: Optional[SecretStr] = None
@@ -217,7 +217,7 @@ class MLNotificationSettings(BaseModel):
         )
         base_url: Optional[AnyUrl] = Field("https://api.pushover.net/1")
         endpoints: EndPoints = Field(default_factory=EndPoints)
-        link_url: bool = Field(False)
+        clickable_link: bool = Field(False)
         link_user: Optional[SecretStr] = None
         link_pass: Optional[SecretStr] = None
         priority: int = Field(ge=-2, le=2, default=0)
@@ -238,20 +238,20 @@ class MLNotificationSettings(BaseModel):
             topic: str = Field("zm_ml/image")
             format: Optional[str] = Field("bytes", regex="^(bytes|base64)$")
 
-        enabled: bool = Field(False)
-        force: bool = Field(False)
-        topic: str = Field("zm_ml/detection")
+        enabled: Optional[bool] = Field(False)
+        keep_alive: Optional[int] = Field(60, ge=1)
+        topic: Optional[str] = Field("zm_ml")
         broker: Optional[Union[IPvAnyAddress, AnyUrl]] = None
-        port: int = Field(1883)
-        user: str = None
+        port: Optional[int] = Field(1883)
+        user: Optional[str] = None
         pass_: Optional[SecretStr] = Field(None, alias="pass")
-        allow_self_signed: bool = Field(False)
-        tls_insecure: bool = Field(False)
+        tls_secure: bool = Field(True)
         tls_ca: Optional[Path] = None
         tls_cert: Optional[Path] = None
         tls_key: Optional[Path] = None
         retain: bool = Field(False)
         qos: int = Field(0)
+        cooldown: CoolDownSettings = Field(default_factory=CoolDownSettings)
 
         image: MQTTImageSettings = Field(default_factory=MQTTImageSettings)
 
