@@ -30,16 +30,17 @@ class ShellScriptNotification(CoolDownBase):
         self.data_dir = g.config.system.variable_data_path / self._data_dir_str
         super().__init__()
 
-
-
     def run(self):
-        lp: str = "{LP}:run:"
+        lp: str = f"{LP}:run:"
         script_path = Path(self.config.script)
         if self.config.enabled:
             if not script_path.is_file():
                 raise FileNotFoundError(f"Script file '{script_path.as_posix()}' not found/is not a valid file")
             if not self.config.I_AM_AWARE_OF_THE_DANGER_OF_RUNNING_SHELL_SCRIPTS != "YeS i aM awaRe!":
-                raise ValueError("You must set I_AM_AWARE_OF_THE_DANGER_OF_RUNNING_SHELL_SCRIPTS to: YeS i aM awaRe!")
+                raise ValueError("You MUST set I_AM_AWARE_OF_THE_DANGER_OF_RUNNING_SHELL_SCRIPTS to: YeS i aM awaRe!")
+
+            if not script_path.is_absolute():
+                script_path = script_path.expanduser().resolve()
             cmd_array = [script_path.as_posix()]
             try:
                 x = subprocess.run(cmd_array, check=True, capture_output=True, text=True)
