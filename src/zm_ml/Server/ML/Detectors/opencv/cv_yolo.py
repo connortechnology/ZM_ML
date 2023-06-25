@@ -98,7 +98,6 @@ class CV2YOLODetector(CV2Base):
             f"{' [squared]' if self.config.square else ''}"
         )
         self.acquire_lock()
-        logger.info(f"USING THESE CLASSES FOR LABELS -> {self.config.labels}")
         try:
             detection_timer = time.perf_counter()
 
