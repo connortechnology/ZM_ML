@@ -27,8 +27,10 @@ class CoolDownBase:
     cooldown: Union[CoolDownSettings, OverRideCoolDownSettings]
 
     def __init__(self):
-        self.cooldown = self.config.cooldown
-        self.data_dir.mkdir(parents=True, exist_ok=True)
+        if self.config.cooldown:
+            self.cooldown = self.config.cooldown
+        if self.data_dir:
+            self.data_dir.mkdir(parents=True, exist_ok=True)
 
     def write_cooldown(self, mid: int):
         cooldown_file: Path = self.data_dir / self._cooldown_str.format(mid=mid)
