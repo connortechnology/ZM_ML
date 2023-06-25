@@ -330,24 +330,19 @@ async def available_models_proc(framework: ModelFrameWork):
         ]
     }
 
+@app.post('/login')
+def login():
+    """Processes user's authentication and returns a token
+    on successful authentication.
 
-# FUCK YOU FAST API and your bullshit inheritance annotations issue. built a whole fucking app on your frameowrk to find out the fastapi dev is a fucking moron.
-# @app.post("/models/modify/{model_hint}", summary="Change a models options")
-# async def modify_model(
-#     model_hint: str,
-#     model_options: Union[
-#         FaceRecognitionLibModelDetectionOptions, OpenALPRLocalModelOptions
-#     ]
-# ):
-#     model = get_model(model_hint)
-#     old_options = model.detection_options
-#     detector = get_global_config().get_detector(model)
-#     logger.info(
-#         f"modify_model: '{model.name}' original: {old_options}  -> new: {model_options}"
-#     )
-#     detector.config.detection_options = model.detection_options = model_options
-#     return {"original": old_options, "new": model.detection_options}
+    request body:
 
+    - username: Unique identifier for a user e.g email,
+                phone number, name
+
+    - password:
+    """
+    return "ThisTokenIsFake"
 
 @app.post(
     "/detect/group",
