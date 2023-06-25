@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import ssl
 from time import perf_counter
-from typing import Union, Optional, TYPE_CHECKING
+from typing import Union, Optional, TYPE_CHECKING, Any, Dict
 
 import numpy as np
 import paho.mqtt.client as paho_client
@@ -30,9 +30,9 @@ class MQTT(CoolDownBase):
     _connected: bool = False
     conn_time: Optional[float] = None
     ssl_cert: int = ssl.CERT_REQUIRED
-    client_id: str = "zm_ml-"
+    client_id: Optional[str] = None
     config: MLNotificationSettings.MQTTNotificationSettings
-    _image: Optional[Union[bytes, np.ndarray]] = None
+    _image: Optional[Union[str, bytes, np.ndarray]] = None
     sanitize: bool = False
     sanitize_str: Optional[str] = None
 
@@ -41,6 +41,18 @@ class MQTT(CoolDownBase):
         g = get_global_config()
         self.config = g.config.notifications.mqtt
         self.data_dir = (g.config.system.variable_data_path / self._data_dir_str).expanduser().resolve()
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.id_file = self.data_dir / "client_id"
+        if self.id_file.is_file():
+            self.client_id = self.id_file.read_text()
+        self.id_file.touch(exist_ok=True, mode=0o660)
+        if not self.client_id:
+            import uuid
+
+            self.client_id = uuid.uuid4().__str__()
+        self.id_file.write_text(self.client_id)
+        self.client_id = f"zm_ml-client_{self.client_id}"
+
         self.sanitize = g.config.logging.sanitize.enabled
         self.sanitize_str = g.config.logging.sanitize.replacement_str
 
@@ -59,8 +71,7 @@ class MQTT(CoolDownBase):
         logger.debug(f"{LP}on_publish: message_id: {mid = }")
 
     def _on_connect(self, client: paho_client.Client, userdata, flags, rc):
-        logger.debug(f"{LP}on_connect: CALLBACK called >>> {rc = }")
-        lp = f"{LP}connect: "
+        lp = f"{LP}on_connect: "
         if rc == 0:
             logger.debug(f"{lp} connected to broker with flags-> {flags}")
             self._connected = True
@@ -165,15 +176,15 @@ class MQTT(CoolDownBase):
                 else:
                     logger.warning(f"{LP}connect: TLS CA cert not found, cannot use TLS!")
 
-            else:
+            if not self.client:
                 # No tls_ca so we are not using TLS
                 self.client_id = f"{self.client_id}noTLS-{uuid}"
                 self.client = paho_client.Client(self.client_id)
                 logger.debug(
-                    f"{LP}connect: {self.client_id} -> "
+                    f"{LP}connect: ID: {self.client_id} -> "
                     f"{self.config.broker if not self.sanitize else self.sanitize_str}:{self.config.port} "
-                    f"{'user:{}'.format(self.config.user) if self.config.user else ''} "
-                    f"{'passwd:{}'.format(self.sanitize_str) if self.config.pass_ and self.config.user else 'passwd:<None>'}"
+                    f"{'user: {}'.format(self.config.user) if self.config.user else '<None>'} "
+                    f"{'passwd: {}'.format(self.config.pass_.get_secret_value() if not self.sanitize else self.sanitize_str) if self.config.pass_ and self.config.user else 'passwd: <None>'}"
                 )
 
             if self.config.user and self.config.pass_:
@@ -212,8 +223,9 @@ class MQTT(CoolDownBase):
 
     def publish(
         self,
-        topic: Optional[str] = None,
-        message: Optional[str] = None,
+        root_topic: Optional[str] = None,
+        fmt_str: Optional[str] = None,
+        results: Optional[Dict[str, Any]] = None,
         image: Optional[np.ndarray] = None,
     ):
         if not self._connected:
@@ -221,49 +233,69 @@ class MQTT(CoolDownBase):
                 f"{LP}publish: not connected to broker, please connect first, skipping publish..."
             )
             return
-        if not message or not image:
+        if not fmt_str or not results or image is None:
             logger.warning(f"{LP}publish: no message or image to publish, skipping...")
             return
-        if message:
-            if not topic:
-                if self.config.topic:
-                    topic = self.config.topic
-                else:
-                    topic = "zm_ml"
-            logger.debug(f"{LP}publish: topic: '{topic}' data: {message[:255]}")
-            try:
+
+        if not root_topic:
+            if self.config.root_topic:
+                root_topic = self.config.root_topic
+            else:
+                root_topic = "zm_ml"
+
+        if fmt_str or results:
+            if fmt_str:
+                topic = f"{root_topic}/result/formatted"
+                message = fmt_str
+                logger.debug(f"{LP}publish: topic: '{topic}' data: {message[:255]}")
                 self.client.publish(
-                    topic, message, qos=self.config.qos, retain=self.config.retain
+                    f"{topic}", message, qos=self.config.qos, retain=self.config.retain
                 )
-            except Exception as e:
-                logger.error(f"{LP}publish:err_msg-> {e}")
-        del message
+            if results:
+                import json
+
+                message = json.dumps(results)
+                topic = f"{root_topic}/result/json"
+                logger.debug(f"{LP}publish: topic: '{topic}' data: {message[:255]}")
+                self.client.publish(
+                    f"{topic}", message, qos=self.config.qos, retain=self.config.retain
+                )
+        message = None
         if image is not None:
+            def _get_size(message: Union[bytes, bytearray, str]) -> str:
+                size_str = ""
+                if hasattr(message, "__sizeof__"):
+                    size = message.__sizeof__() / 1024 / 1024
+                    if size < 1:
+                        size = message.__sizeof__() / 1024
+                        if size < 1:
+                            size_str = f"{message.__sizeof__():.2f} B"
+                        else:
+                            size_str = f"{size:.2f} KB"
+                    else:
+                        size_str = f"{size:.2f} MB"
+                return size_str
+
             message = self.encode_image(image)
             if not message:
                 logger.error(f"{LP}publish: could not encode image, skipping...")
                 return
-            if not topic:
-                if self.config.image.topic:
-                    topic = self.config.image.topic
-                else:
-                    topic = f"zm_ml/image/{self.config.image.format}"
-
+            topic = f"{root_topic}/image/{self.config.image.format}"
             if isinstance(message, bytes):
+
                 logger.debug(
-                    f"{LP}publish:IMG: sending -> topic: '{topic}'  data: '<bytes object>'  size: "
-                    f"{message.__sizeof__() / 1024 / 1024:.2f} MB",
+                    f"{LP}publish:IMG:bytes:: sending -> topic: '{topic}'  data: '<bytes object>'  size: "
+                    f"{_get_size(message)}",
                 )
             elif isinstance(message, str):
                 logger.debug(
-                    f"{LP}publish:IMG: sending -> topic: '{topic}' data: {message[:255]}"
+                    f"{LP}publish:IMG:base64:: sending -> topic: '{topic}' data: {message[:255]}"
                 )
             elif isinstance(message, bytearray):
                 logger.debug(
-                    f"{LP}publish:IMG: sending -> topic: '{topic}'  data: '<bytearray object>'  size: "
-                    f"{message.__sizeof__() / 1024 / 1024:.2f} MB",
+                    f"{LP}publish:IMG:bytearray:: sending -> topic: '{topic}'  data: '<bytearray object>'  size: "
+                    f"{_get_size(message)}",
                 )
-
             try:
                 self.client.publish(
                     topic, message, qos=self.config.qos, retain=self.config.retain

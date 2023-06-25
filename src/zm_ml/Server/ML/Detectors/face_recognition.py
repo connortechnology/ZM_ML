@@ -195,17 +195,16 @@ class FaceRecognitionLibDetector(FileLock):
             ## Create a global KNN object
             if not self.knn:
                 logger.debug(f"{LP} no trained faces found, skipping recognition")
+                if self.scaled:
+                    logger.debug(f"{LP} scaling bounding boxes as image was resized for detection")
+                    input_image = self.original_image
+                    self.face_locations = self.scale_by_factor(self.face_locations, self.x_factor, self.y_factor)
                 for loc in self.face_locations:
                     label = self.config.unknown_faces.label_as
-                    if self.scaled:
-                        logger.debug(f"{LP} scaling bounding boxes as image was resized for detection")
-                        input_image = self.original_image
-                        self.face_locations = self.scale_by_factor(self.face_locations, self.x_factor, self.y_factor)
-                    # image is the originally supplied image, not the resized one to crop if needed
                     if self.config.unknown_faces.enabled:
-                        self.save_unknown_faces(loc, input_image)
+                        self.save_unknown_face(loc, input_image)
                     b_boxes.append([loc[3], loc[0], loc[1], loc[2]])
-                    labels.append(f"face: {label}")
+                    labels.append(label)
 
             else:
                 logger.debug(f"{LP} comparing detected faces to trained (known) faces...")
@@ -226,18 +225,16 @@ class FaceRecognitionLibDetector(FileLock):
                     f"perf:{LP}{self.processor}: matching detected faces to known faces took "
                     f"{time.perf_counter() - comparing_timer:.5f} s"
                 )
-
+                if self.scaled:
+                    logger.debug(f"{LP} scaling bounding boxes as image was resized for detection")
+                    input_image = self.original_image
+                    self.face_locations = self.scale_by_factor(self.face_locations, self.x_factor, self.y_factor)
                 for pred, loc, rec in zip(prediction_labels, self.face_locations, are_matches):
                     label = pred if rec else self.config.unknown_faces.label_as
-                    if self.scaled:
-                        logger.debug(f"{LP} scaling bounding boxes as image was resized for detection")
-                        input_image = self.original_image
-                        self.face_locations = self.scale_by_factor(self.face_locations, self.x_factor, self.y_factor)
                     if not rec and self.config.unknown_faces.enabled:
-                        self.save_unknown_faces(loc, input_image)
-
+                        self.save_unknown_face(loc, input_image)
                     b_boxes.append([loc[3], loc[0], loc[1], loc[2]])
-                    labels.append(f"{label}")
+                    labels.append(label)
                 logger.debug(
                     f"perf:{LP} recognition sequence took {time.perf_counter() - comparing_timer:.5f} s"
                 )
@@ -255,6 +252,8 @@ class FaceRecognitionLibDetector(FileLock):
     @staticmethod
     def scale_by_factor(locations: list, x_factor: float, y_factor: float):
         scaled_face_locations = []
+        logger.debug(f"scaling bounding boxes by x_factor: {x_factor} and y_factor: {y_factor}")
+        logger.debug(f"original bounding boxes: {locations}")
         for loc in locations:
             a, b, c, d = loc
             a = round(a * y_factor)
@@ -262,6 +261,7 @@ class FaceRecognitionLibDetector(FileLock):
             c = round(c * y_factor)
             d = round(d * x_factor)
             scaled_face_locations.append((a, b, c, d))
+        logger.debug(f"scaled bounding boxes: {scaled_face_locations}")
         return scaled_face_locations
 
     def train(self, face_resize_width: Optional[int] = None):
@@ -373,11 +373,9 @@ class FaceRecognitionLibDetector(FileLock):
             f"perf:{LP} Recognition training took: {time.perf_counter() - t:.5f} s"
         )
 
-    def save_unknown_faces(self, loc: list, input_image: np.ndarray):
+    def save_unknown_face(self, loc: list, input_image: np.ndarray):
         save_dir = Path(self.config.unknown_faces.dir)
-        if save_dir.is_dir() and os.access(
-                save_dir.as_posix(), os.W_OK
-        ):
+        if save_dir.is_dir():
             time_str = time.strftime("%b%d-%Hh%Mm%Ss-")
             unf = (
                 f"{save_dir.as_posix()}/{time_str}{uuid.uuid4()}.jpg"

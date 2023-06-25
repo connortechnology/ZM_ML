@@ -231,6 +231,7 @@ class MLNotificationSettings(BaseModel):
         script: str = None
         cooldown: CoolDownSettings = Field(default_factory=CoolDownSettings)
         I_AM_AWARE_OF_THE_DANGER_OF_RUNNING_SHELL_SCRIPTS: str = "No I am not"
+        args: Optional[List[str]] = None
 
     class MQTTNotificationSettings(BaseModel):
 
@@ -240,8 +241,8 @@ class MLNotificationSettings(BaseModel):
 
         enabled: Optional[bool] = Field(False)
         keep_alive: Optional[int] = Field(60, ge=1)
-        topic: Optional[str] = Field("zm_ml")
-        broker: Optional[Union[IPvAnyAddress, AnyUrl]] = None
+        root_topic: Optional[str] = Field("zm_ml")
+        broker: Optional[str] = None
         port: Optional[int] = Field(1883)
         user: Optional[str] = None
         pass_: Optional[SecretStr] = Field(None, alias="pass")
@@ -256,9 +257,9 @@ class MLNotificationSettings(BaseModel):
         image: MQTTImageSettings = Field(default_factory=MQTTImageSettings)
 
         # validators
-        _validate_host_broker = validator("broker", allow_reuse=True, pre=True)(
-            validate_no_scheme_url
-        )
+        # _validate_host_broker = validator("broker", allow_reuse=True, pre=True)(
+        #     validate_no_scheme_url
+        # )
 
     mqtt: MQTTNotificationSettings = Field(default_factory=MQTTNotificationSettings)
     zmninja: ZMNinjaNotificationSettings = Field(

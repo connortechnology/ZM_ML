@@ -864,7 +864,7 @@ class ZMClient:
                             "form-data", name="image", filename=image_name
                         )
                         logger.debug(
-                            f"Sending image to ZM-ML API ['{route.name}' @ {url}]"
+                            f"Sending image to ZM-ML API ['{route.name}' @ {url if not g.config.logging.sanitize.enabled else g.config.logging.sanitize.replacement_str}]"
                         )
                         _perf = perf_counter()
                         r: aiohttp.ClientResponse
@@ -873,7 +873,7 @@ class ZMClient:
                             url,
                             data=mpwriter,
                             timeout=aiohttp.ClientTimeout(
-                                total=10
+                                total=10.0
                             )
                         ) as r:
                             status = r.status
@@ -1891,7 +1891,7 @@ class ZMClient:
 
         return yaml.safe_load(search_str)
 
-    def send_notifications(self, noti_img: np.ndarray, prediction_str: str):
+    def send_notifications(self, noti_img: np.ndarray, prediction_str: str, results: Optional = None):
         lp = f"notifications::"
         noti_cfg = g.config.notifications
         if any(
@@ -1961,16 +1961,29 @@ class ZMClient:
                     # gotify has no limits, so it can send a notification for each frame
                     goti.title = f"({g.eid}) {g.mon_name}->{g.event_cause}"
                     goti.send(prediction_str)
+
                 if noti_cfg.zmninja.enabled:
                     # zmninja uses FCM which has a limit of messages per month, so it needs a one time strategy
                     logger.debug(f"{lp} ZMNinja notification configured, sending")
                     # self.notifications.zmninja.send()
+
                 if noti_cfg.mqtt.enabled:
                     logger.debug(f"{lp} MQTT notification configured, sending")
-                    self.notifications.mqtt.publish(message=prediction_str, image=noti_img)
+                    mqtt_results = {
+                        'labels': results['labels'],
+                        'model_names': results['model_names'],
+                        'confidences': results['confidences'],
+                        'frame_id': results['frame_id'],
+                        'detection_types': results['detection_types'],
+                        'bounding_boxes': results['bounding_boxes'],
+                        'processor': results['processor']
+                    }
+                    self.notifications.mqtt.publish(fmt_str=prediction_str, results=mqtt_results, image=noti_img)
+
                 if noti_cfg.shell_script.enabled:
                     logger.debug(f"{lp} Shell Script notification configured, sending")
                     self.notifications.shell_script.send()
+
             for future in concurrent.futures.as_completed(futures):
                 try:
                     exc_ = future.exception(timeout=10)
@@ -2003,6 +2016,7 @@ class ZMClient:
         write_model = g.config.detection_settings.images.annotation.model.enabled
         write_processor = g.config.detection_settings.images.annotation.model.processor
         logger.debug(f"{lp} Annotating image")
+
         prepared_image: np.ndarray = draw_bounding_boxes(
             image,
             labels=labels,
@@ -2144,4 +2158,4 @@ class ZMClient:
                     f" -> {new_notes}"
                 )
         # send notifications
-        self.send_notifications(prepared_image, pred_out)
+        self.send_notifications(prepared_image, pred_out, results=matches)

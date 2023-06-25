@@ -164,10 +164,17 @@ notifications:
   #  NOTIFICATIONS ARE WIP
   ########################
   mqtt:
-    #-- use python mqtt client to publish a message to a broker
-    #-- Options to use no encryption or secure/insecure TLS/mTLS
-    #-- Default ports: for TCP: non-TLS: 1883  TLS:8883 .
+    #-- Use a MQTT client to publish messages to a broker
     enabled: no
+
+    #-- Allow you to set a custom MQTT topic name, formats for topics are: name/sub-name/sub-sub-name
+    #-- notice no leading or trailing '/'
+    #-- Default topic: zm_ml
+    #-- Be aware that the image and results are published under hard coded sub topics,
+    #-- this only apples to the root topic
+
+    root_topic: zm_ml
+
 
     #-- Send image to "<topic>/image/<format>" where topic is the mqtt topic and format is either bytes or base64
     #-- Home Assistant can ingest images from MQTT
@@ -175,10 +182,6 @@ notifications:
       enabled: no
       format: bytes # bytes or base64
 
-    #-- Allow you to set a custom MQTT topic name, formats for topics are: name/sub-name/sub-sub-name
-    #-- notice no leading or trailing '/'
-    #-- Default topic: zm_ml
-    #topic:  topic_here/sub_topic_here
 
     #-- if using TLS remember about host verification (tls_secure: no = no host verification but still encrypted)
     broker: ${MQTT_BROKER}
@@ -395,15 +398,15 @@ notifications:
     # You and you alone are solely responsible for the contents of the script you are running.
     I AM AWARE OF THE DANGER OF RUNNING SHELL SCRIPTS: NO I AM NOT
     script: ${DATA_DIR}/scripts/notify.sh
+
+    # A list of arguments to pass to the script, order matters
     args:
-      # A list of arguments to pass to the script, order matters
-      - mid
-      - eid
+      - mid  # Monitor ID
+      - eid  # Event ID
       - fmt_str  # "[166] :detected:person(54%-yolov7x[gpu])"
-      - event_url
+      - event_url # https://zm.example.com/zm/index.php?view=event&eid=166
       - event_system_path # /var/lib/zoneminder/events/1/etc
-      - results  # { }
-      - errors
+      - results  # [ {label: person, conf: 0.68, bbox: (x,y, w, h)},  ]
 
 label_groups:
   # These are 'groups' of labels that can be used for per monitor filtering
