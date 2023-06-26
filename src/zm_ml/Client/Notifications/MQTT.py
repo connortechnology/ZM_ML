@@ -223,12 +223,11 @@ class MQTT(CoolDownBase):
 
     def publish(
         self,
+        mid: int,
         root_topic: Optional[str] = None,
         fmt_str: Optional[str] = None,
         results: Optional[Dict[str, Any]] = None,
         image: Optional[np.ndarray] = None,
-        eid: Optional[int] = None,
-        mid: Optional[int] = None,
     ):
         if not self._connected:
             logger.error(
@@ -243,7 +242,7 @@ class MQTT(CoolDownBase):
             if self.config.root_topic:
                 root_topic = f"{self.config.root_topic}/mid/{mid}"
             else:
-                root_topic = "zm_ml"
+                root_topic = f"zm_ml/mid/{mid}"
 
         if fmt_str or results:
             if fmt_str:
