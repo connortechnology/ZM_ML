@@ -21,7 +21,8 @@ except ImportError:
     cv2 = None
     warnings.warn(
         "OpenCV is not installed. This is required for image processing. "
-        "Please install OpenCV to enable image processing.", ImportWarning
+        "Please install OpenCV to enable image processing.",
+        ImportWarning,
     )
 try:
     import numpy as np
@@ -31,7 +32,8 @@ try:
 except ImportError as e:
     warnings.warn(
         f"Some dependencies are not installed. Please install them to enable "
-        f"all features. {e}", ImportWarning
+        f"all features. {e}",
+        ImportWarning,
     )
 
 from .Libs.Media import APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine
@@ -872,9 +874,7 @@ class ZMClient:
                         async with session.post(
                             url,
                             data=mpwriter,
-                            timeout=aiohttp.ClientTimeout(
-                                total=10.0
-                            )
+                            timeout=aiohttp.ClientTimeout(total=10.0),
                         ) as r:
                             status = r.status
                             if status == 200:
@@ -1248,7 +1248,9 @@ class ZMClient:
                                 f"{lp} matched ReGex pattern [{pattern.pattern}] ALLOWING..."
                             )
                             if type_ == ModelType.FACE:
-                                logger.debug(f"DBG>> This model is typed as {type_} is not OBJECT, skipping non face filters like min_conf, total_max_area, etc.")
+                                logger.debug(
+                                    f"DBG>> This model is typed as {type_} is not OBJECT, skipping non face filters like min_conf, total_max_area, etc."
+                                )
                                 found_match = True
                                 break
 
@@ -1259,7 +1261,9 @@ class ZMClient:
                                     f"min_conf={type_filter.min_conf}, ALLOWING..."
                                 )
                                 if type_ == ModelType.ALPR:
-                                    logger.debug(f"DBG>> This model is typed as {type_} is not OBJECT, skipping non alpr filters like total_max_area, etc.")
+                                    logger.debug(
+                                        f"DBG>> This model is typed as {type_} is not OBJECT, skipping non alpr filters like total_max_area, etc."
+                                    )
                                     found_match = True
                                     break
                                 w, h = g.mon_width, g.mon_height
@@ -1275,7 +1279,6 @@ class ZMClient:
                                 min_object_area_of_zone: Optional[
                                     Union[float, int]
                                 ] = None
-
 
                                 # check total max area
                                 lp = f"{__lp}total max area::"
@@ -1891,7 +1894,9 @@ class ZMClient:
 
         return yaml.safe_load(search_str)
 
-    def send_notifications(self, noti_img: np.ndarray, prediction_str: str, results: Optional = None):
+    def send_notifications(
+        self, noti_img: np.ndarray, prediction_str: str, results: Optional = None
+    ):
         lp = f"notifications::"
         noti_cfg = g.config.notifications
         if any(
@@ -1970,15 +1975,22 @@ class ZMClient:
                 if noti_cfg.mqtt.enabled:
                     logger.debug(f"{lp} MQTT notification configured, sending")
                     mqtt_results = {
-                        'labels': results['labels'],
-                        'model_names': results['model_names'],
-                        'confidences': results['confidences'],
-                        'frame_id': results['frame_id'],
-                        'detection_types': results['detection_types'],
-                        'bounding_boxes': results['bounding_boxes'],
-                        'processor': results['processor']
+                        "labels": results["labels"],
+                        "model_names": results["model_names"],
+                        "confidences": results["confidences"],
+                        "frame_id": results["frame_id"],
+                        "detection_types": results["detection_types"],
+                        "bounding_boxes": results["bounding_boxes"],
+                        "processor": results["processor"],
+                        "mid": g.mid,
+                        "eid": g.eid,
                     }
-                    self.notifications.mqtt.publish(fmt_str=prediction_str, results=mqtt_results, image=noti_img)
+                    self.notifications.mqtt.publish(
+                        fmt_str=prediction_str,
+                        results=mqtt_results,
+                        image=noti_img,
+                        mid=g.mid,
+                    )
 
                 if noti_cfg.shell_script.enabled:
                     logger.debug(f"{lp} Shell Script notification configured, sending")

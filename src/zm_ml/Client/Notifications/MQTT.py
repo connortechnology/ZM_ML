@@ -227,6 +227,8 @@ class MQTT(CoolDownBase):
         fmt_str: Optional[str] = None,
         results: Optional[Dict[str, Any]] = None,
         image: Optional[np.ndarray] = None,
+        eid: Optional[int] = None,
+        mid: Optional[int] = None,
     ):
         if not self._connected:
             logger.error(
@@ -239,7 +241,7 @@ class MQTT(CoolDownBase):
 
         if not root_topic:
             if self.config.root_topic:
-                root_topic = self.config.root_topic
+                root_topic = f"{self.config.root_topic}/mid/{mid}"
             else:
                 root_topic = "zm_ml"
 
