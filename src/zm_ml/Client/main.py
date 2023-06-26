@@ -831,7 +831,7 @@ class ZMClient:
                 logger.warning(f"{lp} Image stream has been exhausted!")
                 break
 
-            if any([g.config.animation.gif.enabled, g.config.animation.mp4.enabled]):
+            if any([g.config.animation.gif, g.config.animation.mp4]):
                 if g.config.animation.low_memory:
                     # save image buffer to disk
                     _tmp = g.config.system.tmp_path / "animations"
