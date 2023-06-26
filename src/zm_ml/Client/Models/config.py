@@ -69,7 +69,7 @@ class ZoneMinderSettings(BaseSettings):
         api_url: Optional[AnyUrl] = Field(None, env="ML_CLIENT_ZONEMINDER_API_URL")
         user: Optional[SecretStr] = Field(None, env="ML_CLIENT_ZONEMINDER_API_USER")
         password: Optional[SecretStr] = Field(None, env="ML_CLIENT_ZONEMINDER_API_PASSWORD")
-        ssl_verify: bool = Field(True, env="ML_CLIENT_ZONEMINDER_API_SSL_VERIFY")
+        ssl_verify: Optional[bool] = Field(True, env="ML_CLIENT_ZONEMINDER_API_SSL_VERIFY")
         headers: Optional[Dict[str, str]] = Field(default_factory=dict, env="ML_CLIENT_ZONEMINDER_API_HEADERS")
 
         _validate_api_url = validator("api_url", allow_reuse=True, pre=True)(
@@ -77,9 +77,9 @@ class ZoneMinderSettings(BaseSettings):
         )
 
     portal_url: Optional[AnyUrl] = Field(None, env="ML_CLIENT_ZONEMINDER_PORTAL_URL")
-    misc: ZMMisc = Field(default_factory=ZMMisc)
-    api: ZMAPISettings = Field(default_factory=ZMAPISettings)
-    db: ZMDBSettings = Field(default_factory=ZMDBSettings)
+    misc: Optional[ZMMisc] = Field(default_factory=ZMMisc)
+    api: Optional[ZMAPISettings] = Field(default_factory=ZMAPISettings)
+    db: Optional[ZMDBSettings] = Field(default_factory=ZMDBSettings)
 
     _validate_portal_url = validator("portal_url", allow_reuse=True, pre=True)(
         validate_no_scheme_url
@@ -91,15 +91,18 @@ class ZoneMinderSettings(BaseSettings):
 
 class ServerRoute(BaseModel):
     name: str = Field(...)
-    enabled: bool = Field(True)
-    weight: int = Field(0)
+    enabled: Optional[bool] = Field(True)
+    weight: Optional[int] = Field(0)
     host: AnyUrl = Field(...)
-    port: int = Field(5000)
-    username: str = None
-    password: SecretStr = None
-    timeout: int = Field(90)
+    port: Optional[int] = Field(5000)
+    username: Optional[str] = None
+    password: Optional[SecretStr] = None
+    timeout: Optional[int] = Field(90)
 
     # validators
+    _validate_mlapi_host = validator("host", allow_reuse=True, pre=True)(
+        validate_replace_localhost
+    )
     _validate_host_portal = validator("host", allow_reuse=True, pre=True)(
         validate_no_scheme_url
     )
@@ -205,22 +208,22 @@ class MLNotificationSettings(BaseModel):
             cancel: str = Field("/cancel/{receipt}.json")
             emergency: str = Field("/emergency.json")
 
-        enabled: bool = Field(False)
+        enabled: Optional[bool] = Field(False)
         token: str = Field(...)
         key: str = Field(...)
-        animation: SendAnimations = Field(default_factory=SendAnimations)
-        sounds: Dict[str, str] = Field(default_factory=dict)
-        cooldown: CoolDownSettings = Field(default_factory=CoolDownSettings)
+        animation: Optional[SendAnimations] = Field(default_factory=SendAnimations)
+        sounds: Optional[Dict[str, str]] = Field(default_factory=dict)
+        cooldown: Optional[CoolDownSettings] = Field(default_factory=CoolDownSettings)
         device: Optional[str] = None
-        url_opts: NotificationZMURLOptions = Field(
+        url_opts: Optional[NotificationZMURLOptions] = Field(
             default_factory=NotificationZMURLOptions
         )
         base_url: Optional[AnyUrl] = Field("https://api.pushover.net/1")
-        endpoints: EndPoints = Field(default_factory=EndPoints)
-        clickable_link: bool = Field(False)
+        endpoints: Optional[EndPoints] = Field(default_factory=EndPoints)
+        clickable_link: Optional[bool] = Field(False)
         link_user: Optional[SecretStr] = None
         link_pass: Optional[SecretStr] = None
-        priority: int = Field(ge=-2, le=2, default=0)
+        priority: Optional[int] = Field(ge=-2, le=2, default=0)
 
         # validators
         _validate_host_portal = validator("base_url", allow_reuse=True, pre=True)(
@@ -228,8 +231,8 @@ class MLNotificationSettings(BaseModel):
         )
 
     class ShellScriptNotificationSettings(DefaultNotEnabled):
-        script: str = None
-        cooldown: CoolDownSettings = Field(default_factory=CoolDownSettings)
+        script: Optional[str] = None
+        cooldown: Optional[CoolDownSettings] = Field(default_factory=CoolDownSettings)
         I_AM_AWARE_OF_THE_DANGER_OF_RUNNING_SHELL_SCRIPTS: str = "No I am not"
         args: Optional[List[str]] = None
 
