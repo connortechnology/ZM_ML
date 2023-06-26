@@ -177,6 +177,7 @@ notifications:
     image:
       enabled: no
       format: bytes # bytes or base64
+      retain: yes # Retain the image message
 
 
     #-- if using TLS remember about host verification (tls_secure: no = no host verification but still encrypted)

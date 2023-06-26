@@ -100,7 +100,8 @@ class MQTT(CoolDownBase):
         _type = self.config.image.format
         if _type == "bytes":
             logger.debug(f"{LP}grab_image: converting to byte array")
-            image = bytearray(image.tobytes())
+            # image = bytearray(image.tobytes())
+            image = image.tobytes()
 
         elif _type == "base64":
             import base64
@@ -299,7 +300,7 @@ class MQTT(CoolDownBase):
                 )
             try:
                 self.client.publish(
-                    topic, message, qos=self.config.qos, retain=self.config.retain
+                    topic, message, qos=self.config.qos, retain=self.config.image.retain
                 )
             except Exception as e:
                 logger.error(f"{LP}publish:IMG: {e}")
