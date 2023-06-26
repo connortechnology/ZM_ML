@@ -90,6 +90,7 @@ class ZoneMinderSettings(BaseSettings):
 
 
 class ServerRoute(BaseModel):
+    # Make 1 attr required so empty entries will fail.
     name: str = Field(...)
     enabled: Optional[bool] = Field(True)
     weight: Optional[int] = Field(0)
@@ -97,13 +98,13 @@ class ServerRoute(BaseModel):
     port: Optional[int] = Field(5000)
     username: Optional[str] = None
     password: Optional[SecretStr] = None
-    timeout: Optional[int] = Field(90)
+    timeout: Optional[int] = Field(90, ge=0)
 
     # validators
-    _validate_mlapi_host = validator("host", allow_reuse=True, pre=True)(
+    _validate_mlapi_host_localhost = validator("host", allow_reuse=True, pre=True)(
         validate_replace_localhost
     )
-    _validate_host_portal = validator("host", allow_reuse=True, pre=True)(
+    _validate_mlapi_host_no_scheme = validator("host", allow_reuse=True, pre=True)(
         validate_no_scheme_url
     )
 
@@ -113,20 +114,14 @@ class ServerRoutes(BaseModel):
 
 
 class AnimationSettings(BaseModel):
-    class AnimationBaseSettings(BaseModel):
-        enabled: bool = Field(False)
-
-    class AnimationGIFSettings(AnimationBaseSettings):
-        fast: bool = Field(False)
-
-    gif: AnimationGIFSettings = Field(default_factory=AnimationGIFSettings)
-    mp4: AnimationBaseSettings = Field(default_factory=AnimationBaseSettings)
-    width: int = Field(640)
-
-    low_memory: bool = Field(False)
-    overwrite: bool = Field(False)
-    max_attempts: int = Field(ge=1, default=3)
-    attempt_delay: float = Field(
+    gif: bool = Field(False)
+    mp4: bool = Field(False)
+    width: Optional[int] = Field(640)
+    fast_gif: bool = Field(False)
+    low_memory: Optional[bool] = Field(False)
+    overwrite: Optional[bool] = Field(False)
+    max_attempts: Optional[int] = Field(ge=1, default=3)
+    attempt_delay: Optional[float] = Field(
         ge=0.1, default=2.9, description="Delay between attempts in seconds"
     )
 
@@ -239,8 +234,8 @@ class MLNotificationSettings(BaseModel):
     class MQTTNotificationSettings(BaseModel):
 
         class MQTTImageSettings(DefaultNotEnabled):
-            topic: str = Field("zm_ml/image")
             format: Optional[str] = Field("bytes", regex="^(bytes|base64)$")
+            retain: Optional[bool] = True
 
         enabled: Optional[bool] = Field(False)
         keep_alive: Optional[int] = Field(60, ge=1)
@@ -249,82 +244,82 @@ class MLNotificationSettings(BaseModel):
         port: Optional[int] = Field(1883)
         user: Optional[str] = None
         pass_: Optional[SecretStr] = Field(None, alias="pass")
-        tls_secure: bool = Field(True)
+        tls_secure: Optional[bool] = Field(True)
         tls_ca: Optional[Path] = None
         tls_cert: Optional[Path] = None
         tls_key: Optional[Path] = None
-        retain: bool = Field(False)
-        qos: int = Field(0)
-        cooldown: CoolDownSettings = Field(default_factory=CoolDownSettings)
+        retain: Optional[bool] = Field(False)
+        qos: Optional[int] = Field(0)
+        cooldown: Optional[CoolDownSettings] = Field(default_factory=CoolDownSettings)
 
-        image: MQTTImageSettings = Field(default_factory=MQTTImageSettings)
+        image: Optional[MQTTImageSettings] = Field(default_factory=MQTTImageSettings)
 
         # validators
         # _validate_host_broker = validator("broker", allow_reuse=True, pre=True)(
         #     validate_no_scheme_url
         # )
 
-    mqtt: MQTTNotificationSettings = Field(default_factory=MQTTNotificationSettings)
-    zmninja: ZMNinjaNotificationSettings = Field(
+    mqtt: Optional[MQTTNotificationSettings] = Field(default_factory=MQTTNotificationSettings)
+    zmninja: Optional[ZMNinjaNotificationSettings] = Field(
         default_factory=ZMNinjaNotificationSettings
     )
-    gotify: GotifyNotificationSettings = Field(
+    gotify: Optional[GotifyNotificationSettings] = Field(
         default_factory=GotifyNotificationSettings
     )
-    pushover: PushoverNotificationSettings = Field(
+    pushover: Optional[PushoverNotificationSettings] = Field(
         default_factory=PushoverNotificationSettings
     )
-    shell_script: ShellScriptNotificationSettings = Field(
+    shell_script: Optional[ShellScriptNotificationSettings] = Field(
         default_factory=ShellScriptNotificationSettings
     )
 
 
 class APIPullMethod(DefaultNotEnabled):
-    fps: int = Field(1)
-    attempts: int = Field(3)
-    delay: float = Field(1.0)
-    check_snapshots: bool = Field(True)
-    snapshot_frame_skip: int = Field(3)
-    max_frames: int = Field(0)
+    fps: Optional[int] = Field(1)
+    attempts: Optional[int] = Field(3)
+    delay: Optional[float] = Field(1.0)
+    check_snapshots: Optional[bool] = Field(True)
+    snapshot_frame_skip: Optional[int] = Field(3)
+    max_frames: Optional[int] = Field(0)
 
 
 class DetectionSettings(BaseModel):
     class ImageSettings(BaseModel):
         class PullMethod(BaseModel):
-            shm: bool = Field(False)
-            api: APIPullMethod = Field(default_factory=APIPullMethod)
-            zmu: bool = Field(False)
+            shm: Optional[bool] = Field(False)
+            api: Optional[APIPullMethod] = Field(default_factory=APIPullMethod)
+            zmu: Optional[bool] = Field(False)
 
         class Debug(DefaultNotEnabled):
             path: Optional[Path] = Field(Path("/tmp"))
 
         class Annotations(BaseModel):
             class Zones(DefaultNotEnabled):
-                color: Union[str, Tuple[int, int, int]] = Field((255, 0, 0))
-                thickness: int = Field(2)
+                color: Union[str, Tuple[int, int, int], None] = Field((255, 0, 0))
+                thickness: Optional[int] = Field(2)
 
             class Models(DefaultEnabled):
-                processor: bool = Field(False)
+                processor: Optional[bool] = Field(False)
 
-            zones: Zones = Field(default_factory=Zones)
-            model: Models = Field(default_factory=Models)
-            confidence: bool = Field(True)
+            zones: Optional[Zones] = Field(default_factory=Zones)
+            model: Optional[Models] = Field(default_factory=Models)
+            confidence: Optional[bool] = Field(True)
 
         class Training(DefaultEnabled):
             from tempfile import gettempdir
 
-            enabled: bool = Field(False)
-            path: Path = Field(Path(gettempdir()) / "src/training")
+            enabled: Optional[bool] = Field(False)
+            path: Optional[Path] = Field(Path(gettempdir()) / "src/training")
 
-        pull_method: PullMethod = Field(default_factory=PullMethod)
-        debug: Debug = Field(default_factory=Debug)
-        annotation: Annotations = Field(default_factory=Annotations)
-        training: Training = Field(default_factory=Training)
+        pull_method: Optional[PullMethod] = Field(default_factory=PullMethod)
+        debug: Optional[Debug] = Field(default_factory=Debug)
+        annotation: Optional[Annotations] = Field(default_factory=Annotations)
+        training: Optional[Training] = Field(default_factory=Training)
 
-    models: Dict = Field(default_factory=dict)
-    import_zones: bool = Field(False)
-    match_origin_zone: bool = Field(False)
-    images: ImageSettings = Field(default_factory=ImageSettings)
+    models: Optional[Dict] = Field(default_factory=dict)
+    import_zones: Optional[bool] = Field(False)
+    match_origin_zone: Optional[bool] = Field(False)
+    images: Optional[ImageSettings] = Field(default_factory=ImageSettings)
 
 
 class BaseObjectFilters(BaseModel):
@@ -373,8 +368,8 @@ class OverRideAlprFilters(BaseModel):
 class StaticObjects(DefaultEnabled):
     enabled: Optional[bool] = Field(False)
     difference: Optional[Union[float, int]] = Field(0.1)
-    labels: List[str] = Field(default_factory=list)
-    ignore_labels: List[str] = Field(default_factory=list)
+    labels: Optional[List][str] = Field(default_factory=list)
+    ignore_labels: Optional[List][str] = Field(default_factory=list)
 
     _validate_difference = validator("difference", allow_reuse=True)(
         validate_percentage_or_pixels
@@ -382,7 +377,7 @@ class StaticObjects(DefaultEnabled):
 
 
 class OverRideStaticObjects(BaseModel):
-    enabled: bool = None
+    enabled: Optional[bool] = None
     difference: Optional[Union[float, int]] = None
     labels: Optional[List[str]] = None
     ignore_labels: Optional[List[str]] = None
@@ -393,15 +388,15 @@ class OverRideStaticObjects(BaseModel):
 
 
 class MatchFilters(BaseModel):
-    object: ObjectFilters = Field(default_factory=ObjectFilters)
-    face: FaceFilters = Field(default_factory=FaceFilters)
-    alpr: AlprFilters = Field(default_factory=AlprFilters)
+    object: Optional[ObjectFilters] = Field(default_factory=ObjectFilters)
+    face: Optional[FaceFilters] = Field(default_factory=FaceFilters)
+    alpr: Optional[AlprFilters] = Field(default_factory=AlprFilters)
 
 
 class OverRideMatchFilters(BaseModel):
-    object: OverRideObjectFilters = Field(default_factory=OverRideObjectFilters)
-    face: OverRideFaceFilters = Field(default_factory=OverRideFaceFilters)
-    alpr: OverRideAlprFilters = Field(default_factory=OverRideAlprFilters)
+    object: Optional[OverRideObjectFilters] = Field(default_factory=OverRideObjectFilters)
+    face: Optional[OverRideFaceFilters] = Field(default_factory=OverRideFaceFilters)
+    alpr: Optional[OverRideAlprFilters] = Field(default_factory=OverRideAlprFilters)
 
 
 class MatchStrategy(str, Enum):
@@ -420,13 +415,13 @@ class MatchingSettings(BaseModel):
 
 class MonitorZones(BaseModel):
     enabled: bool = Field(True)
-    points: List[Tuple[int, int]] = None
-    resolution: Optional[Tuple[int, int]] = None
+    points: List[Tuple[int, int], None] = None
+    resolution: Optional[Tuple[int, int], None] = None
     object_confirm: Optional[bool] = None
-    static_objects: Union[OverRideStaticObjects, StaticObjects] = Field(
+    static_objects: Union[OverRideStaticObjects, StaticObjects, None] = Field(
         default_factory=OverRideStaticObjects
     )
-    filters: Union[MatchFilters, OverRideMatchFilters] = Field(
+    filters: Union[MatchFilters, OverRideMatchFilters, None] = Field(
         default_factory=OverRideMatchFilters
     )
     __validate_resolution = validator("resolution", pre=True, allow_reuse=True)(
@@ -453,17 +448,16 @@ class ConfigFileModel(BaseModel):
     config_path: Path = Field(Path("/etc/zm"))
     system: SystemSettings = Field(default_factory=SystemSettings)
     zoneminder: ZoneMinderSettings = Field(default_factory=ZoneMinderSettings)
-    db: ZMDBSettings = Field(default_factory=ZMDBSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     mlapi: ServerRoutes = Field(default_factory=ServerRoutes)
     animation: AnimationSettings = Field(default_factory=AnimationSettings)
     notifications: MLNotificationSettings = Field(
         default_factory=MLNotificationSettings
     )
-    label_groups: Dict[str, List[str]] = Field(default_factory=dict)
+    label_groups: Optional[Dict[str, List[str]]] = Field(default_factory=dict)
     detection_settings: DetectionSettings = Field(default_factory=DetectionSettings)
     matching: MatchingSettings = Field(default_factory=MatchingSettings)
-    monitors: Dict[int, MonitorsSettings] = Field(default_factory=dict)
+    monitors: Optional[Dict[int, MonitorsSettings]] = Field(default_factory=dict)
 
     _validate_config_path = validator(
         "config_path", allow_reuse=True, always=True, pre=True
@@ -492,8 +486,6 @@ class ClientEnvVars(BaseSettings):
         "client_conf_file", allow_reuse=True, pre=True, always=True, check_fields=False
     )(_validate_file)
     _validate_zm_conf_dir = validator(
-        "zm_conf_dir", allow_reuse=True, pre=True, always=True
+        "zm_conf_dir", "ml_conf_dir", allow_reuse=True, pre=True, always=True
     )(_validate_dir)
-    _validate_ml_conf_dir = validator(
-        "ml_conf_dir", allow_reuse=True, pre=True, always=True
-    )(_validate_dir)
+

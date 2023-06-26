@@ -136,6 +136,10 @@ mlapi:
 # I think zmninja notifications may work and may play .gif files on android
 ########################
 animations:
+  mp4: no
+  gif: no
+  # Make a 'sped-up' version of the gif (makes the gif show more of an event)
+  fast_gif: yes
   # If you are on a low memory system, write frame buffer to disk instead of holding it in memory
   # Slower but takes less memory.
   low_memory: no
@@ -149,14 +153,6 @@ animations:
   # set attempts andd elays between attempts at grabbing frames.
   max_attempts: 3
   attempt_delay: 3
-
-  gif:
-    enabled: no
-    # Make a 'sped-up' version of the animation (makes the gif show more of an event)
-    fast: true
-
-  mp4:
-    enabled: no
 
 
 notifications:
