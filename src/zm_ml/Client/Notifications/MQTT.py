@@ -40,7 +40,11 @@ class MQTT(CoolDownBase):
         global g
         g = get_global_config()
         self.config = g.config.notifications.mqtt
-        self.data_dir = (g.config.system.variable_data_path / self._data_dir_str).expanduser().resolve()
+        self.data_dir = (
+            (g.config.system.variable_data_path / self._data_dir_str)
+            .expanduser()
+            .resolve()
+        )
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.id_file = self.data_dir / "client_id"
         if self.id_file.is_file():
@@ -95,21 +99,30 @@ class MQTT(CoolDownBase):
 
     def encode_image(self, image: np.ndarray):
         """Prepares an image to be published, tested on jpg and gif so far. Give it an image and
-         it then converts it to a byte array or base64 string depending on the config.image.format setting
+        it then converts it to a byte array or base64 string depending on the config.image.format setting
         """
+        import cv2
+
+        lp = f"{LP}encode_image:"
         _type = self.config.image.format
-        if _type == "bytes":
-            logger.debug(f"{LP}grab_image: converting to byte array")
-            # image = bytearray(image.tobytes())
-            image = image.tobytes()
-
-        elif _type == "base64":
-            import base64
-
-            logger.debug(f"{LP}grab_image: converting to BASE64")
-            image = base64.b64encode(image.tobytes()).decode("utf-8")
+        if not _type:
+            _type = "bytes"
+        if _type not in ["bytes", "base64"]:
+            logger.warning(f"{lp} invalid image format: {_type}")
         else:
-            raise ValueError(f"{LP}grab_image: Unknown image format: '{_type}'")
+            succ, jpg = cv2.imencode(".jpeg", image)
+            if not succ:
+                logger.warning(f"{lp} failed to encode image to jpeg")
+            else:
+                if _type == "bytes":
+                    logger.debug(f"{lp} encoding image using bytes")
+                    image = jpg.tobytes()
+                else:
+                    import base64
+
+                    logger.debug(f"{lp} encoding image using base64")
+                    image = base64.b64encode(jpg.tobytes())
+                del jpg
         return image
 
     def connect(self):
@@ -132,17 +145,27 @@ class MQTT(CoolDownBase):
             # First check if there is a CA cert, if there is then we are using TLS
             if ca:
                 if ca.is_file():
-                    logger.debug(f"{LP}connect: TLS CA cert found, checking mTLS cert and key")
+                    logger.debug(
+                        f"{LP}connect: TLS CA cert found, checking mTLS cert and key"
+                    )
                     if tls_cert and tls_key:
                         if tls_cert.is_file() and tls_key.is_file():
-                            logger.debug(f"{LP}connect: TLS cert and key found, assuming mTLS")
+                            logger.debug(
+                                f"{LP}connect: TLS cert and key found, assuming mTLS"
+                            )
                             # mTLS cert and key are both present
                             self.client_id = f"{self.client_id}mTLS-{uuid}"
                             self.client = paho_client.Client(self.client_id)
                             self.client.tls_set(
-                                ca_certs=self.config.tls_ca.expanduser().resolve().as_posix(),
-                                certfile=self.config.tls_cert.expanduser().resolve().as_posix(),
-                                keyfile=self.config.tls_key.expanduser().resolve().as_posix(),
+                                ca_certs=self.config.tls_ca.expanduser()
+                                .resolve()
+                                .as_posix(),
+                                certfile=self.config.tls_cert.expanduser()
+                                .resolve()
+                                .as_posix(),
+                                keyfile=self.config.tls_key.expanduser()
+                                .resolve()
+                                .as_posix(),
                                 cert_reqs=self.ssl_cert,
                                 # tls_version=ssl.PROTOCOL_TLSv1_2
                             )
@@ -155,14 +178,22 @@ class MQTT(CoolDownBase):
                                 f"'{self.config.tls_ca}' tls_client_key: '{self.config.tls_key}' tls_client_cert: '{self.config.tls_cert}'"
                             )
                         elif not tls_key.is_file():
-                            logger.warning(f"{LP}connect: TLS key not found, cannot use mTLS!")
+                            logger.warning(
+                                f"{LP}connect: TLS key not found, cannot use mTLS!"
+                            )
                         elif not tls_cert.is_file():
-                            logger.warning(f"{LP}connect: TLS cert not found, cannot use mTLS!")
+                            logger.warning(
+                                f"{LP}connect: TLS cert not found, cannot use mTLS!"
+                            )
                     elif tls_cert and not tls_key:
-                        logger.warning(f"{LP}connect: TLS cert SUPPLIED but not key, cannot use mTLS!")
+                        logger.warning(
+                            f"{LP}connect: TLS cert SUPPLIED but not key, cannot use mTLS!"
+                        )
 
                     elif not tls_cert and tls_key:
-                        logger.warning(f"{LP}connect: TLS key SUPPLIED but not cert, cannot use mTLS!")
+                        logger.warning(
+                            f"{LP}connect: TLS key SUPPLIED but not cert, cannot use mTLS!"
+                        )
                     else:
                         self.client_id = f"{self.client_id}TLS-{uuid}"
                         self.client = paho_client.Client(self.client_id)
@@ -175,7 +206,9 @@ class MQTT(CoolDownBase):
                             f"({'TLS Secure' if self.config.tls_secure else 'TLS Insecure'}) -> tls_ca: {self.config.tls_ca}"
                         )
                 else:
-                    logger.warning(f"{LP}connect: TLS CA cert not found, cannot use TLS!")
+                    logger.warning(
+                        f"{LP}connect: TLS CA cert not found, cannot use TLS!"
+                    )
 
             if not self.client:
                 # No tls_ca so we are not using TLS
@@ -208,7 +241,9 @@ class MQTT(CoolDownBase):
                 f"{LP}connect: STRANGE ERROR -> there is no active mqtt object instantiated?! Exiting mqtt routine"
             )
             return
-        logger.debug(f"{LP}connect: connecting to broker (timeout: {self.conn_timeout})")
+        logger.debug(
+            f"{LP}connect: connecting to broker (timeout: {self.conn_timeout})"
+        )
         start = perf_counter()
         while not self._connected:
             if (perf_counter() - start) >= self.conn_timeout:
@@ -263,47 +298,52 @@ class MQTT(CoolDownBase):
                     f"{topic}", message, qos=self.config.qos, retain=self.config.retain
                 )
         message = None
-        if image is not None:
-            def _get_size(message: Union[bytes, bytearray, str]) -> str:
-                size_str = ""
-                if hasattr(message, "__sizeof__"):
-                    size = message.__sizeof__() / 1024 / 1024
-                    if size < 1:
-                        size = message.__sizeof__() / 1024
+        if self.config.image.enabled:
+            if image is not None:
+
+                def _get_size(msg: Union[bytes, bytearray, str]) -> str:
+                    size_str = ""
+                    if hasattr(msg, "__sizeof__"):
+                        size = msg.__sizeof__() / 1024 / 1024
                         if size < 1:
-                            size_str = f"{message.__sizeof__():.2f} B"
+                            size = msg.__sizeof__() / 1024
+                            if size < 1:
+                                size_str = f"{msg.__sizeof__():.2f} B"
+                            else:
+                                size_str = f"{size:.2f} KB"
                         else:
-                            size_str = f"{size:.2f} KB"
+                            size_str = f"{size:.2f} MB"
+                    return size_str
+
+                message = self.encode_image(image)
+                size = _get_size(message)
+                if not message:
+                    logger.error(f"{LP}publish: could not encode image, skipping...")
+                    return
+
+                self.client.publish(
+                    f"{root_topic}/image/format",
+                    self.config.image.format,
+                    qos=self.config.qos,
+                    retain=self.config.retain,
+                )
+                topic = f"{root_topic}/image/data"
+                _msg = "N/A"
+                if isinstance(message, bytes):
+                    if self.config.image.format == "base64":
+                        _msg = f"'<base64 encoded jpeg>'"
+                        message = message.decode("utf-8")
                     else:
-                        size_str = f"{size:.2f} MB"
-                return size_str
-
-            message = self.encode_image(image)
-            if not message:
-                logger.error(f"{LP}publish: could not encode image, skipping...")
-                return
-            topic = f"{root_topic}/image/{self.config.image.format}"
-            if isinstance(message, bytes):
+                        _msg = f"'<bytes encoded jpeg>'"
 
                 logger.debug(
-                    f"{LP}publish:IMG:bytes:: sending -> topic: '{topic}'  data: '<bytes object>'  size: "
-                    f"{_get_size(message)}",
+                    f"{LP}publish:IMG:{self.config.image.format}:: sending -> topic: '{topic}' data: {_msg} size: {size}"
                 )
-            elif isinstance(message, str):
-                logger.debug(
-                    f"{LP}publish:IMG:base64:: sending -> topic: '{topic}' data: {message[:255]}"
-                )
-            elif isinstance(message, bytearray):
-                logger.debug(
-                    f"{LP}publish:IMG:bytearray:: sending -> topic: '{topic}'  data: '<bytearray object>'  size: "
-                    f"{_get_size(message)}",
-                )
-            try:
                 self.client.publish(
                     topic, message, qos=self.config.qos, retain=self.config.image.retain
                 )
-            except Exception as e:
-                logger.error(f"{LP}publish:IMG: {e}")
+        else:
+            logger.debug(f"{LP}publish: image not enabled, skipping...")
 
     def close(self):
         if not self._connected:

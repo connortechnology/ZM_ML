@@ -4,7 +4,7 @@ from typing import Dict, Optional
 
 from pydantic import BaseModel, Field, validator
 
-from .validators import validate_log_level, str2path
+from .validators import validate_log_level, str2path, validate_enabled, validate_not_enabled
 from ...Server.Models.DEFAULTS import *
 
 
@@ -16,9 +16,13 @@ class Testing(BaseModel):
 class DefaultEnabled(BaseModel):
     enabled: bool = Field(True)
 
+    _v = validator('enabled', pre=True, always=True)(validate_enabled)
+
 
 class DefaultNotEnabled(DefaultEnabled):
     enabled: bool = Field(False)
+
+    _v = validator('enabled', pre=True, always=True)(validate_not_enabled)
 
 
 class LoggingLevelBase(BaseModel):

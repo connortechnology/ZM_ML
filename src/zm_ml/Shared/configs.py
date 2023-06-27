@@ -91,6 +91,7 @@ class GlobalConfig(BaseModel):
     Environment: Optional[Union[ClientEnvVars]] = None
     imported_zones: list = Field(default_factory=list)
     random: Dict = Field(default_factory=dict)
+    static_objects: Dict = Field(default_factory=dict)
 
     class Config:
         arbitrary_types_allowed = True

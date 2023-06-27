@@ -18,6 +18,15 @@ elif SERVER_LOGGER_NAME in loggers:
 else:
     logger = logging.getLogger(CLIENT_LOGGER_NAME)
 
+def validate_not_enabled(v, **kwargs):
+    if v is None:
+        v = False
+    return v
+
+def validate_enabled(v, **kwargs):
+    if v is None:
+        v = True
+    return v
 
 def validate_replace_localhost(
     v,
@@ -107,7 +116,7 @@ def str2path(v: Union[str, Path, None], **kwargs):
     return v
 
 
-def _validate_dir(v, field=None, values=None, config=None):
+def validate_dir(v, field=None, values=None, config=None):
     if v:
         v = str2path(v, field=field, values=values, config=config)
         assert v.exists(), f"Path [{v}] does not exist"
@@ -115,7 +124,7 @@ def _validate_dir(v, field=None, values=None, config=None):
     return v
 
 
-def _validate_file(v, field=None, values=None, config=None):
+def validate_file(v, field=None, values=None, config=None):
     if v:
         v = str2path(v, field=field, values=values, config=config)
         assert v.exists(), f"Path [{v}] does not exist"

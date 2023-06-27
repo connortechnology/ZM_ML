@@ -171,7 +171,7 @@ class ZMDB:
                             xtra_ = f" (defaulting to '{set_to}' from ZM .conf files)"
 
                 if g and g.config:
-                    cfg_file_db = getattr(g.config.db, _attr)
+                    cfg_file_db = getattr(g.config.zoneminder.db, _attr)
                     if cfg_file_db:
                         # todo: what if we want it to be an empty string? or int(0)
                         # There is an entry in the config file, use it even if ENV or .conf files set it

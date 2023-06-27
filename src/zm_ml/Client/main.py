@@ -344,7 +344,23 @@ class StaticObjects(BaseModel):
         :param confs: list of confidence scores (Required for write)
         :param labels: list of labels (Required for write)
         """
-        lp: str = "static_objects::pickle::"
+        lp: str = f"static_objects:{'write' if write else 'read'}:"
+        _so_cause = "default"
+        _so = False
+        if g.config.matching.static_objects.enabled is not None:
+            _so = g.config.matching.static_objects.enabled
+            _so_caused = "global"
+        if g.mid in g.config.monitors:
+            if g.config.monitors[g.mid].static_objects.enabled is not None:
+                _so = g.config.monitors[g.mid].static_objects.enabled
+                _so_cause = f"monitor: {g.mid}"
+        if _so is False or _so is None:
+            logger.debug(f"{lp} static object matching is disabled by {_so_cause} config")
+            return None
+        elif _so is True:
+            logger.debug(f"{lp} static object matching is enabled by {_so_cause} config")
+            return None
+
         variable_data_path = g.config.system.variable_data_path
         filename = self.filename
         if not write:
@@ -376,12 +392,25 @@ class StaticObjects(BaseModel):
             else:
                 logger.warning(f"{lp} no history data file found for monitor '{g.mid}'")
         else:
+            # _past_match = (saved_label, saved_conf, saved_bbox)
+            propagations = g.static_objects.get("propagate")
+            _l = list(labels)
+            _c = list(confs)
+            _b = list(bboxs)
+            if propagations:
+                logger.debug(f"{lp} ADDING propagations: {propagations}")
+                for prop in propagations:
+                    _l.append(prop[0])
+                    _c.append(prop[1])
+                    _b.append(prop[2])
+            else:
+                logger.debug(f"{lp} NO propagations to add")
             try:
                 filename.touch(exist_ok=True, mode=0o640)
                 with filename.open("wb") as f:
-                    pickle.dump(labels, f)
-                    pickle.dump(confs, f)
-                    pickle.dump(bboxs, f)
+                    pickle.dump(_l, f)
+                    pickle.dump(_c, f)
+                    pickle.dump(_b, f)
                     logger.debug(
                         f"{lp} saved_event: {g.eid} RESULTS to file: '{filename}' ::: {labels}, {confs}, {bboxs}",
                     )
@@ -715,7 +744,7 @@ class ZMClient:
         self.static_objects.filename = (
             g.config.system.variable_data_path / f"static-objects_m{g.mid}.pkl"
         )
-        self.static_objects.pickle()
+
         # init Image Pipeline
         logger.debug(f"{lp} Initializing Image Pipeline...")
         img_pull_method = self.config.detection_settings.images.pull_method
@@ -731,10 +760,7 @@ class ZMClient:
             # self.image_pipeline = ZMUImagePipeLine()
 
         models: Optional[Dict] = None
-        # Fixme: Need to add support for monitors with no definition at all
-        ## there will always be a monitor object, but it may not have some of its attributes
-        ## Inherit from the global config object
-
+        self.static_objects.pickle()
         if g.mid in self.config.monitors:
             if self.config.monitors[g.mid].zones:
                 self.zones = self.config.monitors[g.mid].zones
@@ -1039,10 +1065,10 @@ class ZMClient:
             )
             await self.post_process(matched)
             matched.pop("frame_img")
-            logger.debug(f"Writing static_objects to disk")
             self.static_objects.pickle(
                 labels=matched_l, confs=matched_c, bboxs=matched_b, write=True
             )
+
             return matched
         return {}
 
@@ -1723,12 +1749,22 @@ class ZMClient:
                             elif isinstance(mda, int):
                                 max_diff_pixels = mda
                         if diff_area is not None and diff_area <= max_diff_pixels:
+                            # FIXME: if an object is removed, the PAST object it matched should be propagated to the next event
                             logger.debug(
                                 f"{lp} removing '{current_label}' as it seems to be approximately in the same spot"
                                 f" as it was detected last time based on '{mda}' -> Difference in pixels: {diff_area} "
                                 f"- Configured maximum difference in pixels: {max_diff_pixels}"
                             )
+                            _past_match = (saved_label, saved_conf, saved_bbox)
+                            propagations = g.static_objects.get("propagate")
+                            if propagations is None:
+                                propagations = []
+                            if propagations:
+                                if _past_match not in propagations:
+                                    propagations.append(_past_match)
+
                             return False
+
                             # if saved_bbox not in mpd_b:
                             #     logger.debug(
                             #         f"{lp} appending this saved object to the mpd "

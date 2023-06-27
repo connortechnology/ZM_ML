@@ -18,8 +18,10 @@ from .validators import validate_percentage_or_pixels, validate_resolution, vali
 from ...Shared.Models.validators import (
     validate_no_scheme_url,
     validate_replace_localhost,
-    _validate_file,
-    _validate_dir,
+    validate_file,
+    validate_dir,
+    validate_not_enabled,
+    validate_enabled
 )
 from ...Shared.Models.config import (
     Testing,
@@ -89,10 +91,9 @@ class ZoneMinderSettings(BaseSettings):
         extra = "allow"
 
 
-class ServerRoute(BaseModel):
+class ServerRoute(DefaultEnabled):
     # Make 1 attr required so empty entries will fail.
     name: str = Field(...)
-    enabled: Optional[bool] = Field(True)
     weight: Optional[int] = Field(0)
     host: AnyUrl = Field(...)
     port: Optional[int] = Field(5000)
@@ -127,15 +128,15 @@ class AnimationSettings(BaseModel):
 
 
 class NotificationZMURLOptions(BaseModel):
-    mode: str = Field("jpeg")
-    scale: int = Field(50)
-    max_fps: int = Field(15)
-    buffer: int = Field(1000)
-    replay: str = Field("single")
+    mode: Optional[str] = Field("jpeg")
+    scale: Optional[int] = Field(50)
+    max_fps: Optional[int] = Field(15)
+    buffer: Optional[int] = Field(1000)
+    replay: Optional[str] = Field("single")
 
 
 class CoolDownSettings(DefaultNotEnabled):
-    seconds: float = Field(
+    seconds: Optional[float] = Field(
         60.00, ge=0.0, description="Seconds to wait before sending another notification"
     )
 
@@ -147,39 +148,36 @@ class OverRideCoolDownSettings(CoolDownSettings):
 
 
 class MLNotificationSettings(BaseModel):
-    class ZMNinjaNotificationSettings(BaseModel):
+    class ZMNinjaNotificationSettings(DefaultEnabled):
         class ZMNinjaFCMSettings(BaseModel):
-            class FCMV1Settings(BaseModel):
-                enabled: bool = Field(True)
+            class FCMV1Settings(DefaultEnabled):
                 key: Optional[SecretStr] = None
                 url: Optional[AnyUrl] = None
 
-            v1: FCMV1Settings = Field(default_factory=FCMV1Settings)
-            token_file: Path = None
-            replace_messages: bool = Field(False)
-            date_fmt: str = Field("%I:%M %p, %d-%b")
-            android_priority: str = Field("high")
-            log_raw_message: bool = Field(False)
-            log_message_id: str = None
-            android_ttl: int = Field(0)
+            v1: Optional[FCMV1Settings] = Field(default_factory=FCMV1Settings)
+            token_file: Optional[Path] = None
+            replace_messages: Optional[bool] = Field(False)
+            date_fmt: Optional[str] = Field("%I:%M %p, %d-%b")
+            android_priority: Optional[str] = Field("high")
+            log_raw_message: Optional[bool] = Field(False)
+            log_message_id: Optional[str] = None
+            android_ttl: Optional[int] = Field(0)
 
-        enabled: bool = Field(True)
-        cooldown: CoolDownSettings = Field(default_factory=CoolDownSettings)
-        fcm: ZMNinjaFCMSettings = Field(default_factory=ZMNinjaFCMSettings)
+        cooldown: Optional[CoolDownSettings] = Field(default_factory=CoolDownSettings)
+        fcm: Optional[ZMNinjaFCMSettings] = Field(default_factory=ZMNinjaFCMSettings)
 
-    class GotifyNotificationSettings(BaseModel):
-        test_image: bool = Field(False)
-        enabled: bool = Field(False)
-        host: AnyUrl = None
+    class GotifyNotificationSettings(DefaultNotEnabled):
+        test_image: Optional[bool] = Field(False)
+        host: Optional[AnyUrl] = None
         token: Optional[str] = None
-        portal: AnyUrl = None
-        clickable_link: bool = Field(False)
+        portal: Optional[AnyUrl] = None
+        clickable_link: Optional[bool] = Field(False)
         link_user: Optional[SecretStr] = None
         link_pass: Optional[SecretStr] = None
         _push_auth: Optional[SecretStr] = None
-        cooldown: CoolDownSettings = Field(default_factory=CoolDownSettings)
+        cooldown: Optional[CoolDownSettings] = Field(default_factory=CoolDownSettings)
 
-        url_opts: NotificationZMURLOptions = Field(
+        url_opts: Optional[NotificationZMURLOptions] = Field(
             default_factory=NotificationZMURLOptions
         )
 
@@ -189,19 +187,18 @@ class MLNotificationSettings(BaseModel):
         )
 
     class PushoverNotificationSettings(BaseModel):
-        class SendAnimations(BaseModel):
-            enabled: bool = Field(False)
+        class SendAnimations(DefaultNotEnabled):
             token: Optional[str] = None
             key: Optional[str] = None
 
         class EndPoints(BaseModel):
-            messages: str = Field("/messages.json")
-            users: str = Field("/users/validate.json")
-            devices: str = Field("/devices.json")
-            sounds: str = Field("/sounds.json")
-            receipt: str = Field("/receipts/{receipt}.json")
-            cancel: str = Field("/cancel/{receipt}.json")
-            emergency: str = Field("/emergency.json")
+            messages: Optional[str] = Field("/messages.json")
+            users: Optional[str] = Field("/users/validate.json")
+            devices: Optional[str] = Field("/devices.json")
+            sounds: Optional[str] = Field("/sounds.json")
+            receipt: Optional[str] = Field("/receipts/{receipt}.json")
+            cancel: Optional[str] = Field("/cancel/{receipt}.json")
+            emergency: Optional[str] = Field("/emergency.json")
 
         enabled: Optional[bool] = Field(False)
         token: str = Field(...)
@@ -228,16 +225,15 @@ class MLNotificationSettings(BaseModel):
     class ShellScriptNotificationSettings(DefaultNotEnabled):
         script: Optional[str] = None
         cooldown: Optional[CoolDownSettings] = Field(default_factory=CoolDownSettings)
-        I_AM_AWARE_OF_THE_DANGER_OF_RUNNING_SHELL_SCRIPTS: str = "No I am not"
+        I_AM_AWARE_OF_THE_DANGER_OF_RUNNING_SHELL_SCRIPTS: Optional[str] = "No I am not"
         args: Optional[List[str]] = None
 
-    class MQTTNotificationSettings(BaseModel):
+    class MQTTNotificationSettings(DefaultNotEnabled):
 
         class MQTTImageSettings(DefaultNotEnabled):
-            format: Optional[str] = Field("bytes", regex="^(bytes|base64)$")
+            format: Optional[str] = Field("base64", regex="^(bytes|base64)$")
             retain: Optional[bool] = True
 
-        enabled: Optional[bool] = Field(False)
         keep_alive: Optional[int] = Field(60, ge=1)
         root_topic: Optional[str] = Field("zm_ml")
         broker: Optional[str] = None
@@ -253,11 +249,6 @@ class MLNotificationSettings(BaseModel):
         cooldown: Optional[CoolDownSettings] = Field(default_factory=CoolDownSettings)
 
         image: Optional[MQTTImageSettings] = Field(default_factory=MQTTImageSettings)
-
-        # validators
-        # _validate_host_broker = validator("broker", allow_reuse=True, pre=True)(
-        #     validate_no_scheme_url
-        # )
 
     mqtt: Optional[MQTTNotificationSettings] = Field(default_factory=MQTTNotificationSettings)
     zmninja: Optional[ZMNinjaNotificationSettings] = Field(
@@ -289,6 +280,9 @@ class DetectionSettings(BaseModel):
             shm: Optional[bool] = Field(False)
             api: Optional[APIPullMethod] = Field(default_factory=APIPullMethod)
             zmu: Optional[bool] = Field(False)
+            zms: Optional[bool] = Field(False)
+
+            _validate_ = validator("shm", "zmu", "zms", allow_reuse=True, pre=True)(validate_not_enabled)
 
         class Debug(DefaultNotEnabled):
             path: Optional[Path] = Field(Path("/tmp"))
@@ -368,8 +362,8 @@ class OverRideAlprFilters(BaseModel):
 class StaticObjects(DefaultEnabled):
     enabled: Optional[bool] = Field(False)
     difference: Optional[Union[float, int]] = Field(0.1)
-    labels: Optional[List][str] = Field(default_factory=list)
-    ignore_labels: Optional[List][str] = Field(default_factory=list)
+    labels: Optional[List[str]] = Field(default_factory=list)
+    ignore_labels: Optional[List[str]] = Field(default_factory=list)
 
     _validate_difference = validator("difference", allow_reuse=True)(
         validate_percentage_or_pixels
@@ -415,8 +409,8 @@ class MatchingSettings(BaseModel):
 
 class MonitorZones(BaseModel):
     enabled: bool = Field(True)
-    points: List[Tuple[int, int], None] = None
-    resolution: Optional[Tuple[int, int], None] = None
+    points: Optional[List[Tuple[int, int]]] = None
+    resolution: Optional[Tuple[int, int]] = None
     object_confirm: Optional[bool] = None
     static_objects: Union[OverRideStaticObjects, StaticObjects, None] = Field(
         default_factory=OverRideStaticObjects
@@ -461,7 +455,7 @@ class ConfigFileModel(BaseModel):
 
     _validate_config_path = validator(
         "config_path", allow_reuse=True, always=True, pre=True
-    )(_validate_dir)
+    )(validate_dir)
 
 
 class ClientEnvVars(BaseSettings):
@@ -484,8 +478,8 @@ class ClientEnvVars(BaseSettings):
 
     _validate_client_conf_file = validator(
         "client_conf_file", allow_reuse=True, pre=True, always=True, check_fields=False
-    )(_validate_file)
+    )(validate_file)
     _validate_zm_conf_dir = validator(
         "zm_conf_dir", "ml_conf_dir", allow_reuse=True, pre=True, always=True
-    )(_validate_dir)
+    )(validate_dir)
 

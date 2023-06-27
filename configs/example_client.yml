@@ -172,11 +172,13 @@ notifications:
     root_topic: zm_ml
 
 
-    #-- Send image to "<topic>/image/<format>" where topic is the mqtt topic and format is either bytes or base64
+    #-- Send image to "<root_topic>/mid/<monitor ID>/image/<format>" where topic is the mqtt topic and format is either bytes or base64
     #-- Home Assistant can ingest images from MQTT
     image:
       enabled: no
-      format: bytes # bytes or base64
+      #-- Format of image to send, options are: bytes, base64
+      #-- base64 is more efficient HASS can use both formats for MQTT Camera
+      format: base64
       retain: yes # Retain the image message
 
 
