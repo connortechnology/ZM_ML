@@ -30,7 +30,7 @@ class ShellScriptNotification(CoolDownBase):
         self.data_dir = g.config.system.variable_data_path / self._data_dir_str
         super().__init__()
 
-    def run(self):
+    def run(self, script_args: Optional[List[str]] = None):
         lp: str = f"{LP}:run:"
         script_path = Path(self.config.script)
         if self.config.enabled:
@@ -42,6 +42,9 @@ class ShellScriptNotification(CoolDownBase):
             if not script_path.is_absolute():
                 script_path = script_path.expanduser().resolve()
             cmd_array = [script_path.as_posix()]
+            if script_args:
+                logger.debug(f"{lp} Adding script args: {script_args}")
+                cmd_array.extend(script_args)
             try:
                 x = subprocess.run(cmd_array, check=True, capture_output=True, text=True)
             except subprocess.CalledProcessError as e:
@@ -55,5 +58,5 @@ class ShellScriptNotification(CoolDownBase):
         else:
             logger.debug(f"Shell script notification disabled, skipping")
 
-    def send(self):
-        return self.run()
+    def send(self, script_args: Optional[List[str]] = None):
+        return self.run(script_args=script_args)
