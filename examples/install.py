@@ -1479,6 +1479,7 @@ if __name__ == "__main__":
         "ML_INSTALL_LOGGING_SYSLOG_ADDRESS": "/dev/log",
         "ML_INSTALL_TMP_DIR": tmp_dir.as_posix() if tmp_dir else None,
         "ML_INSTALL_MODEL_DIR": model_dir.as_posix() if model_dir else None,
+        "ML_INSTALL_IMAGE_DIR": (data_dir / "images").as_posix(),
         "ML_INSTALL_CLIENT_ZM_API": zm_api,
         "ML_INSTALL_CLIENT_ZM_USER": zm_user,
         "ML_INSTALL_CLIENT_ZM_PASS": zm_pass,
