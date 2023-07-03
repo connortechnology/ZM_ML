@@ -359,7 +359,6 @@ class StaticObjects(BaseModel):
             return None
         elif _so is True:
             logger.debug(f"{lp} static object matching is enabled by {_so_cause} config")
-            return None
 
         variable_data_path = g.config.system.variable_data_path
         filename = self.filename
@@ -936,13 +935,27 @@ class ZMClient:
                         )
                         filter_start = perf_counter()
                         res_loop = 0
+                        from zm_ml.Server.ML.Detectors.virelai import VirelAI
+
+                        _v = VirelAI()
+                        _v.logger(logger)
                         for result in results:
                             res_loop += 1
 
                             if result["success"] is True:
-                                filtered_result = await self.filter_detections(
-                                    result, image_name
-                                )
+
+                                if isinstance(result["bounding_box"], str):
+                                    logger.debug(f"The bounding box is a string: {result['bounding_box']}")
+                                    if result["bounding_box"] == 'virel':
+                                        logger.debug(f"bbox says its from virelAI, lets grab the annotated image from their API.")
+                                        image = _v.get_image(image)
+                                        # write to file
+                                        cv2.imwrite(f'/tmp/virel.jpg', image)
+                                    filtered_result = result
+                                elif isinstance(result["bounding_box"], list):
+                                    filtered_result = await self.filter_detections(
+                                        result, image_name
+                                    )
                                 # check strategy
                                 strategy: MatchStrategy = g.config.matching.strategy
                                 if filtered_result["success"] is True:
@@ -1001,9 +1014,12 @@ class ZMClient:
                                         matched_detection_types = result["type"]
                                         matched_b = final_bbox
                                         matched_processor = result["processor"]
-                                        matched_e = self.filtered_labels[
-                                            str(image_name)
-                                        ]
+                                        if str(image_name) in self.filtered_labels:
+                                            matched_e = self.filtered_labels[
+                                                str(image_name)
+                                            ]
+                                        else:
+                                            matched_e = []
                                         matched_frame_img = image.copy()
 
                                     final_detections[str(image_name)].append(
@@ -1063,6 +1079,7 @@ class ZMClient:
             logger.debug(
                 f"based on strategy of {strategy}, BEST MATCH IS {matched['labels']}"
             )
+
             await self.post_process(matched)
             matched.pop("frame_img")
             self.static_objects.pickle(
@@ -2030,7 +2047,32 @@ class ZMClient:
 
                 if noti_cfg.shell_script.enabled:
                     logger.debug(f"{lp} Shell Script notification configured, sending")
-                    self.notifications.shell_script.send()
+                    script_args = noti_cfg.shell_script.args
+                    if script_args is None:
+                        script_args = []
+                    _accepted_args = {
+                        "mid", "eid", "fmt_str", "event_url", "event_path", "results"
+                    }
+                    for _arg in script_args:
+                        if _arg == "mid":
+                            _arg = g.mid
+                        elif _arg == "eid":
+                            _arg = g.eid
+                        elif _arg == "fmt_str":
+                            _arg = prediction_str
+                        elif _arg == "event_url":
+                            _arg = (
+                                f"{g.api.portal_base_url}/cgi-bin/nph-zms?mode=jpeg&replay=single&"
+                                f"monitor={g.mid}&event={g.eid}"
+                            )
+                        elif _arg == "event_path":
+                            _arg = g.event_path
+                        elif _arg == "results":
+                            _arg = results
+                        else:
+                            script_args.remove(_arg)
+
+                    self.notifications.shell_script.send(script_args)
 
             for future in concurrent.futures.as_completed(futures):
                 try:
@@ -2048,10 +2090,17 @@ class ZMClient:
 
     async def post_process(self, matches: Dict[str, Any]) -> None:
         labels, scores, boxes = (
+
             matches["labels"],
             matches["confidences"],
             matches["bounding_boxes"],
         )
+        # check if bounding boxes contains any str
+        _skip = False
+        if any(isinstance(x, str) for x in boxes):
+            # there is a bbox that is a str instead of a tuple
+            _skip = True
+
         model, processor = matches["model_names"], matches["processor"]
         image: np.ndarray = matches["frame_img"]
         prepared_image = image.copy()
@@ -2063,19 +2112,44 @@ class ZMClient:
         write_conf = g.config.detection_settings.images.annotation.confidence
         write_model = g.config.detection_settings.images.annotation.model.enabled
         write_processor = g.config.detection_settings.images.annotation.model.processor
-        logger.debug(f"{lp} Annotating image")
 
-        prepared_image: np.ndarray = draw_bounding_boxes(
-            image,
-            labels=labels,
-            confidences=scores,
-            boxes=boxes,
-            model=model,
-            processor=processor,
-            write_conf=write_conf,
-            write_model=write_model,
-            write_processor=write_processor,
-        )
+        if _skip:
+            prepared_image = image
+            logger.debug(f"{LP} No need to annotate, grabbed annotated image from virel.ai")
+        else:
+            logger.debug(f"{lp} Annotating image")
+            prepared_image: np.ndarray = draw_bounding_boxes(
+                image,
+                labels=labels,
+                confidences=scores,
+                boxes=boxes,
+                model=model,
+                processor=processor,
+                write_conf=write_conf,
+                write_model=write_model,
+                write_processor=write_processor,
+            )
+            if g.config.detection_settings.images.debug.enabled:
+                from .Models.utils import draw_filtered_bboxes
+
+                logger.debug(f"{lp} Debug image configured, drawing filtered out bboxes")
+
+                debug_image = draw_filtered_bboxes(
+                    prepared_image, list(self.filtered_labels[image_name])
+                )
+                from datetime import datetime
+
+                img_write_success = cv2.imwrite(
+                    g.config.detection_settings.images.debug.path.joinpath(
+                        f"debug-img_{datetime.now()}"
+                    ).as_posix(),
+                    debug_image,
+                )
+                if img_write_success:
+                    logger.debug(f"{lp} Debug image written to disk.")
+                else:
+                    logger.warning(f"{lp} Debug image failed to write to disk.")
+                del debug_image
 
         if g.config.detection_settings.images.annotation.zones.enabled:
             from .Models.utils import draw_zones
@@ -2087,27 +2161,6 @@ class ZMClient:
                 g.config.detection_settings.images.annotation.zones.color,
                 g.config.detection_settings.images.annotation.zones.thickness,
             )
-        if g.config.detection_settings.images.debug.enabled:
-            from .Models.utils import draw_filtered_bboxes
-
-            logger.debug(f"{lp} Debug image configured, drawing filtered out bboxes")
-
-            debug_image = draw_filtered_bboxes(
-                prepared_image, list(self.filtered_labels[image_name])
-            )
-            from datetime import datetime
-
-            img_write_success = cv2.imwrite(
-                g.config.detection_settings.images.debug.path.joinpath(
-                    f"debug-img_{datetime.now()}"
-                ).as_posix(),
-                debug_image,
-            )
-            if img_write_success:
-                logger.debug(f"{lp} Debug image written to disk.")
-            else:
-                logger.warning(f"{lp} Debug image failed to write to disk.")
-            del debug_image
 
         jpg_file = g.event_path / "objdetect.jpg"
         object_file = g.event_path / "objects.json"
