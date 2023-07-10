@@ -10,7 +10,7 @@ dependencies = [
     # Both
     'PyYAML>=6.0',
     'requests>=2.28.1',
-    "pydantic>=1.10.2",
+    "pydantic~=1.10.2",
     'urllib3>=1.26.12',
     'numpy>=1.23.2',
     'pyjwt>=2.6.0',
