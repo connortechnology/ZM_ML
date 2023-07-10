@@ -35,7 +35,7 @@ from ...Shared.Models.Enums import (
     ALPRSubFrameWork,
 )
 from ...Shared.Models.config import Testing, LoggingSettings
-from ...Shared.Models.validators import validate_no_scheme_url, validate_replace_localhost
+from ...Shared.Models.validators import validate_no_scheme_url, validate_replace_localhost, str2path
 
 logger = logging.getLogger(SERVER_LOGGER_NAME)
 
@@ -302,7 +302,7 @@ class PlateRecognizerModelOptions(BaseModelOptions):
         try:
             json.dumps(v)
         except TypeError:
-            raise ValueError("Must be JSON serializable")
+            raise ValueError("Must be JSON serializable, check formatting...")
         return v
 
 
@@ -315,7 +315,9 @@ class CV2TFModelOptions(BaseModelOptions):
 
 
 class PyTorchModelOptions(BaseModelOptions):
-    pass
+    nms: Optional[float] = Field(
+        0.3, ge=0.0, le=1.0, description="Non-Maximum Suppression Threshold"
+    )
 
 
 class BaseModelConfig(BaseModel):
@@ -348,6 +350,7 @@ class BaseModelConfig(BaseModel):
         PlateRecognizerModelOptions,
         ALPRModelOptions,
         TPUModelOptions,
+        PyTorchModelOptions
     ] = Field(
         default_factory=BaseModelOptions,
         description="Default Configuration for the model",
@@ -578,7 +581,28 @@ class CV2TFModelConfig(BaseModelConfig):
 
 
 class PyTorchModelConfig(BaseModelConfig):
-    pass
+    input: Optional[Path] = None
+    classes: Optional[Path] = None
+
+    num_classes: Optional[int] = None
+    gpu_idx: Optional[int] = None
+    pretrained: Optional[str] = Field(None, regex=r"(accurate|fast|default|balanced|high_performance|low_performance)")
+
+    conf: Optional[float] = Field(None, ge=0, le=1)
+    nms: Optional[float] = Field(None, ge=0, le=1)
+
+    # this is not to be configured by the user. It is parsed classes from the labels file (or default if no file).
+    labels: List[str] = Field(
+        default=None,
+        description="model labels parsed into a list of strings",
+        repr=False,
+        exclude=True,
+    )
+
+    _validate_labels = validator("labels", always=True, allow_reuse=True)(
+        validate_model_labels
+    )
+    _validate = validator("input", "classes", pre=True, always=True, allow_reuse=True)(str2path)
 
 
 class ColorDetectSettings(BaseModel):
@@ -768,6 +792,10 @@ class Settings(BaseModel):
                         config = TPUModelConfig(**model)
                         config.detection_options = TPUModelOptions(**_options)
                         final_model = config
+                    elif _framework == ModelFrameWork.TORCH:
+                        config = PyTorchModelConfig(**model)
+                        config.detection_options = PyTorchModelOptions(**_options)
+                        final_model = config
                     else:
                         raise NotImplementedError(
                             f"Framework {_framework} not implemented"
@@ -888,6 +916,7 @@ class APIDetector:
             FaceRecognitionLibModelConfig,
             DeepFaceModelConfig,
             TPUModelConfig,
+            PyTorchModelConfig,
         ],
     ):
         from ..ML.Detectors.opencv.cv_yolo import CV2YOLODetector
@@ -896,12 +925,14 @@ class APIDetector:
         from ..ML.Detectors.alpr import PlateRecognizer, OpenAlprCmdLine, OpenAlprCloud
         from ..ML.Detectors.virelai import VirelAI
         from ..ML.Detectors.aws_rekognition import AWSRekognition
+        from ..ML.Detectors.pytorch.torch_base import TorchDetector
 
         self.config = model_config
         self.id = self.config.id
         self.options = model_config.detection_options
         self.model: Optional[
             Union[
+                TorchDetector,
                 TpuDetector,
                 CV2YOLODetector,
                 FaceRecognitionLibDetector,
@@ -1002,6 +1033,11 @@ class APIDetector:
 
             self.model = TpuDetector(self.config)
 
+        elif self.config.framework == ModelFrameWork.TORCH:
+            from ..ML.Detectors.pytorch.torch_base import TorchDetector
+
+            self.model = TorchDetector(self.config)
+
         else:
             logger.warning(
                 f"CANT CREATE DETECTOR -> Framework NOT IMPLEMENTED!!! {self.config.framework}"
@@ -1081,7 +1117,7 @@ class APIDetector:
                         )
                     else:
                         available = True
-            elif framework == ModelFrameWork.PYTORCH:
+            elif framework == ModelFrameWork.TORCH:
                 try:
                     import torch
                 except ImportError:

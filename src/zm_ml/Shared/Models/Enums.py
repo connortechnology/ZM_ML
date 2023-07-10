@@ -43,7 +43,7 @@ class ModelFrameWork(str, Enum):
     HTTP = "http"
     CORAL = "coral"
     TENSORFLOW = "tensorflow"
-    PYTORCH = "pytorch"
+    TORCH = "torch"
     DEEPFACE = "deepface"
     ALPR = "alpr"
     FACE_RECOGNITION = "face_recognition"

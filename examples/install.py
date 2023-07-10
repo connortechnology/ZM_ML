@@ -332,7 +332,6 @@ def parse_cli():
         default=None,
         type=str,
         help="ZoneMinder API URL, If this is ommited and --zm-portal is specified, the API URL will be derived from the portal URL (--zm-portal + '/api')",
-
     )
     parser.add_argument(
         "--zm-user",
@@ -370,7 +369,6 @@ def parse_cli():
         type=str,
         help="MLAPI host port [Optional]",
     )
-
 
     parser.add_argument(
         "--config-only",
@@ -1144,9 +1142,7 @@ def do_install(_inst_type: str):
             )
 
             if not testing:
-                Path("/usr/local/bin/zmmlapi").symlink_to(
-                    f"{data_dir}/bin/mlapi.py"
-                )
+                Path("/usr/local/bin/zmmlapi").symlink_to(f"{data_dir}/bin/mlapi.py")
             # SERVER INSTALL ENVS FOR envsubst CMD
             if "ML_INSTALL_SERVER_ADDRESS" not in _ENV:
                 _ENV["ML_INSTALL_SERVER_ADDRESS"] = "0.0.0.0"
@@ -1230,8 +1226,12 @@ def do_install(_inst_type: str):
                     logger.info(f"\n{ran.stdout}")
                 if ran.stderr:
                     logger.error(f"\n{ran.stderr}")
-                    logger.warning(f"If you get errors about --root-user-action or --report, upgrade pip > python3 -m pip install pip -U")
-                    logger.warning(f"If you get errors about cant uninstall distutils system package, use a virtual environment.")
+                    logger.warning(
+                        f"If you get errors about --root-user-action or --report, upgrade pip > python3 -m pip install pip -U"
+                    )
+                    logger.warning(
+                        f"If you get errors about cant uninstall distutils system package, use a virtual environment."
+                    )
 
 
 class Envsubst:
@@ -1344,13 +1344,14 @@ class Envsubst:
 def envsubst(string: str, env: Optional[Dict] = None, strict: bool = False):
     """Wraps Envsubst class for easier use.
 
-Args:
-    string (str): String to substitute
-    env (Optional[Dict], optional): Custom environment mapping. Defaults to None.
-    strict (bool, optional): If True, only use the custom environment mapping. Defaults to False.
+    Args:
+        string (str): String to substitute
+        env (Optional[Dict], optional): Custom environment mapping. Defaults to None.
+        strict (bool, optional): If True, only use the custom environment mapping. Defaults to False.
     """
     _ = Envsubst()
     return _.sub(string, env=env, strict=strict)
+
 
 def create_(_type: str, dest: Path):
     src = REPO_BASE / f"configs/example_{_type}.yml"
@@ -1436,7 +1437,9 @@ if __name__ == "__main__":
     zm_api = args.zm_api
     if zm_portal and not zm_api:
         args.zm_api = zm_api = f"{zm_portal}/api"
-        logger.info(f"ZM_PORTAL specified, but not ZM_API, appending '/api' to ZM_PORTAL -> {zm_api}")
+        logger.info(
+            f"ZM_PORTAL specified, but not ZM_API, appending '/api' to ZM_PORTAL -> {zm_api}"
+        )
     route_name = args.route_name
     route_host = args.route_host
     route_port = args.route_port

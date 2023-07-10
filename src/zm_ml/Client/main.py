@@ -826,7 +826,7 @@ class ZMClient:
                 logger.warning(
                     f"{_lp} Zone '{zone_name}' has a resolution of '{zone_resolution}'"
                     f" which is different from the monitor resolution of {mon_res}! "
-                    f"Attempting to adjust zone points to match monitor resolution..."
+                    f"Attempting to scale zone to match monitor resolution..."
                 )
                 logger.debug(f"{mon_res = } -- {zone_resolution = }")
                 xfact: float = mon_res[1] / zone_resolution[1] or 1.0
@@ -935,10 +935,7 @@ class ZMClient:
                         )
                         filter_start = perf_counter()
                         res_loop = 0
-                        from zm_ml.Server.ML.Detectors.virelai import VirelAI
 
-                        _v = VirelAI()
-                        _v.logger(logger)
                         for result in results:
                             res_loop += 1
 
@@ -947,8 +944,13 @@ class ZMClient:
                                 if isinstance(result["bounding_box"], str):
                                     logger.debug(f"The bounding box is a string: {result['bounding_box']}")
                                     if result["bounding_box"] == 'virel':
+                                        from zm_ml.Server.ML.Detectors.virelai import VirelAI
+
+                                        _v = VirelAI()
+                                        _v.logger(logger)
                                         logger.debug(f"bbox says its from virelAI, lets grab the annotated image from their API.")
                                         image = _v.get_image(image)
+                                        del _v
                                         # write to file
                                         cv2.imwrite(f'/tmp/virel.jpg', image)
                                     filtered_result = result
@@ -1081,7 +1083,8 @@ class ZMClient:
             )
 
             await self.post_process(matched)
-            matched.pop("frame_img")
+            if "frame_img" in matched:
+                matched.pop("frame_img")
             self.static_objects.pickle(
                 labels=matched_l, confs=matched_c, bboxs=matched_b, write=True
             )
@@ -2018,7 +2021,8 @@ class ZMClient:
                     goti = self.notifications.gotify
                     # gotify has no limits, so it can send a notification for each frame
                     goti.title = f"({g.eid}) {g.mon_name}->{g.event_cause}"
-                    goti.send(prediction_str)
+                    # goti.send(prediction_str)
+                    futures.append(executor.submit(goti.send, prediction_str))
 
                 if noti_cfg.zmninja.enabled:
                     # zmninja uses FCM which has a limit of messages per month, so it needs a one time strategy
@@ -2038,41 +2042,23 @@ class ZMClient:
                         "mid": g.mid,
                         "eid": g.eid,
                     }
-                    self.notifications.mqtt.publish(
-                        fmt_str=prediction_str,
-                        results=mqtt_results,
-                        image=noti_img,
-                        mid=g.mid,
-                    )
+                    # self.notifications.mqtt.publish(
+                    #     fmt_str=prediction_str,
+                    #     results=mqtt_results,
+                    #     image=noti_img,
+                    #     mid=g.mid,
+                    # )
+                    futures.append(executor.submit(self.notifications.mqtt.publish, fmt_str=prediction_str, results=mqtt_results, image=noti_img, mid=g.mid))
 
                 if noti_cfg.shell_script.enabled:
                     logger.debug(f"{lp} Shell Script notification configured, sending")
-                    script_args = noti_cfg.shell_script.args
-                    if script_args is None:
-                        script_args = []
-                    _accepted_args = {
-                        "mid", "eid", "fmt_str", "event_url", "event_path", "results"
-                    }
-                    for _arg in script_args:
-                        if _arg == "mid":
-                            _arg = g.mid
-                        elif _arg == "eid":
-                            _arg = g.eid
-                        elif _arg == "fmt_str":
-                            _arg = prediction_str
-                        elif _arg == "event_url":
-                            _arg = (
-                                f"{g.api.portal_base_url}/cgi-bin/nph-zms?mode=jpeg&replay=single&"
-                                f"monitor={g.mid}&event={g.eid}"
-                            )
-                        elif _arg == "event_path":
-                            _arg = g.event_path
-                        elif _arg == "results":
-                            _arg = results
-                        else:
-                            script_args.remove(_arg)
-
-                    self.notifications.shell_script.send(script_args)
+                    futures.append(executor.submit(self.notifications.shell_script.send, prediction_str, results))
+                    # try:
+                    #     self.notifications.shell_script.send(prediction_str, results)
+                    # except Exception as exc:
+                    #     logger.error(f"{lp} failed to send notification: {exc}")
+                    # else:
+                    #     logger.debug(f"{lp} Shell Script notification completed")
 
             for future in concurrent.futures.as_completed(futures):
                 try:
@@ -2081,7 +2067,7 @@ class ZMClient:
                         raise exc_
                 except Exception as exc:
                     logger.error(f"{lp} failed to send notification: {exc}")
-                    raise exc
+                    # raise exc
                 else:
                     future.result()
         else:

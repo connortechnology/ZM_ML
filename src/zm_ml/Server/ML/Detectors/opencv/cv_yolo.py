@@ -111,23 +111,22 @@ class CV2YOLODetector(CV2Base):
             )
             for (class_id, confidence, box) in zip(l, c, b):
                 confidence = float(confidence)
-                if confidence >= conf_threshold:
-                    x, y, _w, _h = (
-                        int(round(box[0])),
-                        int(round(box[1])),
-                        int(round(box[2])),
-                        int(round(box[3])),
-                    )
-                    b_boxes.append(
-                        [
-                            x,
-                            y,
-                            x + _w,
-                            y + _h,
-                        ]
-                    )
-                    labels.append(self.config.labels[class_id])
-                    confs.append(confidence)
+                x, y, _w, _h = (
+                    int(round(box[0])),
+                    int(round(box[1])),
+                    int(round(box[2])),
+                    int(round(box[3])),
+                )
+                b_boxes.append(
+                    [
+                        x,
+                        y,
+                        x + _w,
+                        y + _h,
+                    ]
+                )
+                labels.append(self.config.labels[class_id])
+                confs.append(confidence)
         except Exception as all_ex:
             err_msg = repr(all_ex)
             # cv2.error: OpenCV(4.2.0) /home/<Someone>/opencv/modules/dnn/src/cuda/execution.hpp:52: error: (-217:Gpu
