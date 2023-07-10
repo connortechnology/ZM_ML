@@ -476,7 +476,6 @@ def parse_cli():
         default="",
         dest="model_dir",
     )
-
     parser.add_argument(
         "--dir-temp",
         "--dir-tmp",
