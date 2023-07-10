@@ -83,8 +83,15 @@ class TorchDetector(FileLock):
     def load_model(self):
         import os
 
+        torch.hub.download_url_to_file
+
+
         if self.config.pretrained:
             logger.debug(f"{LP} 'pretrained' has a value, using pretrained weights...")
+            _pth = None
+            if os.environ.get("TORCH_HOME"):
+                logger.warning(f"{LP} 'TORCH_HOME' is already set, working around it...")
+                _pth = os.environ["TORCH_HOME"]
             os.environ["TORCH_HOME"] = self.cache_dir.as_posix()
             _pt = self.config.pretrained
             conf, nms = self.options.confidence, self.options.nms
@@ -124,8 +131,12 @@ class TorchDetector(FileLock):
             )
             self.model.eval()
             self.ok = True
+            if _pth:
+                logger.warning(f"{LP} resetting 'TORCH_HOME' to original value...")
+                os.environ["TORCH_HOME"] = _pth
         else:
             logger.warning(f"{LP} pretrained was not defined, user trained models are: Not Implemented yet....")
+
 
     def _convert_image(self, image: np.ndarray) -> torch.Tensor:
         # convert numpy array to torch tensor
