@@ -1,11 +1,12 @@
 import logging
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple, List, Any
 
+import numpy as np
 from pydantic import BaseModel, Field, validator
 
 from .validators import validate_log_level, str2path, validate_enabled, validate_not_enabled
-from ...Server.Models.DEFAULTS import *
+from .Enums import ModelProcessor, ModelType
 
 
 class Testing(BaseModel):
@@ -60,3 +61,24 @@ class LoggingSettings(LoggingLevelBase):
     integrate_zm: IntegrateZMLogging = Field(default_factory=IntegrateZMLogging)
     file: FileLogging = Field(default_factory=FileLogging)
     sanitize: SanitizeLogging = Field(default_factory=SanitizeLogging)
+
+
+class Result(BaseModel):
+    label: str
+    confidence: float
+    bounding_box: List[Tuple[int, int]]
+
+    def __str__(self):
+        return f"{self.label} ({self.confidence:.2f}) @ {self.bounding_box}"
+
+
+class DetectionResults(BaseModel):
+    success: bool = Field(...)
+    type: ModelType = Field(...)
+    processor: ModelProcessor = Field(...)
+    model_name: str = Field(...)
+    results: Optional[List[Result]] = Field(None)
+
+    image: Optional[np.ndarray] = Field(None, repr=False)
+    # Possibly pass back a URL or Path for the client to grab the image from (virel.ai)
+    extra_image_data: Optional[Dict[str, Any]] = Field(None, repr=False)

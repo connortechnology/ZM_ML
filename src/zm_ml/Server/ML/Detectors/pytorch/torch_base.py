@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from logging import getLogger
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union, List, Tuple, Any, Dict
 import warnings
 
 import numpy as np
@@ -36,6 +36,7 @@ else:
     )
 
 from .....Shared.Models.Enums import ModelProcessor
+from .....Shared.Models.config import DetectionResults, Result
 from ....Models.config import PyTorchModelConfig
 from ....Log import SERVER_LOGGER_NAME
 from ...file_locks import FileLock
@@ -171,27 +172,32 @@ class TorchDetector(FileLock):
         labels, confs, b_boxes = [], [], []
         oom: bool = False
         if not self.ok:
-            logger.warning(f"{LP} model not loaded, cannot detect")
+            logger.warning(f"{LP} Something is not 'ok' (self.ok = False), skipping inference...")
         else:
             image_tensor = self._convert_image(image)
+            # Tensor .to cannot be done in place, so we need to reassign
             image_tensor = image_tensor.to(self.device)
             preprocess = self.weights.transforms()
             batch = [preprocess(image_tensor)]
-            del image_tensor
+            del image_tensor, preprocess
             self.acquire_lock()
             detection_timer = time.perf_counter()
-
             try:
-                # todo: profile batching
                 prediction = self.model(batch)[0]
                 del batch
                 logger.debug(
                     f"perf:{LP}{self.processor}: '{self.name}' detection "
                     f"took: {time.perf_counter() - detection_timer:.5f} s"
                 )
+            except torch.cuda.OutOfMemoryError as oom_exc:
+                logger.error(f"{LP} CUDA Out of Memory Error while detecting => {oom_exc}")
+                oom = True
+            except RuntimeError as runtime_exc:
+                # torch docs say use RuntimeError for OOM catching
+                logger.error(f"{LP} Runtime Error while detecting => {runtime_exc}")
+                oom = True
             except Exception as detection_exc:
                 logger.error(f"{LP} Error while detecting => {detection_exc}")
-                oom = True
             else:
                 labels = [
                     self.weights.meta["categories"][i] for i in prediction["labels"]
@@ -214,20 +220,30 @@ class TorchDetector(FileLock):
                 # logger.debug(f"{LP} memory stats: {torch.cuda.memory_stats()}")
                 # logger.debug(f"{LP} memory summary: {torch.cuda.memory_summary(self.device)}")
 
+        # This needs to be called outside of the try loop to allow memory to be freed in OOM cases
         if oom:
             if self.processor == ModelProcessor.GPU:
-                # using torch.cuda clean up to prevent running out of memory after several runs
-                logger.debug(f"{LP} OOM detected.... clearing GPU memory")
+                logger.debug(f"{LP} OOM detected.... Attempting to clear GPU memory")
                 torch.cuda.empty_cache()
             else:
-                logger.warning(f"{LP} OOM detected.... cannot clear memory on CPU...")
+                logger.warning(f"{LP} OOM detected.... cannot clear memory on CPU, try a lower performance model")
 
-        return {
-            "success": True if labels else False,
-            "type": self.config.model_type,
-            "processor": self.processor,
-            "model_name": self.name,
-            "label": labels,
-            "confidence": confs,
-            "bounding_box": b_boxes,
-        }
+        result = DetectionResults(
+            success=True if labels else False,
+            type=self.config.model_type,
+            processor=self.processor,
+            model_name=self.name,
+            results=[Result(label=labels[i], confidence=confs[i], bounding_box=b_boxes[i]) for i in range(len(labels))],
+            image=image,
+        )
+        return result
+
+        # return {
+        #     "success": True if labels else False,
+        #     "type": self.config.model_type,
+        #     "processor": self.processor,
+        #     "model_name": self.name,
+        #     "label": labels,
+        #     "confidence": confs,
+        #     "bounding_box": b_boxes,
+        # }
