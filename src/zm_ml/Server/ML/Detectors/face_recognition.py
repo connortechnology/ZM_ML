@@ -17,6 +17,7 @@ from ..file_locks import FileLock
 from ...Models.config import FaceRecognitionLibModelDetectionOptions, BaseModelConfig, FaceRecognitionLibModelConfig, \
     FaceRecognitionLibModelTrainingOptions
 from ....Shared.Models.Enums import ModelProcessor, FaceRecognitionLibModelTypes
+from ....Shared.Models.config import DetectionResults, Result
 
 logger = getLogger(SERVER_LOGGER_NAME)
 
@@ -239,15 +240,15 @@ class FaceRecognitionLibDetector(FileLock):
                     f"perf:{LP} recognition sequence took {time.perf_counter() - comparing_timer:.5f} s"
                 )
         self.release_lock()
-        return {
-            "success": True if labels else False,
-            "type": self.config.model_type,
-            "processor": self.processor,
-            "model_name": self.name,
-            "label": labels,
-            "confidence": [1] * len(labels) if labels else [],
-            "bounding_box": b_boxes,
-        }
+        result = DetectionResults(
+            success=True if labels else False,
+            type=self.config.model_type,
+            processor=self.processor,
+            model_name=self.name,
+            results=[Result(label=labels[i], confidence=confs[i], bounding_box=b_boxes[i]) for i in range(len(labels))],
+        )
+
+        return result
 
     @staticmethod
     def scale_by_factor(locations: list, x_factor: float, y_factor: float):

@@ -15,9 +15,11 @@ except ImportError:
     boto3 = None
 
 from ...Models.config import RekognitionModelConfig
+from ....Shared.Models.config import DetectionResults, Result
+from zm_ml.Server.Log import SERVER_LOGGER_NAME
+
 
 LP: str = "AWS:Rekognition:"
-from zm_ml.Server.Log import SERVER_LOGGER_NAME
 logger = getLogger(SERVER_LOGGER_NAME)
 
 class AWSRekognition:
@@ -72,12 +74,22 @@ class AWSRekognition:
                 labels.append(label)
                 confs.append(conf)
 
-        return {
-            "success": True if labels else False,
-            "type": self.config.model_type,
-            "processor": self.processor,
-            "model_name": self.name,
-            "label": labels,
-            "confidence": confs,
-            "bounding_box": b_boxes,
-        }
+        result = DetectionResults(
+            success=True if labels else False,
+            type=self.config.model_type,
+            processor=self.processor,
+            model_name=self.name,
+            results=[Result(label=labels[i], confidence=confs[i], bounding_box=b_boxes[i]) for i in range(len(labels))],
+        )
+
+        return result
+
+        # return {
+        #     "success": True if labels else False,
+        #     "type": self.config.model_type,
+        #     "processor": self.processor,
+        #     "model_name": self.name,
+        #     "label": labels,
+        #     "confidence": confs,
+        #     "bounding_box": b_boxes,
+        # }

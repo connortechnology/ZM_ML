@@ -234,7 +234,7 @@ class TorchDetector(FileLock):
             processor=self.processor,
             model_name=self.name,
             results=[Result(label=labels[i], confidence=confs[i], bounding_box=b_boxes[i]) for i in range(len(labels))],
-            image=image,
+            # image=image,
         )
         return result
 

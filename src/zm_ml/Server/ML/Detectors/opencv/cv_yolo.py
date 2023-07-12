@@ -12,12 +12,13 @@ import numpy as np
 
 from .....Shared.Models.Enums import ModelProcessor
 from .cv_base import CV2Base
+from .....Shared.Models.config import DetectionResults, Result
+from ....Log import SERVER_LOGGER_NAME
 
 if TYPE_CHECKING:
     from ....Models.config import CV2YOLOModelConfig
 
 LP: str = "OpenCV:YOLO:"
-from ....Log import SERVER_LOGGER_NAME
 logger = getLogger(SERVER_LOGGER_NAME)
 # TODO: Choose what models to load and keep in memory and which to load and drop for memory constraints
 
@@ -154,6 +155,16 @@ class CV2YOLODetector(CV2Base):
             raise all_ex
         finally:
             self.release_lock()
+
+        result = DetectionResults(
+            success=True if labels else False,
+            type=self.config.model_type,
+            processor=self.processor,
+            model_name=self.name,
+            results=[Result(label=labels[i], confidence=confs[i], bounding_box=b_boxes[i]) for i in range(len(labels))],
+        )
+        return result
+
         return {
             "success": True if labels else False,
             "type": self.config.model_type,

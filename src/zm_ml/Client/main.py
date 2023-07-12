@@ -53,7 +53,7 @@ from .Models.config import (
     NotificationZMURLOptions,
     ClientEnvVars,
 )
-from ..Shared.Models.config import Testing
+from ..Shared.Models.config import Testing, DetectionResults, Result
 from ..Shared.configs import GlobalConfig
 from .Log import CLIENT_LOGGER_NAME, CLIENT_LOG_FORMAT
 
@@ -64,7 +64,6 @@ if TYPE_CHECKING:
     from .Notifications.zmNinja import ZMNinja
     from .Notifications.MQTT import MQTT
     from .Notifications.ShellScript import ShellScriptNotification
-    from ..Shared.Models.config import DetectionResults, Result
 
 _PR: str = "print():"
 __version__: str = "0.0.1"
@@ -875,7 +874,7 @@ class ZMClient:
                     f"{lp}animations:: Added image to frame buffer: {image_name} -- {type(image)=}"
                 )
             # results: Optional[List[Dict[str, Any]]] = None
-            from ..Shared.Models.config import DetectionResults, Result
+            from ..Shared.Models.config import DetectionResults
 
             results: Optional[List[DetectionResults]] = None
             reply: Optional[Dict[str, Any]] = None
@@ -931,26 +930,27 @@ class ZMClient:
                     if image_name not in self.filtered_labels:
                         self.filtered_labels[str(image_name)] = []
                     if reply:
-                        results = [DetectionResults(**reply[i]) for i in reply]
+                        results = []
+                        for _rep in reply:
+                            results.append(DetectionResults(**_rep))
                         image = await self.convert_to_cv2(image)
                         assert isinstance(
                             image, np.ndarray
                         ), "Image is not np.ndarray after converting from bytes"
                         image: np.ndarray
                         logger.debug(
-                            f"There are {len(results.results)} UNFILTERED Results for image '{image_name}' => {results}"
+                            f"There are {len(results)} UNFILTERED Results for image '{image_name}' => {results}"
                         )
                         filter_start = perf_counter()
                         res_loop = 0
+                        logger.debug(f"{type(results) = } -- {results = }")
 
                         result: DetectionResults
                         for result in results:
                             res_loop += 1
 
-                            # if result["success"] is True:
                             if result.success is True:
 
-                                # if isinstance(result["bounding_box"], str):
                                 if result.extra_image_data:
                                     logger.debug(f"There is extra image data in the result: {result.extra_image_data}")
                                     if 'virel' in result.extra_image_data:
@@ -971,13 +971,17 @@ class ZMClient:
                                 # check strategy
                                 strategy: MatchStrategy = g.config.matching.strategy
                                 if filtered_result.success is True:
+                                    logger.debug(f"DBG>>> {filtered_result = }")
 
                                     # fixme: continue on with implementing DetectionResults
 
-
-                                    final_label = filtered_result["label"]
-                                    final_confidence = filtered_result["confidence"]
-                                    final_bbox = filtered_result["bounding_box"]
+                                    final_label = []
+                                    final_confidence = []
+                                    final_bbox = []
+                                    for _res in filtered_result.results:
+                                        final_label.append(_res.label)
+                                        final_confidence.append(_res.confidence)
+                                        final_bbox.append(_res.bounding_box)
 
                                     if (
                                         (strategy == MatchStrategy.first)
@@ -1019,17 +1023,18 @@ class ZMClient:
                                         logger.debug(
                                             f"\n\nFOUND A BETTER MATCH [{strategy=}] THAN model: {matched_model_names}"
                                             f" image name: {matched_frame_id}: LABELS: {matched_l} with "
-                                            f" model: {result['model_name']} image name: {image_name} ||| "
+                                            f" model: {result.model_name} image name: {image_name} ||| "
                                             f"LABELS: {final_label}\n\n"
                                         )
-                                        # matched_poly = item['bbox2poly']
+
                                         matched_l = final_label
-                                        matched_model_names = result["model_name"]
+                                        matched_model_names = result.model_name
                                         matched_c = final_confidence
                                         matched_frame_id = image_name
-                                        matched_detection_types = result["type"]
+                                        matched_detection_types = result.type
                                         matched_b = final_bbox
-                                        matched_processor = result["processor"]
+                                        matched_processor = result.processor
+                                        # FIXME: Is filtered out objects really needed in the results?
                                         if str(image_name) in self.filtered_labels:
                                             matched_e = self.filtered_labels[
                                                 str(image_name)
@@ -1043,7 +1048,7 @@ class ZMClient:
                                     )
 
                                 logger.debug(
-                                    f"perf:: Filtering for {image_name}:{result['model_name']} took "
+                                    f"perf:: Filtering for {image_name}:{result.model_name} took "
                                     f"{perf_counter() - filter_start:.5f} seconds"
                                 )
 
@@ -1114,7 +1119,6 @@ class ZMClient:
         """Filter detections"""
         lp: str = "filter detections::"
 
-        labels, confidences, bboxes = [], [], []
         final_results = []
         filtered_results = await self._filter(result, image_name=image_name)
         if filtered_results:
@@ -1127,28 +1131,11 @@ class ZMClient:
                         f"DBG>>> {_fr} IS IN FINAL LIST... "
                         f"SKIPPING! [DONT WANT DUPLICATE] <<<DBG"
                     )
-        filtered_result = DetectionResults(
-            success=False if not final_results else True,
-            type=result.type,
-            processor=result.processor,
-            model_name=result.model_name,
-            label=labels,
-            confidence=confidences,
-            bounding_box=bboxes,
-        )
 
+        result.success = False if not final_results else True
+        result.results = final_results
 
-        # filtered_result = {
-        #     "success": False if not final_label else True,
-        #     "type": result["type"],
-        #     "processor": result["processor"],
-        #     "model_name": result["model_name"],
-        #     "label": final_label,
-        #     "confidence": final_confidence,
-        #     "bounding_box": final_bbox,
-        # }
-        logger.debug(f"DBG>>> FILTERED RESULT: {filtered_result} <<<DBG")
-        return filtered_result
+        return result
 
     @staticmethod
     def _bbox2points(bbox: List) -> list[tuple[tuple[Any, Any], tuple[Any, Any]]]:
@@ -1171,6 +1158,7 @@ class ZMClient:
     ) -> List[Result]:
         """Filter detections using 2 loops, first loop is filter by object label, second loop is to filter by zone."""
         from ..Server.Models.config import ModelType
+        from ..Shared.Models.config import Result
 
         zones = self.zones.copy()
         zone_filters = self.zone_filters
@@ -1205,9 +1193,9 @@ class ZMClient:
 
         #
         # Outer Loop
-
+        _result: Result
         for _result in result.results:
-            label, confidence, bbox = _result.label, _result.confidence, _result.bbox
+            label, confidence, bbox = _result.label, _result.confidence, _result.bounding_box
             i += 1
             _lp = f"_filter:{image_name}:'{model_name}'::{type_}::'{label}' {i}/{_lbl_tot}::"
 
@@ -1604,7 +1592,7 @@ class ZMClient:
 
             if found_match:
                 logger.debug(f"{_lp} '{label}' PASSED FILTERING")
-                ret_results.append(Result(label, confidence, bbox))
+                ret_results.append(Result(**{'label': label, 'confidence': confidence, 'bounding_box': bbox}))
 
                 if (strategy := g.config.matching.strategy) == MatchStrategy.first:
                     logger.debug(

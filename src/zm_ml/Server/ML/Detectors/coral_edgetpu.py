@@ -38,8 +38,10 @@ except ImportError:
 
 from ..file_locks import FileLock
 from ....Shared.Models.Enums import ModelType, ModelProcessor
-
 from zm_ml.Server.app import SERVER_LOGGER_NAME
+from ....Shared.Models.config import DetectionResults, Result
+
+
 if TYPE_CHECKING:
     from ...Models.config import TPUModelConfig, TPUModelOptions
 
@@ -195,12 +197,12 @@ class TpuDetector(FileLock):
         else:
             logger.warning(f"{LP} nothing returned from invoke()... ?")
 
-        return {
-            "success": True if labels else False,
-            "type": self.config.model_type,
-            "processor": self.processor,
-            "model_name": self.name,
-            "label": labels,
-            "confidence": confs,
-            "bounding_box": b_boxes,
-        }
+        result = DetectionResults(
+            success=True if labels else False,
+            type=self.config.model_type,
+            processor=self.processor,
+            model_name=self.name,
+            results=[Result(label=labels[i], confidence=confs[i], bounding_box=b_boxes[i]) for i in range(len(labels))],
+        )
+
+        return result

@@ -15,6 +15,8 @@ from ....Shared.Models.Enums import ModelProcessor, ModelType
 from ...Models.config import VirelAIModelConfig
 from ...Log import SERVER_LOGGER_NAME
 from ....Client.Log import CLIENT_LOGGER_NAME
+from ....Shared.Models.config import DetectionResults, Result
+
 LP: str = "Virel.ai:"
 
 logger = getLogger(SERVER_LOGGER_NAME)
@@ -138,13 +140,12 @@ class VirelAI:
             )
             b_boxes = "virel"
 
-        return {
-            "success": True if labels else False,
-            "type": ModelType.OBJECT,
-            "processor": self.processor,
-            "model_name": self.name,
-            "label": labels,
-            "confidence": confs,
-            # set to None to signal the image needs grabbing from virel.ai itself
-            "bounding_box": b_boxes,
-        }
+        result = DetectionResults(
+            success=True if labels else False,
+            type=self.config.model_type,
+            processor=self.processor,
+            model_name=self.name,
+            results=[Result(label=labels[i], confidence=confs[i], bounding_box=b_boxes[i]) for i in range(len(labels))],
+        )
+
+        return result
