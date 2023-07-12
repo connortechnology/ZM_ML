@@ -351,7 +351,7 @@ class StaticObjects(BaseModel):
             _so = g.config.matching.static_objects.enabled
             _so_caused = "global"
         if g.mid in g.config.monitors:
-            if g.config.monitors[g.mid].static_objects.enabled is not None:
+            if g.config.monitors[g.mid].static_objects is not None:
                 _so = g.config.monitors[g.mid].static_objects.enabled
                 _so_cause = f"monitor: {g.mid}"
         if _so is False or _so is None:
