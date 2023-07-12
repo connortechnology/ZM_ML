@@ -17,7 +17,7 @@ except ImportError:
 try:
     import pycoral
     from pycoral.adapters import common, detect
-    from pycoral.utils.edgetpu import make_interpreter
+    from pycoral.utils.edgetpu import make_interpreter, list_edge_tpus
 except ImportError:
     warnings.warn(
         "pycoral not installed, this is ok if you do not plan to use TPU as detection processor. "
@@ -28,6 +28,7 @@ except ImportError:
     common = None
     detect = None
 try:
+    import tflite_runtime
     from tflite_runtime.interpreter import Interpreter
 except ImportError:
     warnings.warn(
@@ -52,6 +53,18 @@ LP: str = "Coral:"
 class TpuDetector(FileLock):
     def __init__(self, model_config: TPUModelConfig):
         global LP
+
+        if pycoral is None:
+            logger.warning(f"{LP} pycoral is not installed, cannot use TPU detectors")
+            return
+        elif tflite_runtime is None:
+            logger.warning(f"{LP} tflite_runtime is not installed, cannot use TPU detectors")
+            return
+        # check if there is a tpu device
+        if not list_edge_tpus():
+            logger.warning(f"{LP} no TPU devices found, cannot use TPU detectors")
+            return
+
         # Model init params
         self.config: TPUModelConfig = model_config
         self.options: TPUModelOptions = self.config.detection_options
@@ -81,7 +94,6 @@ class TpuDetector(FileLock):
                         f"{LP} TPU error detected (replace cable with a short high quality one, dont allow "
                         f"TPU/cable to move around). Reset the USB port or reboot!"
                     )
-                    raise RuntimeError("TPU NO COMM")
         else:
             logger.debug(f"perf:{LP} loading took: {time.perf_counter() - t:.5f}s")
 
