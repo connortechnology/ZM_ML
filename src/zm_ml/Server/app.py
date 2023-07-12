@@ -43,9 +43,9 @@ if TYPE_CHECKING:
     from .Models.config import (
         GlobalConfig,
         Settings,
-        BaseModelConfig,
         APIDetector,
     )
+from .Models.config import BaseModelConfig
 
 __version__ = "0.0.1a"
 __version_type__ = "dev"
