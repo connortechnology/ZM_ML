@@ -47,7 +47,7 @@ if TYPE_CHECKING:
 
 logger = getLogger(SERVER_LOGGER_NAME)
 LP: str = "Torch:"
-OBJDET_WEIGHTS = Union[
+WEIGHTS_TYPES = Union[
     RetinaNet_ResNet50_FPN_V2_Weights, FasterRCNN_ResNet50_FPN_V2_Weights, FasterRCNN_MobileNet_V3_Large_FPN_Weights, FCOS_ResNet50_FPN_Weights
 ]
 g: GlobalConfig
@@ -55,7 +55,7 @@ g: GlobalConfig
 
 class TorchDetector(FileLock):
     name: str
-    weights: OBJDET_WEIGHTS
+    weights: WEIGHTS_TYPES
     device: torch.device
 
     def __init__(self, model_config: PyTorchModelConfig):
@@ -84,15 +84,11 @@ class TorchDetector(FileLock):
     def load_model(self):
         import os
 
-        torch.hub.download_url_to_file
-
-
         if self.config.pretrained:
             logger.debug(f"{LP} 'pretrained' has a value, using pretrained weights...")
-            _pth = None
-            if os.environ.get("TORCH_HOME"):
+            _pth = os.environ.get("TORCH_HOME", None)
+            if _pth:
                 logger.warning(f"{LP} 'TORCH_HOME' is already set, working around it...")
-                _pth = os.environ["TORCH_HOME"]
             os.environ["TORCH_HOME"] = self.cache_dir.as_posix()
             _pt = self.config.pretrained
             conf, nms = self.options.confidence, self.options.nms
@@ -114,7 +110,7 @@ class TorchDetector(FileLock):
                     pass
                 # SSDlite ?
                 elif _pt == "accurate":
-                    self.name = f"torch: fRCNN MN v2"
+                    self.name = f"torch: fRCNN MN v3"
                     self.weights = FasterRCNN_MobileNet_V3_Large_FPN_Weights.DEFAULT
                     self.model = fasterrcnn_mobilenet_v3_large_fpn(
                         weights=self.weights, box_score_thresh=conf, box_nms_thresh=nms

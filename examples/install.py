@@ -1122,9 +1122,9 @@ def do_install(_inst_type: str):
         "-m",
         "pip",
         "install",
-        "--root-user-action=ignore",
-        "--report",
-        "./pip_install_report.json",
+        # "--root-user-action=ignore",
+        # "--report",
+        # "./pip_install_report.json",
     ]
     if _inst_type != "secrets":
         install_host_dependencies(_inst_type)
