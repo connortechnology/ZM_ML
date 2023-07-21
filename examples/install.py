@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import platform
 import subprocess
+import tempfile
 import time
 from collections import namedtuple
 import logging
@@ -451,7 +452,7 @@ def parse_cli():
     parser.add_argument(
         "--dir-config",
         help=f"Directory where config files are held Default: {DEFAULT_CONFIG_DIR}",
-        default="./zmml/conf",
+        default="./zm_ml/conf",
         type=Path,
         dest="config_dir",
     )
@@ -459,7 +460,7 @@ def parse_cli():
         "--dir-data",
         help=f"Directory where variable data is held Default: {DEFAULT_DATA_DIR}",
         dest="data_dir",
-        default="./zmml/data",
+        default="./zm_ml/data",
         type=Path,
     )
     parser.add_argument(
@@ -469,18 +470,19 @@ def parse_cli():
         default="",
         dest="model_dir",
     )
+
     parser.add_argument(
         "--dir-temp",
         "--dir-tmp",
         type=Path,
         help="Temp files directory",
-        default="./zmml/temp",
+        default=f"{tempfile.gettempdir()}/zm_ml",
         dest="tmp_dir",
     )
     parser.add_argument(
         "--dir-log",
         help=f"Directory where logs will be stored Default: {DEFAULT_LOG_DIR}",
-        default="./zmml/log",
+        default="./zm_ml/log",
         dest="log_dir",
         type=Path,
     )
