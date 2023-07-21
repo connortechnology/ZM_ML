@@ -208,16 +208,22 @@ def get_web_user() -> Tuple[Optional[str], Optional[str]]:
     for proc in psutil.process_iter():
         if (
             any(x.startswith(proc.name()) for x in www_daemon_names)
-        ) and proc.name() not in proc_names:
+        ):
             uname, ugroup = proc.username(), grp.getgrgid(proc.gids().real).gr_name
             logger.debug(f"Found web server process: {proc.name()} ({uname}:{ugroup})")
             hits.append((uname, ugroup))
             proc_names.append(proc.name())
-    if len(hits) >= 1:
-        if len(hits) > 1:
-            logger.warning(
-                f"Multiple web server processes found ({proc_names}), using first one"
-            )
+    proc_names = list(set(proc_names))
+    if len(hits) > 1:
+        import pwd
+
+        # sort by uid high to low
+        hits = sorted(hits, key=lambda x: pwd.getpwnam(x[0]).pw_uid, reverse=True)
+        logger.warning(
+            f"Multiple web server processes found ({proc_names}) - The list is sorted to account "
+            f"for root dropping privileges. Hopefully the first entry is the correct one -> {hits}"
+        )
+
     if hits:
         return hits[0]
     return None, None
@@ -598,7 +604,6 @@ def show_config(cli_args: argparse.Namespace):
 def do_web_user():
     global ml_user, ml_group
     _group = None
-    logger.debug(f"do_web_user: {ml_user=} ------- {ml_group=}")
     if not ml_user or not ml_group:
         if not ml_user:
             if interactive:
