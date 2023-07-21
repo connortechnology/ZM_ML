@@ -766,7 +766,12 @@ def download_file(url: str, dest: Path, user: str, group: str, mode: int):
 def copy_file(src: Path, dest: Path, user: str, group: str, mode: int):
     msg = f"Copying {src} to {dest}..."
     if not testing:
+        # Check if the file exists, if so, show a log warning and remove, then copy
         import shutil
+        if dest.exists():
+            logger.warning(f"File {dest} already exists, removing...")
+            dest.unlink()
+
 
         logger.info(msg)
         shutil.copy(src, dest)
@@ -1146,7 +1151,13 @@ def do_install(_inst_type: str):
             )
 
             if not testing:
-                Path("/usr/local/bin/zmmlapi").symlink_to(
+                _dest = Path("/usr/local/bin/zmmlapi")
+                if _dest.exists():
+                    logger.warning(
+                        f"zmmlapi symlink already exists at {_dest}, unlinking and relinking..."
+                    )
+                    _dest.unlink()
+                _dest.symlink_to(
                     f"{data_dir}/bin/mlapi.py"
                 )
             # SERVER INSTALL ENVS FOR envsubst CMD
@@ -1181,24 +1192,24 @@ def do_install(_inst_type: str):
 
             if not testing:
                 # Make sure it does not exist first, it will error if file exists
-                _dest_esc = "/usr/local/bin/zmml_ESC"
-                _dest_ep = "/usr/local/bin/zmml_eventproc"
+                _dest_esc = Path("/usr/local/bin/zmml_ESC")
+                _dest_ep = Path("/usr/local/bin/zmml_eventproc")
                 # if it exists log a message that it is being unlinked then symlinked again with specified user
 
-                if Path(_dest_esc).exists():
+                if _dest_esc.exists():
                     logger.warning(
                         f"{_dest_esc} already exists, unlinking and symlinking again..."
                     )
-                    Path(_dest_esc).unlink()
-                Path(_dest_esc).symlink_to(
+                    _dest_esc.unlink()
+                _dest_esc.symlink_to(
                     f"{data_dir}/bin/EventStartCommand.sh"
                 )
-                if Path(_dest_ep).exists():
+                if _dest_ep.exists():
                     logger.warning(
                         f"{_dest_ep} already exists, unlinking and symlinking again..."
                     )
-                    Path(_dest_ep).unlink()
-                Path(_dest_ep).symlink_to(
+                    _dest_ep.unlink()
+                _dest_ep.symlink_to(
                     f"{data_dir}/bin/eventproc.py"
                 )
             # Client install envs for envsubst cmd
