@@ -598,6 +598,7 @@ def show_config(cli_args: argparse.Namespace):
 def do_web_user():
     global ml_user, ml_group
     _group = None
+    logger.debug(f"do_web_user: {ml_user=} ------- {ml_group=}")
     if not ml_user or not ml_group:
         if not ml_user:
             if interactive:
