@@ -1177,15 +1177,27 @@ def do_install(_inst_type: str):
             )
 
             if not testing:
-                Path("/usr/local/bin/zmml_ESC").symlink_to(
+                # Make sure it does not exist first, it will error if file exists
+                _dest_esc = "/usr/local/bin/zmml_ESC"
+                _dest_ep = "/usr/local/bin/zmml_eventproc"
+                # if it exists log a message that it is being unlinked then symlinked again with specified user
+
+                if Path(_dest_esc).exists():
+                    logger.warning(
+                        f"{_dest_esc} already exists, unlinking and symlinking again..."
+                    )
+                    Path(_dest_esc).unlink()
+                Path(_dest_esc).symlink_to(
                     f"{data_dir}/bin/EventStartCommand.sh"
                 )
-                Path("/usr/local/bin/zmml_eventproc").symlink_to(
+                if Path(_dest_ep).exists():
+                    logger.warning(
+                        f"{_dest_ep} already exists, unlinking and symlinking again..."
+                    )
+                    Path(_dest_ep).unlink()
+                Path(_dest_ep).symlink_to(
                     f"{data_dir}/bin/eventproc.py"
                 )
-                # subprocess.run(
-                #     ["ln", "-s", f"{data_dir}/bin/EventStartCommand.sh", "/usr/local/bin/EventStartCommand.sh"]
-                # )
             # Client install envs for envsubst cmd
             if "ML_INSTALL_ROUTE_NAME" not in _ENV:
                 _ENV["ML_INSTALL_ROUTE_NAME"] = "DEFAULT FROM INSTALL <CHANGE ME!!!>"
