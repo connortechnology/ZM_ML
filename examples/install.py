@@ -1391,13 +1391,16 @@ def install_models(model_dir: Path, force: bool = False):
 
 
 if __name__ == "__main__":
+    # parse args first
+    args = parse_cli()
+
     logger.info(f"Starting install script...")
     if not check_imports():
         msg = f"Missing python dependencies, exiting..."
         logger.critical(msg)
         sys.exit(1)
     else:
-        logger.info("All python dependencies found for the install script.")
+        logger.info("All python dependencies that this install script requires found.")
 
     class TqdmLoggingHandler(logging.Handler):
         def __init__(self, level=logging.NOTSET):
@@ -1419,7 +1422,6 @@ if __name__ == "__main__":
     logger.removeHandler(console)
     logger.addHandler(tqdm_handler)
     models: List[str] = []
-    args = parse_cli()
     testing: bool = args.test
     debug: bool = args.debug
     install_log = args.install_log
