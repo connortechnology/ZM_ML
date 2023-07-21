@@ -1230,6 +1230,7 @@ def do_install(_inst_type: str):
         test_msg(
             f"Installing {_inst_type} pip dependencies :: {' '.join(_pip_prefix)}   ..."
         )
+        test_msg(f"This may appear frozen for a few moments, please be patient...")
         try:
             ran = subprocess.run(
                 _pip_prefix,
