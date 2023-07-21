@@ -333,7 +333,6 @@ def parse_cli():
         default=None,
         type=str,
         help="ZoneMinder API URL, If this is ommited and --zm-portal is specified, the API URL will be derived from the portal URL (--zm-portal + '/api')",
-
     )
     parser.add_argument(
         "--zm-user",
@@ -371,7 +370,6 @@ def parse_cli():
         type=str,
         help="MLAPI host port [Optional]",
     )
-
 
     parser.add_argument(
         "--config-only",
@@ -768,10 +766,10 @@ def copy_file(src: Path, dest: Path, user: str, group: str, mode: int):
     if not testing:
         # Check if the file exists, if so, show a log warning and remove, then copy
         import shutil
+
         if dest.exists():
             logger.warning(f"File {dest} already exists, removing...")
             dest.unlink()
-
 
         logger.info(msg)
         shutil.copy(src, dest)
@@ -1157,9 +1155,7 @@ def do_install(_inst_type: str):
                         f"zmmlapi symlink already exists at {_dest}, unlinking and relinking..."
                     )
                     _dest.unlink()
-                _dest.symlink_to(
-                    f"{data_dir}/bin/mlapi.py"
-                )
+                _dest.symlink_to(f"{data_dir}/bin/mlapi.py")
             # SERVER INSTALL ENVS FOR envsubst CMD
             if "ML_INSTALL_SERVER_ADDRESS" not in _ENV:
                 _ENV["ML_INSTALL_SERVER_ADDRESS"] = "0.0.0.0"
@@ -1201,17 +1197,13 @@ def do_install(_inst_type: str):
                         f"{_dest_esc} already exists, unlinking and symlinking again..."
                     )
                     _dest_esc.unlink()
-                _dest_esc.symlink_to(
-                    f"{data_dir}/bin/EventStartCommand.sh"
-                )
+                _dest_esc.symlink_to(f"{data_dir}/bin/EventStartCommand.sh")
                 if _dest_ep.exists():
                     logger.warning(
                         f"{_dest_ep} already exists, unlinking and symlinking again..."
                     )
                     _dest_ep.unlink()
-                _dest_ep.symlink_to(
-                    f"{data_dir}/bin/eventproc.py"
-                )
+                _dest_ep.symlink_to(f"{data_dir}/bin/eventproc.py")
             # Client install envs for envsubst cmd
             if "ML_INSTALL_ROUTE_NAME" not in _ENV:
                 _ENV["ML_INSTALL_ROUTE_NAME"] = "DEFAULT FROM INSTALL <CHANGE ME!!!>"
@@ -1370,13 +1362,14 @@ class Envsubst:
 def envsubst(string: str, env: Optional[Dict] = None, strict: bool = False):
     """Wraps Envsubst class for easier use.
 
-Args:
-    string (str): String to substitute
-    env (Optional[Dict], optional): Custom environment mapping. Defaults to None.
-    strict (bool, optional): If True, only use the custom environment mapping. Defaults to False.
+    Args:
+        string (str): String to substitute
+        env (Optional[Dict], optional): Custom environment mapping. Defaults to None.
+        strict (bool, optional): If True, only use the custom environment mapping. Defaults to False.
     """
     _ = Envsubst()
     return _.sub(string, env=env, strict=strict)
+
 
 def create_(_type: str, dest: Path):
     src = REPO_BASE / f"configs/example_{_type}.yml"
@@ -1462,7 +1455,9 @@ if __name__ == "__main__":
     zm_api = args.zm_api
     if zm_portal and not zm_api:
         args.zm_api = zm_api = f"{zm_portal}/api"
-        logger.info(f"ZM_PORTAL specified, but not ZM_API, appending '/api' to ZM_PORTAL -> {zm_api}")
+        logger.info(
+            f"ZM_PORTAL specified, but not ZM_API, appending '/api' to ZM_PORTAL -> {zm_api}"
+        )
     route_name = args.route_name
     route_host = args.route_host
     route_port = args.route_port
