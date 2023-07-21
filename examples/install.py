@@ -1124,9 +1124,9 @@ def do_install(_inst_type: str):
         "-m",
         "pip",
         "install",
-        "--root-user-action=ignore",
-        "--report",
-        "./pip_install_report.json",
+        # "--root-user-action=ignore",
+        # "--report",
+        # "./pip_install_report.json",
     ]
     if _inst_type != "secrets":
         install_host_dependencies(_inst_type)
@@ -1230,8 +1230,8 @@ def do_install(_inst_type: str):
                     logger.info(f"\n{ran.stdout}")
                 if ran.stderr:
                     logger.error(f"\n{ran.stderr}")
-                    logger.warning(f"If you get errors about --root-user-action or --report, upgrade pip > python3 -m pip install pip -U")
-                    logger.warning(f"If you get errors about cant uninstall distutils system package, use a virtual environment.")
+                    # logger.warning(f"If you get errors about --root-user-action or --report, upgrade pip > python3 -m pip install pip -U")
+                    # logger.warning(f"If you get errors about cant uninstall distutils system package, use a virtual environment.")
 
 
 class Envsubst:
