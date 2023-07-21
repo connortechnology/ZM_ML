@@ -1435,7 +1435,7 @@ if __name__ == "__main__":
         del _handler
         logger.debug("Debug logging enabled!")
     if testing:
-        logger.warning(">>>>>>>>>>>>> Running in test mode! <<<<<<<<<<<<<<<<")
+        logger.warning(">>>>>>>>>>>>> Running in test/dry-run mode! <<<<<<<<<<<<<<<<")
     models = args.models
     no_models: bool = args.no_models
     INSTALL_TYPE = args.install_type.strip().casefold()
