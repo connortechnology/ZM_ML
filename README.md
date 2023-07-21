@@ -2,7 +2,6 @@
 
 [![Join Slack](https://github.com/ozonesecurity/ozonebase/blob/master/img/slacksm.png?raw=true)](https://join.slack.com/t/zoneminder-chat/shared_invite/enQtNTU0NDkxMDM5NDQwLTdhZmQ5Y2M2NWQyN2JkYTBiN2ZkMzIzZGQ0MDliMTRmM2FjZWRlYzUwYTQ2MjMwMTVjMzQ1NjYxOTdmMjE2MTE "Join Slack")<a href="https://discord.gg/tHYyP9k66q" title="Join Discord Server"><img src="https://assets-global.website-files.com/6257adef93867e50d84d30e2/636e0a6a49cf127bf92de1e2_icon_clyde_blurple_RGB.png" alt="drawing" width="50"/></a>
 
-
 # Please support ZoneMinder if you can!
 If you use software from the [ZoneMinder organization](https://github.com/ZoneMinder)
 please consider [sponsoring ZoneMinder](https://github.com/sponsors/ZoneMinder). ZoneMinder has been free with
@@ -12,6 +11,8 @@ ZM needs help with bringing cash flow in. If you have the means, please consider
 # ZoneMinder Machine Learning Library (ZM ML)
 **Try the x86_64 GPU/TPU accelerated Server docker image!** [docker.io/baudneo/zm_ml:server-full](https://hub.docker.com/r/baudneo/zm_ml)
 ### NOTE
+__*YOU MUST UPGRADE PIP before attempting to install anything in this repo!*__
+
 **This software is currently in alpha stage, expect issues. That said, it is fairly fast. YMMV.**
 
 This is a project aiming to update how [ZoneMinder](https://github.com/ZoneMinder/zoneminder) Object Detection works.
@@ -21,6 +22,12 @@ All the server does is run ML models on supplied images and return its results.
 
 The client is an asynchronous (mostly) script installed on the ZoneMinder machine, which grabs and sends images to a ZM ML server for
 inference and then processes the results to annotate images, create animations and send notifications, if configured to do so.
+
+## Upgrade Pip
+```bash
+# System wide
+sudo python3 -m pip install --upgrade pip
+```
 
 ## Thanks
 
