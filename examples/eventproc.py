@@ -1,6 +1,6 @@
-#! /usr/bin/env python3
-# -*- coding: utf-8 -*-
-# vim:fenc=utf-8
+
+# The shebang line is missing because the install script adds it to call ZoMi ML venv exec
+
 from __future__ import annotations
 import logging.handlers
 import sys
@@ -28,7 +28,7 @@ __doc__ = """
 An example that uses ZM's EventStartCommand/EventEndCommand mechanism to run 
 object detection on a ZM event using ZM ML library.
 """
-__version__ = "0.0.0-a2"
+__version__ = "0.0.1a2"
 __version_type__ = "dev"
 # Setup basic console logging (hook into library logging)
 logger: logging.Logger = create_logs()

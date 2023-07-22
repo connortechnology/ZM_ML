@@ -19,7 +19,7 @@ config="${ML_CLIENT_CONF_FILE:-/etc/zm/client.yml}"
 detect_script="${ML_CLIENT_EVENT_START:-$(which zmml_eventproc)}"
 
 event_start_command=(
-  python3
+#  python3
   "${detect_script}"
   --config "${config}"
   --event-mode

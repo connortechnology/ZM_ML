@@ -8,7 +8,7 @@ please consider [sponsoring ZoneMinder](https://github.com/sponsors/ZoneMinder).
 a paid support option and paid bounties but, it has come to the communities attention that the main/only dev of
 ZM needs help with bringing cash flow in. If you have the means, please consider sponsoring ZoneMinder, Thanks!
 
-# ZoneMinder Machine Learning Library (ZM ML)
+# ZoneMinder Machine Learning Library (ZoMi ML)
 **Try the x86_64 GPU/TPU accelerated Server docker image!** [docker.io/baudneo/zm_ml:server-full](https://hub.docker.com/r/baudneo/zm_ml)
 ### NOTE
 __*YOU MUST UPGRADE PIP before attempting to install anything in this repo!*__

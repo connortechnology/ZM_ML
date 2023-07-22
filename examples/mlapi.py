@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-# vim:fenc=utf-8
+
+# The shebang line is missing because the install script adds it to call ZoMi ML venv exec
+
 
 """A Script to start the MLAPI server."""
 from zm_ml.Server.app import create_logs, MLAPI, init_logs
