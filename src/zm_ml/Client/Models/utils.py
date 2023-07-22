@@ -33,7 +33,7 @@ SLATE_COLORS: List[Tuple[int, int, int]] = [
 
 def draw_filtered_bboxes(
     image: np.ndarray,
-    filtered_bboxes: List[List[int]],
+    filtered_result: List[str, float, List[int]],
     color: Tuple[int, int, int] = (0, 0, 255),
     thickness: int = 2,
 ) -> np.ndarray:
@@ -41,7 +41,7 @@ def draw_filtered_bboxes(
 
     Args:
         image (np.ndarray): The image to draw on.
-        filtered_bboxes (List[Dict]): The filtered bounding boxes.
+        filtered_result (List[str, float, List[int]]): The filtered bounding boxes.
         color (Tuple[int, int, int]): The color to use [Default: Red].
         thickness (int, optional): The thickness of the bounding boxes. Defaults to 2.
 
@@ -50,12 +50,56 @@ def draw_filtered_bboxes(
     """
     # image = image.copy()
     lp = f"image::draw filtered bbox::"
-    for bbox in filtered_bboxes:
-        # fixme: dirty little hack while transitioning to DetectionResults class.
-        bbox = bbox[2]
-        logger.debug(f"{lp} drawing {bbox}")
+    w, h = image.shape[:2]
+
+    for label, conf, bbox in filtered_result:
+        logger.debug(f"{lp} drawing '{label}' bounding box @ {bbox}")
         # draw bounding box around object
         cv2.rectangle(image, (bbox[0], bbox[1]), (bbox[2], bbox[3]), color, thickness)
+
+        # write label
+        font_thickness = 1
+        font_scale = 0.6
+        # FIXME: add something better than this
+        if w >= 720:
+            # 720p+
+            font_scale = 1.0
+            font_thickness = 2
+        elif w >= 1080:
+            # 1080p+
+            font_scale = 1.7
+            font_thickness = 2
+        elif w >= 1880:
+            # 3-4k ish? +
+            font_scale = 3.2
+            font_thickness = 4
+
+        font_type = cv2.FONT_HERSHEY_DUPLEX
+        text_size = cv2.getTextSize(label, font_type, font_scale, font_thickness)[0]
+        text_width_padded = text_size[0] + 4
+        text_height_padded = text_size[1] + 4
+        r_top_left = (bbox[0], bbox[1] - text_height_padded)
+        r_bottom_right = (bbox[0] + text_width_padded, bbox[1])
+        # Background
+        cv2.rectangle(image, r_top_left, r_bottom_right, color, -1)
+        # Make sure the text is inside the image
+        if r_bottom_right[0] > w:
+            r_bottom_right = (w, r_bottom_right[1])
+            r_top_left = (r_bottom_right[0] - text_width_padded, r_top_left[1])
+        if r_bottom_right[1] > h:
+            r_bottom_right = (r_bottom_right[0], h)
+            r_top_left = (r_top_left[0], r_bottom_right[1] - text_height_padded)
+
+        cv2.putText(
+            image,
+            label,
+            (bbox[0] + 2, bbox[1] - 2),
+            font_type,
+            font_scale,
+            [255, 255, 255],
+            font_thickness,
+            cv2.LINE_AA,
+        )
     return image
 
 
