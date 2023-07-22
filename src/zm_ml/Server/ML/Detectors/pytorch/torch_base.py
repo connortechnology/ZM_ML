@@ -10,12 +10,14 @@ try:
     import torch
 except ImportError:
     warnings.warn("Torch not installed, cannot use Torch detectors")
+    torch = None
 
 try:
     import torchvision
 except ImportError:
     warnings.warn("Torchvision not installed, cannot use Torch detectors")
     RetinaNet_ResNet50_FPN_V2_Weights, FasterRCNN_ResNet50_FPN_V2_Weights, FasterRCNN_MobileNet_V3_Large_FPN_Weights, FCOS_ResNet50_FPN_Weights = None, None, None, None
+    torchvision = None
 else:
     from torchvision.models.detection.ssd import SSD
     from torchvision.models.detection import (
@@ -83,57 +85,60 @@ class TorchDetector(FileLock):
         self.load_model()
 
     def load_model(self):
-        import os
-
-        if self.config.pretrained:
-            logger.debug(f"{LP} 'pretrained' has a value, using pretrained weights...")
-            _pth = os.environ.get("TORCH_HOME", None)
-            if _pth:
-                logger.warning(f"{LP} 'TORCH_HOME' is already set, working around it...")
-            os.environ["TORCH_HOME"] = self.cache_dir.as_posix()
-            _pt = self.config.pretrained
-            conf, nms = self.options.confidence, self.options.nms
-
-            if _pt:
-                if _pt in ("default", "balanced"):
-                    self.name = f"torch: RetinaNet RN50 v2"
-                    self.weights = RetinaNet_ResNet50_FPN_V2_Weights.DEFAULT
-                    self.model = retinanet_resnet50_fpn_v2(
-                        weights=self.weights, box_score_thresh=conf, box_nms_thresh=nms
-                    ).to(self.device)
-                elif _pt == "fast":
-                    self.name: str = f"torch: FCOS RN50 v2"
-                    self.weights = FCOS_ResNet50_FPN_Weights.DEFAULT
-                    self.model = fcos_resnet50_fpn(
-                        weights=self.weights, box_score_thresh=conf, box_nms_thresh=nms
-                    ).to(self.device)
-                elif _pt == "low_performance":
-                    pass
-                # SSDlite ?
-                elif _pt == "accurate":
-                    self.name = f"torch: fRCNN MN v3"
-                    self.weights = FasterRCNN_MobileNet_V3_Large_FPN_Weights.DEFAULT
-                    self.model = fasterrcnn_mobilenet_v3_large_fpn(
-                        weights=self.weights, box_score_thresh=conf, box_nms_thresh=nms
-                    ).to(self.device)
-                elif _pt == "high_performance":
-
-
-                    self.name = f"torch: fRCNN RN50 v2"
-                    self.weights = FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT
-                    self.model = fasterrcnn_resnet50_fpn_v2(
-                        weights=self.weights, box_score_thresh=conf, box_nms_thresh=nms
-                    ).to(self.device)
-            logger.debug(
-                f"{LP} loading model into processor memory: {self.name} ({self.id})"
-            )
-            self.model.eval()
-            self.ok = True
-            if _pth:
-                logger.warning(f"{LP} resetting 'TORCH_HOME' to original value...")
-                os.environ["TORCH_HOME"] = _pth
+        if torch is None:
+            logger.error(f"{LP} Torch not installed, cannot use Torch detectors")
         else:
-            logger.warning(f"{LP} pretrained was not defined, user trained models are: Not Implemented yet....")
+            import os
+
+            if self.config.pretrained:
+                logger.debug(f"{LP} 'pretrained' has a value, using pretrained weights...")
+                _pth = os.environ.get("TORCH_HOME", None)
+                if _pth:
+                    logger.warning(f"{LP} 'TORCH_HOME' is already set, working around it...")
+                os.environ["TORCH_HOME"] = self.cache_dir.as_posix()
+                _pt = self.config.pretrained
+                conf, nms = self.options.confidence, self.options.nms
+
+                if _pt:
+                    if _pt in ("default", "balanced"):
+                        self.name = f"torch: RetinaNet RN50 v2"
+                        self.weights = RetinaNet_ResNet50_FPN_V2_Weights.DEFAULT
+                        self.model = retinanet_resnet50_fpn_v2(
+                            weights=self.weights, box_score_thresh=conf, box_nms_thresh=nms
+                        ).to(self.device)
+                    elif _pt == "fast":
+                        self.name: str = f"torch: FCOS RN50 v2"
+                        self.weights = FCOS_ResNet50_FPN_Weights.DEFAULT
+                        self.model = fcos_resnet50_fpn(
+                            weights=self.weights, box_score_thresh=conf, box_nms_thresh=nms
+                        ).to(self.device)
+                    elif _pt == "low_performance":
+                        pass
+                    # SSDlite ?
+                    elif _pt == "accurate":
+                        self.name = f"torch: fRCNN MN v3"
+                        self.weights = FasterRCNN_MobileNet_V3_Large_FPN_Weights.DEFAULT
+                        self.model = fasterrcnn_mobilenet_v3_large_fpn(
+                            weights=self.weights, box_score_thresh=conf, box_nms_thresh=nms
+                        ).to(self.device)
+                    elif _pt == "high_performance":
+
+
+                        self.name = f"torch: fRCNN RN50 v2"
+                        self.weights = FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT
+                        self.model = fasterrcnn_resnet50_fpn_v2(
+                            weights=self.weights, box_score_thresh=conf, box_nms_thresh=nms
+                        ).to(self.device)
+                logger.debug(
+                    f"{LP} loading model into processor memory: {self.name} ({self.id})"
+                )
+                self.model.eval()
+                self.ok = True
+                if _pth:
+                    logger.warning(f"{LP} resetting 'TORCH_HOME' to original value...")
+                    os.environ["TORCH_HOME"] = _pth
+            else:
+                logger.warning(f"{LP} pretrained was not defined, user trained models are: Not Implemented yet....")
 
 
     def _convert_image(self, image: np.ndarray) -> torch.Tensor:
@@ -144,26 +149,29 @@ class TorchDetector(FileLock):
         # return the tensor
         return ret
 
-    def _get_device(self) -> torch.device:
-        dev = "cpu"
-        if self.processor == ModelProcessor.GPU:
-            # todo: allow device index config (possibly use pycuda to get dev names / index for user convenience)
-            if torch.cuda.is_available():
-                _idx = 0
-                if self.config.gpu_idx is not None:
-                    _idx = self.config.gpu_idx
-                    if _idx >= torch.cuda.device_count():
-                        logger.warning(
-                            f"{LP} GPU index out of range, using default index 0"
-                        )
-                        _idx = 0
-                dev = f"cuda:{_idx}"
-        if dev.startswith("cpu"):
-            self.processor = ModelProcessor.CPU
-        elif dev.startswith("cuda"):
-            self.processor = ModelProcessor.GPU
-        logger.debug(f"{LP} using device: {dev}")
-        return torch.device(dev)
+    def _get_device(self) -> Optional[torch.device]:
+        if torch is None:
+            logger.error(f"{LP} Torch not installed, cannot use Torch detectors")
+        else:
+            dev = "cpu"
+            if self.processor == ModelProcessor.GPU:
+                # todo: allow device index config (possibly use pycuda to get dev names / index for user convenience)
+                if torch.cuda.is_available():
+                    _idx = 0
+                    if self.config.gpu_idx is not None:
+                        _idx = self.config.gpu_idx
+                        if _idx >= torch.cuda.device_count():
+                            logger.warning(
+                                f"{LP} GPU index out of range, using default index 0"
+                            )
+                            _idx = 0
+                    dev = f"cuda:{_idx}"
+            if dev.startswith("cpu"):
+                self.processor = ModelProcessor.CPU
+            elif dev.startswith("cuda"):
+                self.processor = ModelProcessor.GPU
+            logger.debug(f"{LP} using device: {dev}")
+            return torch.device(dev)
 
     def detect(self, image: np.ndarray):
         labels, confs, b_boxes = [], [], []
