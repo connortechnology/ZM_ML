@@ -999,9 +999,18 @@ class APIDetector:
             self.config = config
         if self.config.processor and not self.is_processor_available():
             # Fixme: force CPU and continue
-            raise RuntimeError(
-                f"{self.config.processor} is not available on this system"
+            _failed_proc = self.config.processor.value
+
+            if self.config.framework == ModelFrameWork.CORAL:
+                self.config.processor = ModelProcessor.TPU
+            elif self.config.framework == ModelFrameWork.HTTP:
+                self.config.processor = ModelProcessor.NONE
+            else:
+                self.config.processor = ModelProcessor.CPU
+            logger.warning(
+                f"{_failed_proc} is not available to the {self.config.framework} framework! Switching to {self.config.processor}"
             )
+
         if self.config.framework == ModelFrameWork.OPENCV:
             if self.config.sub_framework == OpenCVSubFrameWork.DARKNET or self.config.sub_framework == OpenCVSubFrameWork.ONNX:
                 from ..ML.Detectors.opencv.cv_yolo import CV2YOLODetector
