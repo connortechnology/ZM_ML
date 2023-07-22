@@ -29,7 +29,6 @@ An example that uses ZM's EventStartCommand/EventEndCommand mechanism to run
 object detection on a ZM event using ZM ML library.
 """
 __version__ = "0.0.1a2"
-__version_type__ = "dev"
 # Setup basic console logging (hook into library logging)
 logger: logging.Logger = create_logs()
 zm_client: Optional[ZMClient] = None

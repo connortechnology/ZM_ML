@@ -51,6 +51,8 @@ def draw_filtered_bboxes(
     # image = image.copy()
     lp = f"image::draw filtered bbox::"
     for bbox in filtered_bboxes:
+        # fixme: dirty little hack while transitioning to DetectionResults class.
+        bbox = bbox[2]
         logger.debug(f"{lp} drawing {bbox}")
         # draw bounding box around object
         cv2.rectangle(image, (bbox[0], bbox[1]), (bbox[2], bbox[3]), color, thickness)

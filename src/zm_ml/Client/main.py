@@ -67,7 +67,6 @@ if TYPE_CHECKING:
 
 _PR: str = "print():"
 __version__: str = "0.0.1"
-__version_type__: str = "dev"
 ZM_INSTALLED: Optional[str] = which("zmpkg.pl")
 
 logger = logging.getLogger(CLIENT_LOGGER_NAME)
@@ -972,8 +971,6 @@ class ZMClient:
                                 strategy: MatchStrategy = g.config.matching.strategy
                                 if filtered_result.success is True:
                                     logger.debug(f"DBG>>> {filtered_result = }")
-
-                                    # fixme: continue on with implementing DetectionResults
 
                                     final_label = []
                                     final_confidence = []
@@ -2089,7 +2086,7 @@ class ZMClient:
         model, processor = matches["model_names"], matches["processor"]
         image: np.ndarray = matches["frame_img"]
         prepared_image = image.copy()
-        image_name = matches["frame_id"]
+        image_name = str(matches["frame_id"])
         # annotate the image
         lp = f"post process::"
         from .Models.utils import draw_bounding_boxes
@@ -2123,10 +2120,20 @@ class ZMClient:
                     prepared_image, list(self.filtered_labels[image_name])
                 )
                 from datetime import datetime
+                if g.config.detection_settings.images.debug.path:
+                    _dest = g.config.detection_settings.images.debug.path
+                    logger.debug(f"{lp} Debug image PATH configured: {_dest.as_posix()}")
+                elif g.config.system.image_dir:
+                    _dest = g.config.system.image_dir
+                    logger.debug(f"{lp} Debug image path NOT configured, using system image_dir: {_dest.as_posix()}")
+                else:
+                    _dest = g.config.system.variable_data_path / "images"
+                logger.debug(f"{lp} Debug image path and system image_dir NOT configured"
+                             f" using {{system:variable_data_dir}} as base: {_dest.as_posix()}")
 
                 img_write_success = cv2.imwrite(
-                    g.config.detection_settings.images.debug.path.joinpath(
-                        f"debug-img_{datetime.now()}"
+                    _dest.joinpath(
+                        f"debug-img_{datetime.now()}.jpg"
                     ).as_posix(),
                     debug_image,
                 )
