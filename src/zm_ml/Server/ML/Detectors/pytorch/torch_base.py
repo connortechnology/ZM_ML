@@ -15,6 +15,7 @@ try:
     import torchvision
 except ImportError:
     warnings.warn("Torchvision not installed, cannot use Torch detectors")
+    RetinaNet_ResNet50_FPN_V2_Weights, FasterRCNN_ResNet50_FPN_V2_Weights, FasterRCNN_MobileNet_V3_Large_FPN_Weights, FCOS_ResNet50_FPN_Weights = None, None, None, None
 else:
     from torchvision.models.detection.ssd import SSD
     from torchvision.models.detection import (
