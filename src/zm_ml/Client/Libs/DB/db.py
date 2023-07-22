@@ -168,12 +168,13 @@ class ZMDB:
                             xtra_ = f" (defaulting to '{set_to}' from ZM .conf files)"
 
                 if g and g.config:
-                    cfg_file_db = getattr(g.config.zoneminder.db, _attr)
-                    if cfg_file_db:
-                        # todo: what if we want it to be an empty string? or int(0)
-                        # There is an entry in the config file, use it even if ENV or .conf files set it
-                        set_to = cfg_file_db
-                        xtra_ = f" (OVERRIDING to '{set_to}' from config file)"
+                    if g.config.zoneminder.db:
+                        cfg_file_db = getattr(g.config.zoneminder.db, _attr)
+                        if cfg_file_db:
+                            # todo: what if we want it to be an empty string? or int(0)
+                            # There is an entry in the config file, use it even if ENV or .conf files set it
+                            set_to = cfg_file_db
+                            xtra_ = f" (OVERRIDING to '{set_to}' from config file)"
 
                 if not set_to:
                     # not in env or .conf files try internal defaults
