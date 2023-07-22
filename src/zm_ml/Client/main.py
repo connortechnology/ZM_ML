@@ -2119,6 +2119,7 @@ class ZMClient:
                 debug_image = draw_filtered_bboxes(
                     prepared_image, list(self.filtered_labels[image_name])
                 )
+                logger.debug(f"DBG:FIX ME>>> {list(self.filtered_labels[image_name])}")
                 from datetime import datetime
                 if g.config.detection_settings.images.debug.path:
                     _dest = g.config.detection_settings.images.debug.path
