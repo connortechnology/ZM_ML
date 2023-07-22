@@ -1,5 +1,5 @@
+#!/usr/bin/env python3
 
-# The shebang line is missing because the install script adds it to call ZoMi ML venv exec
 
 from __future__ import annotations
 import logging.handlers
