@@ -72,7 +72,7 @@ class ZoneMinderSettings(BaseSettings):
         user: Optional[SecretStr] = Field(None, env="ML_CLIENT_ZONEMINDER_API_USER")
         password: Optional[SecretStr] = Field(None, env="ML_CLIENT_ZONEMINDER_API_PASSWORD")
         ssl_verify: Optional[bool] = Field(True, env="ML_CLIENT_ZONEMINDER_API_SSL_VERIFY")
-        headers: Optional[Dict[str, str]] = Field(default_factory=dict, env="ML_CLIENT_ZONEMINDER_API_HEADERS")
+        headers: Optional[Dict] = Field(default_factory=dict, env="ML_CLIENT_ZONEMINDER_API_HEADERS")
 
         _validate_api_url = validator("api_url", allow_reuse=True, pre=True)(
             validate_no_scheme_url

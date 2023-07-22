@@ -329,10 +329,13 @@ notifications:
     key: ${PUSHOVER_KEY}
 
     # PushOver has a monthly limit, 'cooldown' means at least X seconds must have passed since the last push for that monitor
-    # i.e: cooldown: 30 means only send a pushover notification if it has been at least 30 seconds since the
+    # i.e: seconds: 30 means only send a pushover notification if it has been at least 30 seconds since the
     # last SUCCESSFUL pushover notification for that MONITOR
-    # [Default: 30]
-    cooldown: 30
+    cooldown:
+    # [Default: no]
+      enabled: no
+      # [Default: 30]
+      seconds: 30
     # send the message to a specififc device (leave blank to send to all devices)
     # [Default: <Nothing>]
     device:
