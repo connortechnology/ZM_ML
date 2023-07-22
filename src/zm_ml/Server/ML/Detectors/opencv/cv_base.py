@@ -22,10 +22,6 @@ LP: str = "OpenCV DNN:"
 class CV2Base(FileLock):
     def __init__(self, model_config: Union[CV2YOLOModelConfig, CV2TFModelConfig, CV2HOGModelConfig]):
         super().__init__()
-        self.lock_name = ""
-        self.lock_maximum = 0
-        self.lock_dir = ""
-        self.lock_timeout = 0.0
         if not model_config:
             raise ValueError(f"{LP} no config passed!")
         # Model init params

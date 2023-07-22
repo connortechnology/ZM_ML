@@ -16,10 +16,10 @@ class FileLock:
     is_locked: bool = False
     name: str = ''
     processor: str = ''
-    lock_timeout = None
-    lock_maximum = None
-    lock_name = None
-    lock_dir = None
+    lock_timeout = 0.0
+    lock_maximum = 0
+    lock_name = ""
+    lock_dir = ""
 
     def create_lock(self):
         from ..app import locks_enabled, get_global_config

@@ -449,7 +449,7 @@ RUN set -x \
     && rm -rf /usr/local/lib/python3.9/dist-packages/dlib-"${DLIB_VERSION}".0-py3.9-linux-x86_64.egg dlib-"${DLIB_VERSION}".0-cp39-none-any.whl
 
 # ZM ML Server Install
-ARG CB6=0
+ARG CB6=22
 ARG ZMML_VERSION=master
 #COPY . /opt/zm_ml/src
 RUN set -x \

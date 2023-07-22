@@ -128,9 +128,6 @@ class ZMDB:
         # todo: get db type from zm .conf files for driver string?
 
         self.conf_file_data = self.read_zm_configs()
-        import pprint
-        logger.debug(pprint.pformat(f"DBG>>> ZM .conf data -> {self.conf_file_data.items()}"))
-        db_config_with_env = None
         db_config_with_env = self.env.db
         logger.debug(f"{LP} ENV VARS = {db_config_with_env}")
         for _attr in dir(db_config_with_env):

@@ -6,40 +6,46 @@ import warnings
 
 from PIL import Image
 import numpy as np
+
 try:
     import cv2
 except ImportError:
-    warnings.warn(
-        "OpenCV not installed, please install OpenCV!", ImportWarning
-    )
+    warnings.warn("OpenCV not installed, please install OpenCV!", ImportWarning)
     cv2 = None
     raise
 try:
     import pycoral
     from pycoral.adapters import common, detect
-    from pycoral.utils.edgetpu import make_interpreter
+    from pycoral.utils.edgetpu import make_interpreter, list_edge_tpus
 except ImportError:
     warnings.warn(
         "pycoral not installed, this is ok if you do not plan to use TPU as detection processor. "
-        "If you intend to use a TPU please install the TPU libs and pycoral!", ImportWarning
+        "If you intend to use a TPU please install the TPU libs and pycoral!",
+        ImportWarning,
     )
     pycoral = None
     make_interpreter = None
     common = None
     detect = None
+    list_edge_tpus = None
 try:
+    import tflite_runtime
     from tflite_runtime.interpreter import Interpreter
 except ImportError:
     warnings.warn(
         "tflite_runtime not installed, this is ok if you do not plan to use TPU as detection processor. "
-        "If you intend to use a TPU please install the TPU libs and pycoral!", ImportWarning
+        "If you intend to use a TPU please install the TPU libs and pycoral!",
+        ImportWarning,
     )
     Interpreter = None
+    tflite_runtime = None
 
 from ..file_locks import FileLock
 from ....Shared.Models.Enums import ModelType, ModelProcessor
-
 from zm_ml.Server.app import SERVER_LOGGER_NAME
+from ....Shared.Models.config import DetectionResults, Result
+
+
 if TYPE_CHECKING:
     from ...Models.config import TPUModelConfig, TPUModelOptions
 
@@ -50,6 +56,20 @@ LP: str = "Coral:"
 class TpuDetector(FileLock):
     def __init__(self, model_config: TPUModelConfig):
         global LP
+
+        if pycoral is None:
+            logger.warning(f"{LP} pycoral is not installed, cannot use TPU detectors")
+            return
+        elif tflite_runtime is None:
+            logger.warning(
+                f"{LP} tflite_runtime is not installed, cannot use TPU detectors"
+            )
+            return
+        # check if there is a tpu device
+        if not list_edge_tpus():
+            logger.warning(f"{LP} no TPU devices found, cannot use TPU detectors")
+            return
+
         # Model init params
         self.config: TPUModelConfig = model_config
         self.options: TPUModelOptions = self.config.detection_options
@@ -57,7 +77,9 @@ class TpuDetector(FileLock):
         self.name: str = self.config.name
         self.model: Optional[Interpreter] = None
         if self.config.model_type == ModelType.FACE:
-            logger.debug(f"{LP} ModelType=Face, this is for identification purposes only")
+            logger.debug(
+                f"{LP} ModelType=Face, this is for identification purposes only"
+            )
             LP = f"{LP}Face:"
         self.load_model()
 
@@ -71,15 +93,15 @@ class TpuDetector(FileLock):
             self.model.allocate_tensors()
         except Exception as ex:
             ex = repr(ex)
-            logger.error(f"{LP} failed to load model at make_interpreter() and allocate_tensors(): {ex}")
+            logger.error(
+                f"{LP} failed to load model at make_interpreter() and allocate_tensors(): {ex}"
+            )
             words = ex.split(" ")
             for word in words:
                 if word.startswith("libedgetpu"):
                     logger.info(
-                        f"{LP} TPU error detected (replace cable with a short high quality one, dont allow "
-                        f"TPU/cable to move around). Reset the USB port or reboot!"
+                        f"{LP} TPU error detected. It could be a bad cable, needing to unplug/replug in the device or a system reboot."
                     )
-                    raise RuntimeError("TPU NO COMM")
         else:
             logger.debug(f"perf:{LP} loading took: {time.perf_counter() - t:.5f}s")
 
@@ -131,7 +153,11 @@ class TpuDetector(FileLock):
                     ious = intersections / unions
 
                     idxs = np.delete(
-                        idxs, np.concatenate(([len(idxs) - 1], np.where(ious > threshold)[0])))
+                        idxs,
+                        np.concatenate(
+                            ([len(idxs) - 1], np.where(ious > threshold)[0])
+                        ),
+                    )
             objects = [objects[i] for i in selected_idxs]
             logger.info(f"perf:{LP} NMS took: {time.perf_counter() - timer:.5f}s")
         return objects
@@ -156,7 +182,7 @@ class TpuDetector(FileLock):
         _, scale = common.set_resized_input(
             self.model,
             input_image.size,
-            lambda size: input_image.resize(size, Image.ANTIALIAS),
+            lambda size: input_image.resize(size, Image.LANCZOS),
         )
         objs: List[detect.Object]
         try:
@@ -178,7 +204,9 @@ class TpuDetector(FileLock):
             # Non Max Suppression
             if nms.enabled:
                 objs = self.nms(objs, nms.threshold)
-                logger.info(f"{LP} {len(objs)}/{_obj_len} objects after NMS filtering with threshold: {nms.threshold}")
+                logger.info(
+                    f"{LP} {len(objs)}/{_obj_len} objects after NMS filtering with threshold: {nms.threshold}"
+                )
             else:
                 logger.info(f"{LP} NMS disabled, {_obj_len} objects detected")
             for obj in objs:
@@ -195,12 +223,15 @@ class TpuDetector(FileLock):
         else:
             logger.warning(f"{LP} nothing returned from invoke()... ?")
 
-        return {
-            "success": True if labels else False,
-            "type": self.config.model_type,
-            "processor": self.processor,
-            "model_name": self.name,
-            "label": labels,
-            "confidence": confs,
-            "bounding_box": b_boxes,
-        }
+        result = DetectionResults(
+            success=True if labels else False,
+            type=self.config.model_type,
+            processor=self.processor,
+            model_name=self.name,
+            results=[
+                Result(label=labels[i], confidence=confs[i], bounding_box=b_boxes[i])
+                for i in range(len(labels))
+            ],
+        )
+
+        return result

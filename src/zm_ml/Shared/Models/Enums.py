@@ -8,7 +8,7 @@ class ModelType(str, Enum):
     DEFAULT = OBJECT
 
     def __repr__(self):
-        return f"{self.__class__.__name__}.{self.name} ({str(self.name).lower()} detection)"
+        return f"<{self.__class__.__name__}: {str(self.name).lower()} detection>"
 
     def __str__(self):
         return self.__repr__()
@@ -43,7 +43,7 @@ class ModelFrameWork(str, Enum):
     HTTP = "http"
     CORAL = "coral"
     TENSORFLOW = "tensorflow"
-    PYTORCH = "pytorch"
+    TORCH = "torch"
     DEEPFACE = "deepface"
     ALPR = "alpr"
     FACE_RECOGNITION = "face_recognition"
@@ -58,6 +58,12 @@ class ModelProcessor(str, Enum):
     GPU = "gpu"
     TPU = "tpu"
     DEFAULT = CPU
+
+    def __repr__(self):
+        return f"<{self.__class__.__name__}: {self.name}>"
+
+    def __str__(self):
+        return f"{self.name}"
 
 
 class FaceRecognitionLibModelTypes(str, Enum):

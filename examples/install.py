@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import venv
 import platform
 import subprocess
 import tempfile
@@ -206,9 +207,7 @@ def get_web_user() -> Tuple[Optional[str], Optional[str]]:
     hits = []
     proc_names = []
     for proc in psutil.process_iter():
-        if (
-            any(x.startswith(proc.name()) for x in www_daemon_names)
-        ):
+        if any(x.startswith(proc.name()) for x in www_daemon_names):
             uname, ugroup = proc.username(), grp.getgrgid(proc.gids().real).gr_name
             logger.debug(f"Found web server process: {proc.name()} ({uname}:{ugroup})")
             hits.append((uname, ugroup))
@@ -476,7 +475,6 @@ def parse_cli():
         default="",
         dest="model_dir",
     )
-
     parser.add_argument(
         "--dir-temp",
         "--dir-tmp",
@@ -1131,7 +1129,7 @@ def do_install(_inst_type: str):
             )
     global _ENV
     _pip_prefix: List[str] = [
-        "python3",
+        # "python3",  # The venv builder will prepend the venv python executable
         "-m",
         "pip",
         "install",
@@ -1176,6 +1174,7 @@ def do_install(_inst_type: str):
                 ml_group,
                 cfg_create_mode,
             )
+
             copy_file(
                 INSTALL_FILE_DIR / "eventproc.py",
                 data_dir / "bin/eventproc.py",
@@ -1183,6 +1182,7 @@ def do_install(_inst_type: str):
                 ml_group,
                 cfg_create_mode,
             )
+
             # create a symbolic link to both files in /usr/local/bin
             # so that they can be called from anywhere
             test_msg(
@@ -1231,30 +1231,27 @@ def do_install(_inst_type: str):
 
         # Add the source dir to the pip install command
         _pip_prefix.append(_src)
-        test_msg(
-            f"Installing {_inst_type} pip dependencies :: {' '.join(_pip_prefix)}   ..."
-        )
-        test_msg(f"This may appear frozen for a few moments, please be patient...")
-        try:
-            ran = subprocess.run(
-                _pip_prefix,
-                capture_output=True,
-                text=True,
-            )
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Error installing {_inst_type} pip dependencies!")
-            logger.error(e)
-            logger.error(e.stderr)
-            logger.error(e.stdout)
-            raise e
-        else:
-            if ran:
-                if ran.stdout:
-                    logger.info(f"\n{ran.stdout}")
-                if ran.stderr:
-                    logger.error(f"\n{ran.stderr}")
-                    # logger.warning(f"If you get errors about --root-user-action or --report, upgrade pip > python3 -m pip install pip -U")
-                    # logger.warning(f"If you get errors about cant uninstall distutils system package, use a virtual environment.")
+        logger.info(f"This may appear frozen for a few moments, please be patient...")
+        # create venv, upgrade pip and setup tools and install ZoMi ML into the venv
+        _venv = ZoMiEnvBuilder(with_pip=True, cmd=_pip_prefix, upgrade_deps=True)
+        _venv.create(venv_dir)
+        content: Optional[str] = None
+        if _inst_type == "client":
+            _f: Path = (data_dir / "bin/eventproc.py")
+            # if testing:
+            #     _f = (INSTALL_FILE_DIR / "eventproc.py")
+        elif _inst_type == "server":
+            _f: Path = (data_dir / "bin/mlapi.py")
+            # if testing:
+            #     _f = (INSTALL_FILE_DIR / "mlapi.py")
+
+        test_msg(f"Modifying {_f.as_posix()} to use VENV {_venv.context.env_exec_cmd} shebang")
+        content = _f.read_text()
+        with _f.open("w+") as f:
+            f.write(f"#!{_venv.context.env_exec_cmd}\n{content}")
+        del content
+
+
 
 
 class Envsubst:
@@ -1394,6 +1391,77 @@ def install_models(model_dir: Path, force: bool = False):
             logger.debug(f"I'm a dir: {path_object}")
 
 
+def in_venv():
+    return hasattr(sys, "real_prefix") or (
+        hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix
+    )
+
+
+class ZoMiEnvBuilder(venv.EnvBuilder):
+    """
+    Venv builder for ZoMi ML
+
+    :param cmd: The pip command as an array to install ZoMi ML..
+    """
+
+    install_cmd: List[str]
+
+    def __init__(self, *args, **kwargs):
+        self.install_cmd = kwargs.pop("cmd", None)
+        assert isinstance(
+            self.install_cmd, list
+        ), f"cmd must be a list not {type(self.install_cmd)}"
+        assert self.install_cmd, f"cmd must not be empty!"
+        super().__init__(*args, **kwargs)
+
+    def post_setup(self, context):
+        """
+        Set up any packages which need to be pre-installed into the
+        environment being created.
+        :param context: The information for the environment creation request
+                        being processed.
+        """
+        self.context = context
+        old_env = os.environ.get("VIRTUAL_ENV", None)
+        os.environ["VIRTUAL_ENV"] = context.env_dir
+        self.install_zmml(context)
+        if old_env:
+            os.environ["VIRTUAL_ENV"] = old_env
+        else:
+            os.environ.pop("VIRTUAL_ENV")
+
+    def install_zmml(self, context):
+        """
+        Install zm_ml in the environment.
+        :param context: The information for the environment creation request
+                        being processed.
+        """
+
+        # set python executable to venv executable
+        self.install_cmd.insert(0, context.env_exec_cmd)
+
+        try:
+            ran = subprocess.run(
+                self.install_cmd,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Error installing pip dependencies!")
+            logger.error(e)
+            if e.stderr:
+                logger.error(e.stderr)
+            if e.stdout:
+                logger.info(e.stdout)
+            raise e
+        else:
+            if ran:
+                if ran.stdout:
+                    logger.info(f"\n{ran.stdout}")
+                if ran.stderr:
+                    logger.error(f"\n{ran.stderr}")
+
+
 if __name__ == "__main__":
     # parse args first
     args = parse_cli()
@@ -1428,6 +1496,14 @@ if __name__ == "__main__":
     models: List[str] = []
     testing: bool = args.test
     debug: bool = args.debug
+    # Let's create a venv for the install script to run in
+    if in_venv():
+        logger.info(
+            "Detected to be running in a virtual environment, "
+            "be aware this install script creates "
+            "a venv for zm_ml to run in!"
+        )
+
     install_log = args.install_log
     file_handler = logging.FileHandler(install_log, mode="w")
     file_handler.setFormatter(log_formatter)
@@ -1456,6 +1532,7 @@ if __name__ == "__main__":
     cfg_dir: Path = args.config_dir
     log_dir: Path = args.log_dir
     tmp_dir: Path = args.tmp_dir
+    venv_dir: Path = data_dir / "venv"
     zm_user = args.zm_user
     zm_pass = args.zm_pass
     zm_portal = args.zm_portal
@@ -1500,6 +1577,7 @@ if __name__ == "__main__":
 
     _ENV = {
         "ML_INSTALL_DATA_DIR": data_dir.as_posix(),
+        "ML_INSTALL_VENV_DIR": venv_dir.as_posix(),
         "ML_INSTALL_CFG_DIR": cfg_dir.as_posix(),
         "ML_INSTALL_LOGGING_DIR": log_dir.as_posix(),
         "ML_INSTALL_LOGGING_LEVEL": "debug",
@@ -1542,6 +1620,7 @@ if __name__ == "__main__":
         if _cfg:
             create_(INSTALL_TYPE, cfg_dir / f"{INSTALL_TYPE}.yml")
         sys.exit(0)
+
     main()
     if THREADS:
         if any([t.is_alive() for t in THREADS.values()]):

@@ -112,7 +112,7 @@ def str2path(v: Union[str, Path, None], **kwargs):
     if v:
         assert isinstance(v, (Path, str))
         v = Path(v)
-    v.expanduser().resolve()
+        v.expanduser().resolve()
     return v
 
 

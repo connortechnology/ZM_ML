@@ -39,6 +39,7 @@ from zm_ml.Shared.Log.handlers import BufferedLogHandler
 from .ML.Detectors.color_detector import ColorDetector
 
 if TYPE_CHECKING:
+    from ..Shared.Models.config import DetectionResults
     from .Models.config import (
         GlobalConfig,
         Settings,
@@ -245,7 +246,7 @@ async def detect(
     return detection
 
 
-async def threaded_detect(model_hints: List[str], image) -> List[Dict]:
+async def threaded_detect(model_hints: List[str], image) -> List[Optional[DetectionResults]]:
     available_models = get_global_config().available_models
     model_hints = [normalize_id(model_hint) for model_hint in model_hints]
     logger.debug(f"threaded_detect: model_hints -> {model_hints}")
@@ -269,6 +270,7 @@ async def threaded_detect(model_hints: List[str], image) -> List[Dict]:
     for future in futures:
         detections.append(future.result())
     logger.info(f"{LP} ThreadPool detections -> {detections}")
+
     return detections
 
 
@@ -359,6 +361,10 @@ async def group_detect(
     logger.info(f"group_detect: {model_hints}")
     model_hints = model_hints[0].strip('"').split(",")
     detections = await threaded_detect(model_hints, image)
+
+    det: DetectionResults
+    for det in detections:
+        det = det.json()
     return detections
 
 

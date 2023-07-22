@@ -53,7 +53,7 @@ from .Models.config import (
     NotificationZMURLOptions,
     ClientEnvVars,
 )
-from ..Shared.Models.config import Testing
+from ..Shared.Models.config import Testing, DetectionResults, Result
 from ..Shared.configs import GlobalConfig
 from .Log import CLIENT_LOGGER_NAME, CLIENT_LOG_FORMAT
 
@@ -826,7 +826,7 @@ class ZMClient:
                 logger.warning(
                     f"{_lp} Zone '{zone_name}' has a resolution of '{zone_resolution}'"
                     f" which is different from the monitor resolution of {mon_res}! "
-                    f"Attempting to adjust zone points to match monitor resolution..."
+                    f"Attempting to scale zone to match monitor resolution..."
                 )
                 logger.debug(f"{mon_res = } -- {zone_resolution = }")
                 xfact: float = mon_res[1] / zone_resolution[1] or 1.0
@@ -873,7 +873,12 @@ class ZMClient:
                 logger.debug(
                     f"{lp}animations:: Added image to frame buffer: {image_name} -- {type(image)=}"
                 )
-            results: Optional[List[Dict[str, Any]]] = None
+            # results: Optional[List[Dict[str, Any]]] = None
+            from ..Shared.Models.config import DetectionResults
+
+            results: Optional[List[DetectionResults]] = None
+            reply: Optional[Dict[str, Any]] = None
+
             route_loop: int = 0
             for route in self.routes:
                 route_loop += 1
@@ -904,7 +909,7 @@ class ZMClient:
                             status = r.status
                             if status == 200:
                                 if r.content_type == "application/json":
-                                    results = await r.json()
+                                    reply = await r.json()
                                 else:
                                     logger.error(
                                         f"{lp} Route '{route.name}' returned a non-json response! \n{r}"
@@ -924,7 +929,10 @@ class ZMClient:
                         final_detections[str(image_name)] = []
                     if image_name not in self.filtered_labels:
                         self.filtered_labels[str(image_name)] = []
-                    if results:
+                    if reply:
+                        results = []
+                        for _rep in reply:
+                            results.append(DetectionResults(**_rep))
                         image = await self.convert_to_cv2(image)
                         assert isinstance(
                             image, np.ndarray
@@ -935,33 +943,45 @@ class ZMClient:
                         )
                         filter_start = perf_counter()
                         res_loop = 0
-                        from zm_ml.Server.ML.Detectors.virelai import VirelAI
+                        logger.debug(f"{type(results) = } -- {results = }")
 
-                        _v = VirelAI()
-                        _v.logger(logger)
+                        result: DetectionResults
                         for result in results:
                             res_loop += 1
 
-                            if result["success"] is True:
+                            if result.success is True:
 
-                                if isinstance(result["bounding_box"], str):
-                                    logger.debug(f"The bounding box is a string: {result['bounding_box']}")
-                                    if result["bounding_box"] == 'virel':
-                                        logger.debug(f"bbox says its from virelAI, lets grab the annotated image from their API.")
+                                if result.extra_image_data:
+                                    logger.debug(f"There is extra image data in the result: {result.extra_image_data}")
+                                    if 'virel' in result.extra_image_data:
+                                        from zm_ml.Server.ML.Detectors.virelai import VirelAI
+
+                                        _v = VirelAI()
+                                        _v.logger(logger)
+                                        logger.debug(f"virelAI quirk: grab annotated image from their secondary API")
                                         image = _v.get_image(image)
+                                        del _v
                                         # write to file
-                                        cv2.imwrite(f'/tmp/virel.jpg', image)
+                                        # cv2.imwrite(f'/tmp/virel.jpg', image)
                                     filtered_result = result
-                                elif isinstance(result["bounding_box"], list):
+                                elif not result.extra_image_data:
                                     filtered_result = await self.filter_detections(
                                         result, image_name
                                     )
                                 # check strategy
                                 strategy: MatchStrategy = g.config.matching.strategy
-                                if filtered_result["success"] is True:
-                                    final_label = filtered_result["label"]
-                                    final_confidence = filtered_result["confidence"]
-                                    final_bbox = filtered_result["bounding_box"]
+                                if filtered_result.success is True:
+                                    logger.debug(f"DBG>>> {filtered_result = }")
+
+                                    # fixme: continue on with implementing DetectionResults
+
+                                    final_label = []
+                                    final_confidence = []
+                                    final_bbox = []
+                                    for _res in filtered_result.results:
+                                        final_label.append(_res.label)
+                                        final_confidence.append(_res.confidence)
+                                        final_bbox.append(_res.bounding_box)
 
                                     if (
                                         (strategy == MatchStrategy.first)
@@ -1003,17 +1023,18 @@ class ZMClient:
                                         logger.debug(
                                             f"\n\nFOUND A BETTER MATCH [{strategy=}] THAN model: {matched_model_names}"
                                             f" image name: {matched_frame_id}: LABELS: {matched_l} with "
-                                            f" model: {result['model_name']} image name: {image_name} ||| "
+                                            f" model: {result.model_name} image name: {image_name} ||| "
                                             f"LABELS: {final_label}\n\n"
                                         )
-                                        # matched_poly = item['bbox2poly']
+
                                         matched_l = final_label
-                                        matched_model_names = result["model_name"]
+                                        matched_model_names = result.model_name
                                         matched_c = final_confidence
                                         matched_frame_id = image_name
-                                        matched_detection_types = result["type"]
+                                        matched_detection_types = result.type
                                         matched_b = final_bbox
-                                        matched_processor = result["processor"]
+                                        matched_processor = result.processor
+                                        # FIXME: Is filtered out objects really needed in the results?
                                         if str(image_name) in self.filtered_labels:
                                             matched_e = self.filtered_labels[
                                                 str(image_name)
@@ -1027,7 +1048,7 @@ class ZMClient:
                                     )
 
                                 logger.debug(
-                                    f"perf:: Filtering for {image_name}:{result['model_name']} took "
+                                    f"perf:: Filtering for {image_name}:{result.model_name} took "
                                     f"{perf_counter() - filter_start:.5f} seconds"
                                 )
 
@@ -1081,7 +1102,8 @@ class ZMClient:
             )
 
             await self.post_process(matched)
-            matched.pop("frame_img")
+            if "frame_img" in matched:
+                matched.pop("frame_img")
             self.static_objects.pickle(
                 labels=matched_l, confs=matched_c, bboxs=matched_b, write=True
             )
@@ -1091,42 +1113,29 @@ class ZMClient:
 
     async def filter_detections(
         self,
-        result: Dict[str, Any],
+        result: DetectionResults,
         image_name: str,
-    ) -> Dict[str, Any]:
+    ) -> DetectionResults:
         """Filter detections"""
         lp: str = "filter detections::"
 
-        labels, confidences, bboxes = [], [], []
-        final_label, final_confidence, final_bbox = [], [], []
-        labels, confidences, bboxs = await self._filter(result, image_name=image_name)
+        final_results = []
+        filtered_results = await self._filter(result, image_name=image_name)
+        if filtered_results:
+            for _fr in filtered_results:
+                if _fr not in final_results:
+                    final_results.append(_fr)
+                    logger.debug(f"{lp} {_fr} not in final results, appending")
+                else:
+                    logger.debug(
+                        f"DBG>>> {_fr} IS IN FINAL LIST... "
+                        f"SKIPPING! [DONT WANT DUPLICATE] <<<DBG"
+                    )
 
-        for lbl, cnf, boxes in zip(labels, confidences, bboxs):
-            if cnf not in final_confidence and boxes not in final_bbox:
-                logger.debug(
-                    f"DBG>>> \n\n {lbl} {cnf} {boxes} IS NOT IN FINAL LIST... ADDING! \n\n <<<DBG"
-                )
-                final_label.append(lbl)
-                final_confidence.append(cnf)
-                final_bbox.append(boxes)
+        result.success = False if not final_results else True
+        result.results = final_results
 
-            else:
-                logger.debug(
-                    f"DBG>>> \n\n {lbl} {cnf} {boxes} IS IN FINAL LIST... "
-                    f"SKIPPING! [DONT WANT DUPLICATE] \n\n <<<DBG"
-                )
-
-        filtered_result = {
-            "success": False if not final_label else True,
-            "type": result["type"],
-            "processor": result["processor"],
-            "model_name": result["model_name"],
-            "label": final_label,
-            "confidence": final_confidence,
-            "bounding_box": final_bbox,
-        }
-        logger.debug(f"DBG>>> FILTERED RESULT: {filtered_result} <<<DBG")
-        return filtered_result
+        return result
 
     @staticmethod
     def _bbox2points(bbox: List) -> list[tuple[tuple[Any, Any], tuple[Any, Any]]]:
@@ -1142,28 +1151,29 @@ class ZMClient:
 
     async def _filter(
         self,
-        result: Dict[str, Any],
+        result: DetectionResults,
         image_name: str = None,
         *args,
         **kwargs,
-    ):
+    ) -> List[Result]:
         """Filter detections using 2 loops, first loop is filter by object label, second loop is to filter by zone."""
         from ..Server.Models.config import ModelType
+        from ..Shared.Models.config import Result
 
-        r_label, r_conf, r_bbox = [], [], []
         zones = self.zones.copy()
         zone_filters = self.zone_filters
         object_label_filters = {}
         final_filters = None
         base_filters = None
         # strategy: MatchStrategy = g.config.matching.strategy
-        type_ = result["type"]
-        model_name = result["model_name"]
-        processor = result["processor"]
+        type_ = result.type
+        model_name = result.model_name
+        ret_results = []
+        processor = result.processor
         found_match: bool = False
         label, confidence, bbox = None, None, None
         _zn_tot = len(zones)
-        _lbl_tot = len(result["label"])
+        _lbl_tot = len(result.results)
         idx = 0
         i = 0
         zone_name: str
@@ -1183,11 +1193,9 @@ class ZMClient:
 
         #
         # Outer Loop
-        for label, confidence, bbox in zip(
-            result["label"],
-            result["confidence"],
-            result["bounding_box"],
-        ):
+        _result: Result
+        for _result in result.results:
+            label, confidence, bbox = _result.label, _result.confidence, _result.bounding_box
             i += 1
             _lp = f"_filter:{image_name}:'{model_name}'::{type_}::'{label}' {i}/{_lbl_tot}::"
 
@@ -1578,15 +1586,14 @@ class ZMClient:
                     logger.debug(
                         f"{__lp} NOT in zone [{zone_name}], continuing to next zone..."
                     )
-                logger.debug(
-                    f"\n---------------------END OF ZONE LOOP # {idx} ---------------------"
-                )
+                # logger.debug(
+                #     f"\n---------------------END OF ZONE LOOP # {idx} ---------------------"
+                # )
 
             if found_match:
                 logger.debug(f"{_lp} '{label}' PASSED FILTERING")
-                r_label.append(label)
-                r_conf.append(confidence)
-                r_bbox.append(bbox)
+                ret_results.append(Result(**{'label': label, 'confidence': confidence, 'bounding_box': bbox}))
+
                 if (strategy := g.config.matching.strategy) == MatchStrategy.first:
                     logger.debug(
                         f"{_lp} Match strategy: '{strategy}', breaking out of LABEL loop..."
@@ -1596,16 +1603,11 @@ class ZMClient:
                 logger.debug(f"{_lp} '{label}' FAILED FILTERING")
                 filter_out(label, confidence, bbox)
 
-            logger.debug(
-                f"\n---------------------END OF LABEL LOOP # {i} ---------------------"
-            )
+            # logger.debug(
+            #     f"\n---------------------END OF LABEL LOOP # {i} ---------------------"
+            # )
 
-        logger.warning(
-            f"OUT OF LABEL AND ZONE LOOP "
-            f"FILTERED LABELS={r_label}, CONFIDENCE={r_conf}, BBOX={r_bbox}"
-        )
-
-        return r_label, r_conf, r_bbox
+        return ret_results
 
     def create_animations(self, label, confidence, bbox):
         """
@@ -2018,7 +2020,8 @@ class ZMClient:
                     goti = self.notifications.gotify
                     # gotify has no limits, so it can send a notification for each frame
                     goti.title = f"({g.eid}) {g.mon_name}->{g.event_cause}"
-                    goti.send(prediction_str)
+                    # goti.send(prediction_str)
+                    futures.append(executor.submit(goti.send, prediction_str))
 
                 if noti_cfg.zmninja.enabled:
                     # zmninja uses FCM which has a limit of messages per month, so it needs a one time strategy
@@ -2038,41 +2041,23 @@ class ZMClient:
                         "mid": g.mid,
                         "eid": g.eid,
                     }
-                    self.notifications.mqtt.publish(
-                        fmt_str=prediction_str,
-                        results=mqtt_results,
-                        image=noti_img,
-                        mid=g.mid,
-                    )
+                    # self.notifications.mqtt.publish(
+                    #     fmt_str=prediction_str,
+                    #     results=mqtt_results,
+                    #     image=noti_img,
+                    #     mid=g.mid,
+                    # )
+                    futures.append(executor.submit(self.notifications.mqtt.publish, fmt_str=prediction_str, results=mqtt_results, image=noti_img, mid=g.mid))
 
                 if noti_cfg.shell_script.enabled:
                     logger.debug(f"{lp} Shell Script notification configured, sending")
-                    script_args = noti_cfg.shell_script.args
-                    if script_args is None:
-                        script_args = []
-                    _accepted_args = {
-                        "mid", "eid", "fmt_str", "event_url", "event_path", "results"
-                    }
-                    for _arg in script_args:
-                        if _arg == "mid":
-                            _arg = g.mid
-                        elif _arg == "eid":
-                            _arg = g.eid
-                        elif _arg == "fmt_str":
-                            _arg = prediction_str
-                        elif _arg == "event_url":
-                            _arg = (
-                                f"{g.api.portal_base_url}/cgi-bin/nph-zms?mode=jpeg&replay=single&"
-                                f"monitor={g.mid}&event={g.eid}"
-                            )
-                        elif _arg == "event_path":
-                            _arg = g.event_path
-                        elif _arg == "results":
-                            _arg = results
-                        else:
-                            script_args.remove(_arg)
-
-                    self.notifications.shell_script.send(script_args)
+                    futures.append(executor.submit(self.notifications.shell_script.send, prediction_str, results))
+                    # try:
+                    #     self.notifications.shell_script.send(prediction_str, results)
+                    # except Exception as exc:
+                    #     logger.error(f"{lp} failed to send notification: {exc}")
+                    # else:
+                    #     logger.debug(f"{lp} Shell Script notification completed")
 
             for future in concurrent.futures.as_completed(futures):
                 try:
@@ -2081,7 +2066,7 @@ class ZMClient:
                         raise exc_
                 except Exception as exc:
                     logger.error(f"{lp} failed to send notification: {exc}")
-                    raise exc
+                    # raise exc
                 else:
                     future.result()
         else:

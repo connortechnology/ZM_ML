@@ -12,6 +12,8 @@ substitutions:
   LOGGING_DIR: ${ML_INSTALL_LOGGING_DIR}
   MODEL_DIR: ${ML_INSTALL_MODEL_DIR}
   IMAGE_DIR: ${ML_INSTALL_IMAGE_DIR}
+  # zm_ml will make its own venv, this will keep its env separate from system
+  VENV_DIR: ${ML_INSTALL_VENV_DIR}
 
   ROUTE_NAME: ${ML_INSTALL_CLIENT_ROUTE_NAME}
   ROUTE_HOST: ${ML_INSTALL_CLIENT_ROUTE_HOST}
@@ -37,6 +39,9 @@ system:
   tmp_path: ${TMP_DIR}
   # Path to where any images will be stored
   image_dir: ${IMAGE_DIR}
+  # Path to where ZoMi ML will install its python environment
+  venv_dir: ${VENV_DIR}
+
   # Maximum parallel threaded processes (set to cores)
   thread_workers: 4
 
