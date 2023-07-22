@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import venv
 import platform
 import subprocess
 import tempfile
@@ -206,9 +207,7 @@ def get_web_user() -> Tuple[Optional[str], Optional[str]]:
     hits = []
     proc_names = []
     for proc in psutil.process_iter():
-        if (
-            any(x.startswith(proc.name()) for x in www_daemon_names)
-        ):
+        if any(x.startswith(proc.name()) for x in www_daemon_names):
             uname, ugroup = proc.username(), grp.getgrgid(proc.gids().real).gr_name
             logger.debug(f"Found web server process: {proc.name()} ({uname}:{ugroup})")
             hits.append((uname, ugroup))
@@ -1393,6 +1392,12 @@ def install_models(model_dir: Path, force: bool = False):
             logger.debug(f"I'm a dir: {path_object}")
 
 
+def in_venv():
+    return hasattr(sys, "real_prefix") or (
+        hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix
+    )
+
+
 if __name__ == "__main__":
     # parse args first
     args = parse_cli()
@@ -1427,6 +1432,17 @@ if __name__ == "__main__":
     models: List[str] = []
     testing: bool = args.test
     debug: bool = args.debug
+    # Let's create a venv for the install script to run in
+    if in_venv():
+        logger.info(
+            "Detected to be running in a virtual environment, "
+            "be aware this install script creates its own venv "
+            "and also creates a venv for zm_ml!"
+        )
+
+    install_venv: venv.EnvBuilder = venv.EnvBuilder(with_pip=True)
+    zmml_venv: venv.EnvBuilder = venv.EnvBuilder(with_pip=True)
+
     install_log = args.install_log
     file_handler = logging.FileHandler(install_log, mode="w")
     file_handler.setFormatter(log_formatter)
