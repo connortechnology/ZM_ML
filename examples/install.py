@@ -1233,7 +1233,7 @@ def do_install(_inst_type: str):
         _pip_prefix.append(_src)
         logger.info(f"This may appear frozen for a few moments, please be patient...")
         # create venv, upgrade pip and setup tools and install ZoMi ML into the venv
-        _venv = ZoMiEnvBuilder(with_pip=True, cmd=_pip_prefix, upgrade_deps=True)
+        _venv = ZoMiEnvBuilder(with_pip=True, cmd=_pip_prefix, upgrade_deps=True, prompt="ZoMi_ML")
         _venv.create(venv_dir)
         content: Optional[str] = None
         if _inst_type == "client":
