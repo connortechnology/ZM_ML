@@ -772,16 +772,17 @@ class Settings(BaseModel):
                         final_model = config
                     elif _framework == ModelFrameWork.OPENCV:
                         config = None
-                        if _sub_fw == OpenCVSubFrameWork.DARKNET:
+                        not_impl = [
+                            OpenCVSubFrameWork.TENSORFLOW,
+                            OpenCVSubFrameWork.TORCH,
+                            OpenCVSubFrameWork.CAFFE,
+                            OpenCVSubFrameWork.VINO,
+                        ]
+                        if _sub_fw == OpenCVSubFrameWork.DARKNET or _sub_fw == OpenCVSubFrameWork.ONNX:
+                            logger.debug(f"\n\nLoading {_sub_fw} model\n\n")
                             config = CV2YOLOModelConfig(**model)
                             config.detection_options = CV2YOLOModelOptions(**_options)
-                            not_impl = [
-                                OpenCVSubFrameWork.ONNX,
-                                OpenCVSubFrameWork.TENSORFLOW,
-                                OpenCVSubFrameWork.TORCH,
-                                OpenCVSubFrameWork.CAFFE,
-                                OpenCVSubFrameWork.VINO,
-                            ]
+
                         elif _sub_fw in not_impl:
                             raise NotImplementedError(f"{_sub_fw} not implemented")
                         else:
@@ -1002,7 +1003,7 @@ class APIDetector:
                 f"{self.config.processor} is not available on this system"
             )
         if self.config.framework == ModelFrameWork.OPENCV:
-            if self.config.sub_framework == OpenCVSubFrameWork.DARKNET:
+            if self.config.sub_framework == OpenCVSubFrameWork.DARKNET or self.config.sub_framework == OpenCVSubFrameWork.ONNX:
                 from ..ML.Detectors.opencv.cv_yolo import CV2YOLODetector
                 self.model = CV2YOLODetector(self.config)
         elif self.config.framework == ModelFrameWork.HTTP:
@@ -1101,7 +1102,7 @@ class APIDetector:
                         )
                         raise cv2_cuda_exception
                     else:
-                        logger.debug(f"Found {cuda_devices} CUDA device(s)")
+                        logger.debug(f"Found {cuda_devices} CUDA device(s) that OpenCV can use")
                         available = True
             elif framework == ModelFrameWork.TENSORFLOW:
                 try:
