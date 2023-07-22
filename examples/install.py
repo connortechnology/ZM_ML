@@ -1169,8 +1169,6 @@ def do_install(_inst_type: str):
                 _ENV["ML_INSTALL_SERVER_PORT"] = "5000"
 
         elif _inst_type == "client":
-            # make the install 'editable' (changes to the repo source files are immediately reflected in the installed package)
-            _pip_prefix.append("-e")
             copy_file(
                 INSTALL_FILE_DIR / "EventStartCommand.sh",
                 data_dir / "bin/EventStartCommand.sh",
