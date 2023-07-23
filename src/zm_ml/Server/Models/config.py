@@ -11,14 +11,14 @@ import yaml
 from pydantic import (
     BaseModel,
     Field,
-    validator,
+    FieldValidationInfo,
+    field_validator,
     IPvAnyAddress,
     PositiveInt,
     SecretStr,
-    BaseSettings,
     AnyUrl,
+
 )
-from pydantic.fields import ModelField
 
 from .validators import validate_model_labels
 from ..Log import SERVER_LOGGER_NAME
@@ -33,6 +33,7 @@ from ...Shared.Models.Enums import (
     HTTPSubFrameWork,
     OpenCVSubFrameWork,
     ALPRSubFrameWork,
+    UltralyticsSubFrameWork
 )
 from ...Shared.Models.config import Testing, LoggingSettings
 from ...Shared.Models.validators import (
@@ -72,12 +73,11 @@ class LockSettings(BaseModel):
         default_factory=LockSetting, description="TPU Lock Settings"
     )
 
-    @validator("gpu", "cpu", "tpu", always=True)
-    def set_lock_name(cls, v, field, values):
-        # logger.debug(f"locks validator {v = } --- {field.name = } -- {values = }")
+    @field_validator("gpu", "cpu", "tpu", always=True, mode="before")
+    def set_lock_name(cls, v, field: FieldValidationInfo):
         if v:
             v: LockSetting
-            v.name = f"zm-mlapi_{field.name}"
+            v.name = f"zm-mlapi_{field.field_name}"
         return v
 
     def get(self, device: str) -> LockSetting:
@@ -91,7 +91,7 @@ class LockSettings(BaseModel):
         else:
             raise ValueError(f"Invalid device type: {device}")
 
-    @validator("dir", pre=True, always=True)
+    @field_validator("dir", mode="before", always=True)
     def validate_lock_dir(cls, v):
         if not v:
             v = f"{tempfile.gettempdir()}/zm_mlapi/locks"
@@ -120,7 +120,7 @@ class ServerSettings(BaseModel):
     )
     jwt: JWTSettings = Field(default_factory=JWTSettings, description="JWT Settings")
 
-    _validate_address = validator("address", allow_reuse=True, pre=True)(
+    _validate_address = field_validator("address", mode="before")(
         validate_replace_localhost
     )
 
@@ -303,7 +303,7 @@ class PlateRecognizerModelOptions(BaseModelOptions):
         description="Maximum size (Width) of image",
     )
 
-    @validator("config", "payload")
+    @field_validator("config", "payload")
     def check_json_serializable(cls, v):
         try:
             json.dumps(v)
@@ -327,8 +327,23 @@ class PyTorchModelOptions(BaseModelOptions):
 
 
 class BaseModelConfig(BaseModel):
+    """
+    Base Model Config
+
+    This is the base model config that all models inherit from.
+
+    :param id: Unique ID of the model
+    :param name: model name
+    :param enabled: model enabled
+    :param description: model description
+    :param framework: model framework
+    :param model_type: model type (object, face, alpr)
+    :param processor: Processor to use for model
+    :param sub_framework: sub-framework to use for model
+    :param detection_options: Model options (if any)
+    """
     id: uuid.UUID = Field(
-        default_factory=uuid.uuid4, description="Unique ID of the model"
+        default_factory=uuid.uuid4, description="Unique ID of the model", init=False
     )
     name: str = Field(..., description="model name")
     enabled: bool = Field(True, description="model enabled")
@@ -345,8 +360,8 @@ class BaseModelConfig(BaseModel):
 
     # todo: add validator that detects framework and sets a default sub framework if it is None.
     sub_framework: Optional[
-        Union[OpenCVSubFrameWork, HTTPSubFrameWork, ALPRSubFrameWork]
-    ] = Field(OpenCVSubFrameWork.DARKNET, description="sub-framework to use for model")
+        Union[OpenCVSubFrameWork, HTTPSubFrameWork, ALPRSubFrameWork, UltralyticsSubFrameWork]
+    ] = Field(UltralyticsSubFrameWork, description="sub-framework to use for model")
 
     detection_options: Union[
         BaseModelOptions,
@@ -357,12 +372,13 @@ class BaseModelConfig(BaseModel):
         ALPRModelOptions,
         TPUModelOptions,
         PyTorchModelOptions,
+        None
     ] = Field(
         default_factory=BaseModelOptions,
         description="Default Configuration for the model",
     )
 
-    @validator("name")
+    @field_validator("name")
     def check_name(cls, v):
         v = str(v).strip().casefold()
         return v
@@ -393,14 +409,14 @@ class TPUModelConfig(BaseModelConfig):
         exclude=True,
     )
 
-    _validate_labels = validator("labels", always=True, allow_reuse=True)(
+    _validate_labels = field_validator("labels", always=True)(
         validate_model_labels
     )
 
-    @validator("config", "input", "classes", pre=True, always=True)
-    def str_to_path(cls, v, values, field: ModelField) -> Optional[Path]:
+    @field_validator("config", "input", "classes", mode="before", always=True)
+    def str_to_path(cls, v, field: FieldValidationInfo) -> Optional[Path]:
         # logger.debug(f"validating {field.name} - {v = } -- {type(v) = } -- {values = }")
-        msg = f"{field.name} must be a path or a string of a path"
+        msg = f"{field.field_name} must be a path or a string of a path"
         model_name = values.get("name", "Unknown Model")
         lp = f"Model Name: {model_name} ->"
 
@@ -441,12 +457,12 @@ class CV2YOLOModelConfig(BaseModelConfig):
         exclude=True,
     )
 
-    _validate_labels = validator("labels", always=True, allow_reuse=True)(
+    _validate_labels = field_validator("labels", always=True)(
         validate_model_labels
     )
 
-    @validator("config", "input", "classes", pre=True, always=True)
-    def str_to_path(cls, v, values, field: ModelField) -> Optional[Path]:
+    @field_validator("config", "input", "classes", mode="before", always=True)
+    def str_to_path(cls, v, values, field) -> Optional[Path]:
         # logger.debug(f"validating {field.name} - {v = } -- {type(v) = } -- {values = }")
         msg = f"{field.name} must be a path or a string of a path"
         model_name = values.get("name", "Unknown Model")
@@ -564,12 +580,12 @@ class CV2TFModelConfig(BaseModelConfig):
         exclude=True,
     )
 
-    _validate_labels = validator("labels", always=True, allow_reuse=True)(
+    _validate_labels = field_validator("labels", always=True)(
         validate_model_labels
     )
 
-    @validator("config", "input", "classes", pre=True, always=True)
-    def str_to_path(cls, v, values, field: ModelField) -> Optional[Path]:
+    @field_validator("config", "input", "classes", mode="before", always=True)
+    def str_to_path(cls, v, values, field) -> Optional[Path]:
         # logger.debug(f"validating {field.name} - {v = } -- {type(v) = } -- {values = }")
         msg = f"{field.name} must be a path or a string of a path"
         model_name = values.get("name", "Unknown Model")
@@ -607,10 +623,10 @@ class PyTorchModelConfig(BaseModelConfig):
         exclude=True,
     )
 
-    _validate_labels = validator("labels", always=True, allow_reuse=True)(
+    _validate_labels = field_validator("labels", always=True)(
         validate_model_labels
     )
-    _validate = validator("input", "classes", pre=True, always=True, allow_reuse=True)(
+    _validate = field_validator("input", "classes", mode="before", always=True)(
         str2path
     )
 
@@ -709,7 +725,7 @@ class Settings(BaseModel):
     def get_lock_settings(self):
         return self.locks
 
-    @validator("available_models", always=True)
+    @field_validator("available_models", always=True)
     def validate_available_models(cls, v, values):
         models = values.get("models")
         if models:

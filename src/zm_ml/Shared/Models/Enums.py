@@ -39,18 +39,24 @@ class ALPRSubFrameWork(str, Enum):
 
 
 class ModelFrameWork(str, Enum):
+    ULTRALYTICS = "ultralytics"
     OPENCV = "opencv"
     HTTP = "http"
     CORAL = "coral"
-    TENSORFLOW = "tensorflow"
     TORCH = "torch"
     DEEPFACE = "deepface"
     ALPR = "alpr"
     FACE_RECOGNITION = "face_recognition"
-    DEFAULT = OPENCV
     REKOGNITION = "rekognition"
-    AWS = REKOGNITION
+    DEFAULT = ULTRALYTICS
 
+
+class UltralyticsSubFrameWork(str, Enum):
+    OBJECT = "object"
+    SEGMENTATION = "segmentation"
+    POSE = "pose"
+    CLASSIFICATION = "classification"
+    DEFAULT = OBJECT
 
 class ModelProcessor(str, Enum):
     NONE = "none"

@@ -98,9 +98,21 @@ locks:
     max: 1
     timeout: 13
 
-# -- Define what models the server will offer
+# -- Define what models the server will offer, name is case insensitive and preserves spaces.
 models:
   # -- The model name is how you will call it in the API request
+  - name: yolov8
+    # Optional. Defaults to True.
+    enabled: yes
+    # opencv, torch, ultralytics, coral, face_recognition, alpr, http
+    # Default: ultralytics
+    framework: ultralytics
+    # Optional. Defaults to cpu - cpu/gpu
+    processor: cpu
+    # Optional. Default: object - object, segmentation, pose, classification
+    sub_framework: object
+
+
   - name: YOLOv4  # Name will be lower cased, spaces are preserved; 'yolov4'
     enabled: no  # Optional. Defaults to True.
     description: "yolov4 pretrained DarkNet model"  # Optional, for user reference.
