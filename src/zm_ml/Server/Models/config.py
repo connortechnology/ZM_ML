@@ -35,7 +35,11 @@ from ...Shared.Models.Enums import (
     ALPRSubFrameWork,
 )
 from ...Shared.Models.config import Testing, LoggingSettings
-from ...Shared.Models.validators import validate_no_scheme_url, validate_replace_localhost, str2path
+from ...Shared.Models.validators import (
+    validate_no_scheme_url,
+    validate_replace_localhost,
+    str2path,
+)
 
 logger = logging.getLogger(SERVER_LOGGER_NAME)
 
@@ -116,7 +120,9 @@ class ServerSettings(BaseModel):
     )
     jwt: JWTSettings = Field(default_factory=JWTSettings, description="JWT Settings")
 
-    _validate_address = validator("address", allow_reuse=True, pre=True)(validate_replace_localhost)
+    _validate_address = validator("address", allow_reuse=True, pre=True)(
+        validate_replace_localhost
+    )
 
 
 class DetectionResult(BaseModel):
@@ -350,7 +356,7 @@ class BaseModelConfig(BaseModel):
         PlateRecognizerModelOptions,
         ALPRModelOptions,
         TPUModelOptions,
-        PyTorchModelOptions
+        PyTorchModelOptions,
     ] = Field(
         default_factory=BaseModelOptions,
         description="Default Configuration for the model",
@@ -586,7 +592,9 @@ class PyTorchModelConfig(BaseModelConfig):
 
     num_classes: Optional[int] = None
     gpu_idx: Optional[int] = None
-    pretrained: Optional[str] = Field(None, regex=r"(accurate|fast|default|balanced|high_performance|low_performance)")
+    pretrained: Optional[str] = Field(
+        None, regex=r"(accurate|fast|default|balanced|high_performance|low_performance)"
+    )
 
     conf: Optional[float] = Field(None, ge=0, le=1)
     nms: Optional[float] = Field(None, ge=0, le=1)
@@ -602,7 +610,9 @@ class PyTorchModelConfig(BaseModelConfig):
     _validate_labels = validator("labels", always=True, allow_reuse=True)(
         validate_model_labels
     )
-    _validate = validator("input", "classes", pre=True, always=True, allow_reuse=True)(str2path)
+    _validate = validator("input", "classes", pre=True, always=True, allow_reuse=True)(
+        str2path
+    )
 
 
 class ColorDetectSettings(BaseModel):
@@ -778,8 +788,10 @@ class Settings(BaseModel):
                             OpenCVSubFrameWork.CAFFE,
                             OpenCVSubFrameWork.VINO,
                         ]
-                        if _sub_fw == OpenCVSubFrameWork.DARKNET or _sub_fw == OpenCVSubFrameWork.ONNX:
-                            logger.debug(f"\n\nLoading {_sub_fw} model\n\n")
+                        if (
+                            _sub_fw == OpenCVSubFrameWork.DARKNET
+                            or _sub_fw == OpenCVSubFrameWork.ONNX
+                        ):
                             config = CV2YOLOModelConfig(**model)
                             config.detection_options = CV2YOLOModelOptions(**_options)
 
@@ -994,11 +1006,16 @@ class APIDetector:
         from ..ML.Detectors.alpr import PlateRecognizer, OpenAlprCmdLine, OpenAlprCloud
         from ..ML.Detectors.virelai import VirelAI
         from ..ML.Detectors.aws_rekognition import AWSRekognition
+
         self.model = None
+        _proc_available: Optional[bool] = False
         if config:
             self.config = config
-        if self.config.processor and not self.is_processor_available():
-            # Fixme: force CPU and continue
+        if not self.config.processor:
+            self.config.processor = ModelProcessor.CPU
+
+        _proc_available = self.is_processor_available()
+        if _proc_available is False:
             _failed_proc = self.config.processor.value
 
             if self.config.framework == ModelFrameWork.CORAL:
@@ -1008,51 +1025,75 @@ class APIDetector:
             else:
                 self.config.processor = ModelProcessor.CPU
             logger.warning(
-                f"{_failed_proc} is not available to the {self.config.framework} framework! Switching to {self.config.processor}"
+                f"{_failed_proc} is not available to the {self.config.framework} framework! "
+                f"Switching to {self.config.processor}"
             )
 
-        if self.config.framework == ModelFrameWork.OPENCV:
-            if self.config.sub_framework == OpenCVSubFrameWork.DARKNET or self.config.sub_framework == OpenCVSubFrameWork.ONNX:
-                from ..ML.Detectors.opencv.cv_yolo import CV2YOLODetector
-                self.model = CV2YOLODetector(self.config)
-        elif self.config.framework == ModelFrameWork.HTTP:
-            sub_fw = self.config.sub_framework
-            if sub_fw == HTTPSubFrameWork.REKOGNITION:
-                self.model = AWSRekognition(self.config)
-            elif sub_fw == HTTPSubFrameWork.VIREL:
-                self.model = VirelAI(self.config)
-            elif sub_fw == HTTPSubFrameWork.NONE:
-                raise RuntimeError(
-                    f"Invalid HTTP sub framework {sub_fw}, YOU MUST CHOOSE A sub_framework!"
-                )
-            else:
-                raise RuntimeError(f"Invalid HTTP sub framework: {sub_fw}")
-        elif self.config.framework == ModelFrameWork.FACE_RECOGNITION:
-            self.model = FaceRecognitionLibDetector(self.config)
-        elif self.config.framework == ModelFrameWork.ALPR:
-            if self.config.service == ALPRService.PLATE_RECOGNIZER:
-                self.model = PlateRecognizer(self.config)
-            elif self.config.service == ALPRService.OPENALPR:
-                if self.config.api_type == ALPRAPIType.LOCAL:
-                    self.model = OpenAlprCmdLine(self.config)
-                elif self.config.api_type == ALPRAPIType.CLOUD:
-                    self.model = OpenAlprCloud(self.config)
-
-        elif self.config.framework == ModelFrameWork.CORAL:
-            from ..ML.Detectors.coral_edgetpu import TpuDetector
-
-            self.model = TpuDetector(self.config)
-
-        elif self.config.framework == ModelFrameWork.TORCH:
-            from ..ML.Detectors.pytorch.torch_base import TorchDetector
-
-            self.model = TorchDetector(self.config)
-
-        else:
+        elif _proc_available is None:
+            # framework is not installed
             logger.warning(
-                f"CANT CREATE DETECTOR -> Framework NOT IMPLEMENTED!!! {self.config.framework}"
+                f"Library missing, cannot create detector for {self.config.name}"
             )
-        logger.debug(f"APIDetector:_load_model()-> {self.model = }")
+            self.config = None
+            from ..app import get_global_config
+
+            for _model in get_global_config().available_models:
+                if _model.id == self.id:
+                    get_global_config().available_models.remove(_model)
+                    break
+
+            return
+
+        try:
+            if self.config.framework == ModelFrameWork.OPENCV:
+                if (
+                    self.config.sub_framework == OpenCVSubFrameWork.DARKNET
+                    or self.config.sub_framework == OpenCVSubFrameWork.ONNX
+                ):
+                    from ..ML.Detectors.opencv.cv_yolo import CV2YOLODetector
+
+                    self.model = CV2YOLODetector(self.config)
+            elif self.config.framework == ModelFrameWork.HTTP:
+                sub_fw = self.config.sub_framework
+                if sub_fw == HTTPSubFrameWork.REKOGNITION:
+                    self.model = AWSRekognition(self.config)
+                elif sub_fw == HTTPSubFrameWork.VIREL:
+                    self.model = VirelAI(self.config)
+                elif sub_fw == HTTPSubFrameWork.NONE:
+                    raise RuntimeError(
+                        f"Invalid HTTP sub framework {sub_fw}, YOU MUST CHOOSE A sub_framework!"
+                    )
+                else:
+                    raise RuntimeError(f"Invalid HTTP sub framework: {sub_fw}")
+            elif self.config.framework == ModelFrameWork.FACE_RECOGNITION:
+                self.model = FaceRecognitionLibDetector(self.config)
+            elif self.config.framework == ModelFrameWork.ALPR:
+                if self.config.service == ALPRService.PLATE_RECOGNIZER:
+                    self.model = PlateRecognizer(self.config)
+                elif self.config.service == ALPRService.OPENALPR:
+                    if self.config.api_type == ALPRAPIType.LOCAL:
+                        self.model = OpenAlprCmdLine(self.config)
+                    elif self.config.api_type == ALPRAPIType.CLOUD:
+                        self.model = OpenAlprCloud(self.config)
+
+            elif self.config.framework == ModelFrameWork.CORAL:
+                from ..ML.Detectors.coral_edgetpu import TpuDetector
+
+                self.model = TpuDetector(self.config)
+
+            elif self.config.framework == ModelFrameWork.TORCH:
+                from ..ML.Detectors.pytorch.torch_base import TorchDetector
+
+                self.model = TorchDetector(self.config)
+
+            else:
+                logger.warning(
+                    f"CANT CREATE DETECTOR -> Framework NOT IMPLEMENTED!!! {self.config.framework}"
+                )
+        except Exception as e:
+            logger.warning(f"Error loading model: {e}")
+        else:
+            logger.debug(f"APIDetector:_load_model()-> {self.model = }")
 
     def is_processor_available(self) -> bool:
         """Check if the processor is available"""
@@ -1079,6 +1120,7 @@ class APIDetector:
                     logger.warning(
                         "pycoral not installed, cannot load any models that use the TPU processor"
                     )
+                    available = None
                 else:
                     tpus = list_edge_tpus()
                     logger.debug(f"TPU devices found: {tpus}")
@@ -1098,6 +1140,7 @@ class APIDetector:
                     logger.warning(
                         "OpenCV does not have CUDA enabled/compiled, cannot load any models that use the GPU processor"
                     )
+                    available = None
                 else:
                     # wrap in try block as this will throw an exception if no CUDA devices are found
                     try:
@@ -1109,9 +1152,11 @@ class APIDetector:
                         logger.warning(
                             f"Error getting CUDA device count: {cv2_cuda_exception}"
                         )
-                        raise cv2_cuda_exception
+                        available = None
                     else:
-                        logger.debug(f"Found {cuda_devices} CUDA device(s) that OpenCV can use")
+                        logger.debug(
+                            f"Found {cuda_devices} CUDA device(s) that OpenCV can use"
+                        )
                         available = True
             elif framework == ModelFrameWork.TENSORFLOW:
                 try:
@@ -1120,6 +1165,7 @@ class APIDetector:
                     logger.warning(
                         "tensorflow not installed, cannot load any models that use tensorflow GPU processor"
                     )
+                    available = None
                 else:
                     if not tf.config.list_physical_devices("GPU"):
                         logger.warning(
@@ -1132,8 +1178,9 @@ class APIDetector:
                     import torch
                 except ImportError:
                     logger.warning(
-                        "pytorch not installed, cannot load any models that use pytorch GPU processor"
+                        "pytorch not installed, cannot load any models that use pytorch"
                     )
+                    available = None
                 else:
                     if not torch.cuda.is_available():
                         logger.warning(
@@ -1148,6 +1195,7 @@ class APIDetector:
                     logger.warning(
                         "dlib not installed, cannot load any models that use dlib GPU processor"
                     )
+                    available = None
                 else:
                     try:
                         if dlib.DLIB_USE_CUDA and dlib.cuda.get_num_devices() >= 1:
@@ -1156,12 +1204,11 @@ class APIDetector:
                         logger.warning(
                             f"Error getting CUDA device count: {dlib_cuda_exception}"
                         )
-                        raise dlib_cuda_exception
+                        available = False
 
             elif framework == ModelFrameWork.DEEPFACE:
                 logger.warning("WORKING ON DeepFace models!")
-                raise NotImplementedError
-                pass
+                available = False
         return available
 
     def detect(self, image: np.ndarray) -> Dict[str, Any]:
@@ -1193,7 +1240,9 @@ class GlobalConfig(BaseModel):
         if not ret_:
             logger.debug(f"Creating new detector for '{model.name}'")
             ret_ = APIDetector(model)
-            self.detectors.append(ret_)
+            logger.debug(f"returned detctor -> {ret_}")
+            if ret_.config is not None:
+                self.detectors.append(ret_)
         if not ret_:
             logger.error(f"Unable to create detector for {model.name}")
         return ret_
@@ -1202,7 +1251,9 @@ class GlobalConfig(BaseModel):
 class ServerEnvVars(BaseSettings):
     """Server Environment Variables"""
 
-    conf_file: str = Field(None, env="ML_SERVER_CONF_FILE", description="Server YAML config file")
+    conf_file: str = Field(
+        None, env="ML_SERVER_CONF_FILE", description="Server YAML config file"
+    )
 
     class Config:
         # env_file = ".env"
