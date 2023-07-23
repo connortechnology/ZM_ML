@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from typing import Union, Any, Optional, Dict
 
-import pydantic.fields
+from pydantic import FieldValidationInfo
 
 from ...Client.Log import CLIENT_LOGGER_NAME
 from ...Server.Log import SERVER_LOGGER_NAME
@@ -30,9 +30,7 @@ def validate_enabled(v, **kwargs):
 
 def validate_replace_localhost(
     v,
-    field: Optional[pydantic.fields.ModelField] = None,
-    values: Optional[Dict] = None,
-    config=None,
+    field: Optional[FieldValidationInfo] = None,
 ):
     """Replace 'localhost' with 127.0.0.1"""
     # logger.debug(f"Validating ENVVAR {field}: {v}")
@@ -43,7 +41,7 @@ def validate_replace_localhost(
     return v
 
 
-def validate_no_scheme_url(v, field, values, config):
+def validate_no_scheme_url(v, field):
     """Validate and transform a URL/IP string into a URL with a scheme"""
     _name_ = inspect.currentframe().f_code.co_name
     logger.debug(f"{_name_}:: Validating '{field.name}' -> {v}")
@@ -103,9 +101,7 @@ def str2path(v: Union[str, Path, None], **kwargs):
     Args:
         v (str|path|None): string to convert to a Path object
     Keyword Args:
-        field (pydantic.fields.ModelField): pydantic field object
-        values (Dict): pydantic values dict
-        config (pydantic.Config): pydantic config object
+        field (FieldValidationInfo): pydantic field object
     """
     # _name_ = inspect.currentframe().f_code.co_name
     # logger.debug(f"{_name_}:: Validating '{field.name}' -> {v}")
@@ -116,17 +112,17 @@ def str2path(v: Union[str, Path, None], **kwargs):
     return v
 
 
-def validate_dir(v, field=None, values=None, config=None):
+def validate_dir(v, field):
     if v:
-        v = str2path(v, field=field, values=values, config=config)
+        v = str2path(v, field)
         assert v.exists(), f"Path [{v}] does not exist"
         assert v.is_dir(), f"Path [{v}] is not a directory"
     return v
 
 
-def validate_file(v, field=None, values=None, config=None):
+def validate_file(v, field):
     if v:
-        v = str2path(v, field=field, values=values, config=config)
+        v = str2path(v, field)
         assert v.exists(), f"Path [{v}] does not exist"
         assert v.is_file(), f"Path [{v}] is not a file"
     return v
