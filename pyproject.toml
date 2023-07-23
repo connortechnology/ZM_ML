@@ -8,208 +8,11 @@ name = "zm_ml"
 version = "0.0.1a2"
 dependencies = [
     # Both
-    'PyYAML>=6.0',
-    'requests>=2.28.1',
-    "pydantic~=1.10.2",
-    'urllib3>=1.26.12',
-    'numpy>=1.23.2',
-    'pyjwt>=2.6.0',
-    'distro>=1.8.0',
-]
-
-authors = [
-  { name="baudneo", email="baudneo@protonmail.com" },
-]
-readme = "README.md"
-
-requires-python = ">=3.8"
-keywords = ["zoneminder", "object detection", "machine learning", "rest api", "facial detection", "facial recognition", "ALPR", "license plate recognition", "face recognition", "deep learning", "opencv", ]
-
-classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
-    "Intended Audience :: End Users/Desktop",
-    "Operating System :: OS Independent",
-    "Natural Language :: English",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "Topic :: Multimedia :: Graphics :: Capture",
-    "Topic :: Multimedia :: Video :: Capture",
-    "Topic :: Internet :: WWW/HTTP :: WSGI :: Server",
-]
-
-[project.urls]
-"Repository" = "https://github.com/baudneo/zm_ml"
-"Bug Tracker" = "https://github.com/baudneo/zm_ml/issues"
-
-
-[project.optional-dependencies]
-face_recognition = [
-    "face-recognition>=1.3.0",
-        # Server
-    'webcolors>=1.13',
-    'scikit-learn>=1.2.2',
-    'portalocker>=2.6.0',
-    'uvicorn>=0.19.0',
-    'fastapi>=0.88.0',
-    'passlib>=1.7.4',
-    'Pillow>=9.3.0',
-    'python-jose>=3.3.0',
-    'python-multipart>=0.0.5',
-    'python-dotenv>=0.21.0'
-]
-rekognition = [
-    'boto3>=1.26.3',
-        # Server
-    'webcolors>=1.13',
-    'scikit-learn>=1.2.2',
-    'portalocker>=2.6.0',
-    'uvicorn>=0.19.0',
-    'fastapi>=0.86.0',
-    'passlib>=1.7.4',
-    'Pillow>=9.3.0',
-    'python-jose>=3.3.0',
-    'python-multipart>=0.0.5',
-    'python-dotenv>=0.21.0'
-]
-
-deepface = [
-    'deepface>=0.0.75',
-        # Server
-    'webcolors>=1.13',
-    'scikit-learn>=1.2.2',
-    'portalocker>=2.6.0',
-    'uvicorn>=0.19.0',
-    'fastapi>=0.86.0',
-    'passlib>=1.7.4',
-    'Pillow>=9.3.0',
-    'python-jose>=3.3.0',
-    'python-multipart>=0.0.5',
-    'python-dotenv>=0.21.0'
-]
-tensorflow = [
-    'tensorflow>=2.7.0',
-    # Server
-    'webcolors>=1.13',
-    'scikit-learn>=1.2.2',
-    'portalocker>=2.6.0',
-    'uvicorn>=0.19.0',
-    'fastapi>=0.86.0',
-    'passlib>=1.7.4',
-    'Pillow>=9.3.0',
-    'python-jose>=3.3.0',
-    'python-multipart>=0.0.5',
-    'python-dotenv>=0.21.0'
-]
-tensorflow_gpu = [
-    'tensorflow-gpu>=2.7.0',
-    # Server
-    'webcolors>=1.13',
-    'scikit-learn>=1.2.2',
-    'portalocker>=2.6.0',
-    'uvicorn>=0.19.0',
-    'fastapi>=0.86.0',
-    'passlib>=1.7.4',
-    'Pillow>=9.3.0',
-    'python-jose>=3.3.0',
-    'python-multipart>=0.0.5',
-    'python-dotenv>=0.21.0'
-]
-torch = [
-    'torch>=1.13.0',
-        # Server
-    'webcolors>=1.13',
-    'scikit-learn>=1.2.2',
-    'portalocker>=2.6.0',
-    'uvicorn>=0.19.0',
-    'fastapi>=0.86.0',
-    'passlib>=1.7.4',
-    'Pillow>=9.3.0',
-    'python-jose>=3.3.0',
-    'python-multipart>=0.0.5',
-    'python-dotenv>=0.21.0'
-]
-client-cpu = [
-    'opencv-contrib-python>=4.6.0',
-    # Client
-    'pygifsicle>=1.0.7',
-    'psutil>=5.9.4',
-    'psutil-extra>=0.2.0',
-    "requests-toolbelt>=0.10.0",
-    "sqlalchemy>=1.4.42",
-    'pymysql>=1.0.2',
-    'shapely>=1.8.5',
-    'dateparser>=1.1.3',
-    'paho-mqtt>=1.6.1',
-    'aiohttp>=3.8.3',
-    'uvloop>=0.16.0',
-]
-
-server-cpu = [
-    # CPU OpenCV
-    'opencv-contrib-python>=4.6.0',
-    # Server
-    'webcolors>=1.13',
-    'scikit-learn>=1.2.2',
-    'portalocker>=2.6.0',
-    'uvicorn>=0.19.0',
-    'fastapi>=0.86.0',
-    'passlib>=1.7.4',
-    'Pillow>=9.3.0',
-    'python-jose>=3.3.0',
-    'python-multipart>=0.0.5',
-    'python-dotenv>=0.21.0'
-
-]
-cpu-frameworks = [
-    'opencv-contrib-python>=4.6.0',
-#    'torch>=1.13.0',
-#    'tensorflow>=2.7.0',
-#    'deepface>=0.0.75',
-    'boto3>=1.26.3',
-    'face-recognition>=1.3.0'
-]
-all-frameworks = [
-#    'opencv-contrib-python>=4.6.0',
-#    'torch>=1.13.0',
-#    'tensorflow>=2.7.0',
-#    'deepface>=0.0.75',
-    'boto3>=1.26.3',
-    'face-recognition>=1.3.0'
-]
-
-client = [
-    'cryptography>=41.0.0',
-    'psutil>=5.9.4',
-    'psutil-extra>=0.2.0',
-    "requests-toolbelt>=0.10.0",
-    "sqlalchemy>=1.4.42",
-    'pymysql>=1.0.2',
-    'shapely>=1.8.5',
-    'dateparser>=1.1.3',
-    'paho-mqtt>=1.6.1',
-    'uvloop>=0.16.0',
-    'pygifsicle>=1.0.7',
-    'aiohttp>=3.8.3',
-]
-
-server = [
-    'cryptography>=41.0.0',
-    'webcolors>=1.13',
-    'scikit-learn>=1.2.2',
-    'PyYAML>=6.0',
-    "pydantic~=1.10.2",
-    'portalocker>=2.6.0',
-    'uvicorn>=0.19.0',
-    'fastapi>=0.86.0',
-    'passlib>=1.7.4',
-    'Pillow>=9.3.0',
-    'python-jose>=3.3.0',
-    'python-multipart>=0.0.5',
-    'python-dotenv>=0.21.0'
-]
-
-both = [
+    'opencv-contrib-python>=4.8.0',
+    "torch>=2.0.1",
+    "torchvision>=0.15.2",
+    "ultralytics>=8.0.1.141",
+    "super_gradients>=3.1.3",
     'cryptography>=41.0.0',
     'webcolors>=1.13',
     'scikit-learn>=1.2.2',
@@ -236,41 +39,71 @@ both = [
     'pygifsicle>=1.0.7',
     'aiohttp>=3.8.3',
 ]
-all = [
-#    'torch>=1.13.0',
-#    'tensorflow>=2.7.0',
-#    'deepface>=0.0.75',
-    'boto3>=1.26.3',
-    'aiohttp>=3.8.3',
-    'webcolors>=1.13',
-    'scikit-learn>=1.2.2',
-    'face-recognition>=1.3.0',
-    'pygifsicle>=1.0.7',
 
-    'PyYAML>=6.0',
-    'requests>=2.28.1',
-    "pydantic~=1.10.2",
-    'urllib3>=1.26.12',
+authors = [
+  { name="baudneo", email="baudneo@protonmail.com" },
+]
+readme = "README.md"
+
+requires-python = ">=3.8,<3.10"
+keywords = ["zoneminder", "object detection", "machine learning", "rest api", "facial detection", "facial recognition", "ALPR", "license plate recognition", "face recognition", "deep learning", "opencv", ]
+
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Natural Language :: English",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Multimedia :: Graphics :: Capture",
+    "Topic :: Multimedia :: Video :: Capture",
+    "Topic :: Internet :: WWW/HTTP :: WSGI :: Server",
+]
+
+[project.urls]
+"Repository" = "https://github.com/baudneo/zm_ml"
+"Bug Tracker" = "https://github.com/baudneo/zm_ml/issues"
+
+
+[project.optional-dependencies]
+
+client = [
+    'opencv-contrib-python>=4.8.0',
+    'cryptography>=41.0.0',
+    'psutil>=5.9.4',
+    'psutil-extra>=0.2.0',
     "requests-toolbelt>=0.10.0",
     "sqlalchemy>=1.4.42",
     'pymysql>=1.0.2',
     'shapely>=1.8.5',
-    'numpy>=1.23.2',
     'dateparser>=1.1.3',
     'paho-mqtt>=1.6.1',
     'uvloop>=0.16.0',
+    'pygifsicle>=1.0.7',
+    'aiohttp>=3.8.3',
+]
+
+server = [
+    'opencv-contrib-python>=4.8.0',
+    "torch>=2.0.1",
+    "torchvision>=0.15.2",
+    "ultralytics>=8.0.1.141",
+    "super_gradients>=3.1.3",
+    'cryptography>=41.0.0',
+    'webcolors>=1.13',
+    'scikit-learn>=1.2.2',
+    'PyYAML>=6.0',
+    "pydantic~=1.10.2",
     'portalocker>=2.6.0',
     'uvicorn>=0.19.0',
     'fastapi>=0.86.0',
     'passlib>=1.7.4',
     'Pillow>=9.3.0',
-    'aiosmtpd>=1.4.2',
     'python-jose>=3.3.0',
     'python-multipart>=0.0.5',
-    'psutil>=5.9.4',
-    'psutil-extra>=0.2.0',
     'python-dotenv>=0.21.0'
-    ]
+]
 
 
 
