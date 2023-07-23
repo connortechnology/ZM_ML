@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import pickle
 import time
 import uuid
@@ -11,8 +10,17 @@ from typing import Optional, Union
 import cv2
 import numpy as np
 from sklearn import neighbors
-from zm_ml.Server.Log import SERVER_LOGGER_NAME
+try:
+    import dlib
+except ImportError:
+    dlib = None
+try:
+    import face_recognition
+except ImportError:
+    face_recognition = None
 
+
+from zm_ml.Server.Log import SERVER_LOGGER_NAME
 from ..file_locks import FileLock
 from ...Models.config import FaceRecognitionLibModelDetectionOptions, BaseModelConfig, FaceRecognitionLibModelConfig, \
     FaceRecognitionLibModelTrainingOptions
@@ -20,15 +28,16 @@ from ....Shared.Models.Enums import ModelProcessor, FaceRecognitionLibModelTypes
 from ....Shared.Models.config import DetectionResults, Result
 
 logger = getLogger(SERVER_LOGGER_NAME)
-
-face_recognition = None
-dlib = None
 LP = "Face_Recognition:"
 
 
 # Class to handle face recognition
 class FaceRecognitionLibDetector(FileLock):
     def __init__(self, model_config: Union[BaseModelConfig, FaceRecognitionLibModelConfig]):
+        if any([face_recognition is None, dlib is None]):
+            raise ImportError(
+                f"{LP} face_recognition or dlib not imported, please install face_recognition and dlib!"
+            )
         if not model_config:
             raise ValueError(f"{LP} no config passed!")
         # Model init params
@@ -46,45 +55,10 @@ class FaceRecognitionLibDetector(FileLock):
         self.face_locations: list = []
         self.face_encodings: list = []
         self.trained_faces_file: Optional[Path] = None
-
-        load_timer: time.perf_counter
-        import_end_time: time.perf_counter
-        try:
-            global dlib
-
-            import dlib
-        except ImportError:
-            logger.error(f"{LP} UNABLE to import D-Lib library, is it installed?")
-            dlib = None
-            return
-        else:
-            logger.debug(f"{LP} successfully imported D-Lib library")
-
-        try:
-            load_timer = time.perf_counter()
-            global face_recognition
-
-            import face_recognition
-        except ImportError:
-            logger.error(
-                f"{LP} Could not import face_recognition, is the face-recognition library installed?)"
-            )
-            return
-        else:
-            logger.debug(
-                f"perf:{LP}{self.processor}: importing Face Recognition library "
-                f"took: {time.perf_counter() - load_timer:.5f} s"
-            )
         self.processor_check()
-
         # get trained face encodings loaded
         self.load_trained_faces()
-        # logger.debug(
-        #     f"{LP} '{self.name}' configuration: {self.config}"
-        # )
-        logger.debug(
-            f"perf:{LP} '{self.name}' loading completed in {time.perf_counter() - load_timer:.5f} s"
-        )
+
 
     def load_trained_faces(self, faces_file: Optional[Path] = None):
         if faces_file and faces_file.is_file():
@@ -248,7 +222,7 @@ class FaceRecognitionLibDetector(FileLock):
             type=self.config.model_type,
             processor=self.processor,
             model_name=self.name,
-            results=[Result(label=labels[i], confidence=confs[i], bounding_box=b_boxes[i]) for i in range(len(labels))],
+            results=[Result(label=labels[i], confidence=1.0, bounding_box=b_boxes[i]) for i in range(len(labels))],
         )
 
         return result

@@ -58,16 +58,16 @@ class TpuDetector(FileLock):
         global LP
 
         if pycoral is None:
-            logger.warning(f"{LP} pycoral is not installed, cannot use TPU detectors")
-            return
+            raise ImportError(f"{LP} pycoral is not installed, cannot use TPU detectors")
+
         elif tflite_runtime is None:
-            logger.warning(
+            raise ImportError(
                 f"{LP} tflite_runtime is not installed, cannot use TPU detectors"
             )
             return
         # check if there is a tpu device
         if not list_edge_tpus():
-            logger.warning(f"{LP} no TPU devices found, cannot use TPU detectors")
+            raise RuntimeError(f"{LP} no TPU devices found, cannot use TPU detectors")
             return
 
         # Model init params

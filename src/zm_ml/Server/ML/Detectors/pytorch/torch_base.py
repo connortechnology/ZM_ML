@@ -9,13 +9,11 @@ import numpy as np
 try:
     import torch
 except ImportError:
-    warnings.warn("Torch not installed, cannot use Torch detectors")
     torch = None
 
 try:
     import torchvision
 except ImportError:
-    warnings.warn("Torchvision not installed, cannot use Torch detectors")
     RetinaNet_ResNet50_FPN_V2_Weights, FasterRCNN_ResNet50_FPN_V2_Weights, FasterRCNN_MobileNet_V3_Large_FPN_Weights, FCOS_ResNet50_FPN_Weights = None, None, None, None
     torchvision = None
 else:
@@ -62,6 +60,8 @@ class TorchDetector(FileLock):
     device: torch.device
 
     def __init__(self, model_config: PyTorchModelConfig):
+        if any([torch is None, torchvision is None]):
+            raise ImportError(f"{LP} Torch or Torchvision not installed, cannot use Torch detectors")
         global g
         from ....app import get_global_config
 
