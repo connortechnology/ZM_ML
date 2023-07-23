@@ -1030,19 +1030,13 @@ class APIDetector:
             )
 
         elif _proc_available is None:
-            # framework is not installed
-            logger.warning(
-                f"Library missing, cannot create detector for {self.config.name}"
-            )
-            self.config = None
             from ..app import get_global_config
 
             for _model in get_global_config().available_models:
                 if _model.id == self.id:
                     get_global_config().available_models.remove(_model)
                     break
-
-            return
+            raise ImportError(f"Library missing, cannot create detector for {self.config.name}")
 
         try:
             if self.config.framework == ModelFrameWork.OPENCV:
@@ -1092,8 +1086,6 @@ class APIDetector:
                 )
         except Exception as e:
             logger.warning(f"Error loading model: {e}")
-        else:
-            logger.debug(f"APIDetector:_load_model()-> {self.model = }")
 
     def is_processor_available(self) -> bool:
         """Check if the processor is available"""
@@ -1238,13 +1230,15 @@ class GlobalConfig(BaseModel):
             if detector.config.id == model.id:
                 ret_ = detector
         if not ret_:
-            logger.debug(f"Creating new detector for '{model.name}'")
-            ret_ = APIDetector(model)
-            logger.debug(f"returned detctor -> {ret_}")
-            if ret_.config is not None:
+            logger.debug(f"Attempting to create new detector for '{model.name}'")
+            try:
+                ret_ = APIDetector(model)
+            except ImportError as e:
+                logger.warning(e)
+            else:
                 self.detectors.append(ret_)
         if not ret_:
-            logger.error(f"Unable to create detector for {model.name}")
+            logger.error(f"Unable to create detector for '{model.name}'")
         return ret_
 
 

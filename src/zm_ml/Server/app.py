@@ -436,7 +436,7 @@ class MLAPI:
             for future in futures:
                 future.result()
             logger.info(
-                f"perf:{LP} TOTAL ThreadPool loading {len(futures)} models took {time.perf_counter() - timer:.5f} s"
+                f"perf:{LP} TOTAL ThreadPool loading models took {time.perf_counter() - timer:.5f} s"
             )
 
         return self.cached_settings
