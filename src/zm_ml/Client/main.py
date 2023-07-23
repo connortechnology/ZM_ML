@@ -1194,7 +1194,7 @@ class ZMClient:
         for _result in result.results:
             label, confidence, bbox = _result.label, _result.confidence, _result.bounding_box
             i += 1
-            _lp = f"_filter:{image_name}:'{model_name}'::{type_}::'{label}' {i}/{_lbl_tot}::"
+            _lp = f"_filter:{image_name}:'{model_name}'::{type_.value.casefold()}::'{label}' {i}/{_lbl_tot}::"
 
             #
             # Inner Loop
