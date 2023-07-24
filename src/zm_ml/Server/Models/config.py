@@ -34,7 +34,7 @@ from ...Shared.Models.Enums import (
     ALPRSubFrameWork,
     UltralyticsSubFrameWork,
 )
-from ...Shared.Models.config import Testing, LoggingSettings
+from ...Shared.Models.config import Testing, LoggingSettings, DefaultEnabled
 from ...Shared.Models.validators import (
     validate_replace_localhost,
     str2path,
@@ -57,8 +57,7 @@ class LockSetting(BaseModel):
     name: Optional[str] = Field(None, description="Name of the lock file")
 
 
-class LockSettings(BaseModel):
-    enabled: bool = Field(True, description="Enable file locking")
+class LockSettings(DefaultEnabled):
     dir: Path = Field(
         None,
         description="Directory for the lock files",
@@ -76,8 +75,9 @@ class LockSettings(BaseModel):
     @field_validator("gpu", "cpu", "tpu", mode="before")
     def set_lock_name(cls, v, info: FieldValidationInfo):
         if v:
-            assert isinstance(v, LockSetting), f"Invalid type: {type(v)}"
-            v: LockSetting
+            assert isinstance(v, (LockSetting, Dict)), f"Invalid type: {type(v)}"
+            if isinstance(v, Dict):
+                v = LockSetting(**v)
             v.name = f"zm-mlapi_{info.field_name}"
         return v
 
@@ -130,7 +130,7 @@ class DetectionResult(BaseModel):
     success: bool = False
     type: ModelType = None
     processor: ModelProcessor = None
-    model_name: str = None
+    _model_name: str = Field(None, alias="model_name")
 
     label: List[str] = None
     confidence: List[Union[float, int]] = None
@@ -354,8 +354,8 @@ class BaseModelConfig(BaseModel):
     framework: ModelFrameWork = Field(
         ModelFrameWork.DEFAULT, description="model framework"
     )
-    model_type: ModelType = Field(
-        ModelType.DEFAULT, description="model type (object, face, alpr)"
+    _model_type: ModelType = Field(
+        ModelType.DEFAULT, description="model type (object, face, alpr)", alias="model_type"
     )
     processor: Optional[ModelProcessor] = Field(
         ModelProcessor.DEFAULT, description="Processor to use for model"
@@ -556,12 +556,13 @@ from ...Shared.Models.config import DefaultEnabled
 
 class TorchModelConfig(BaseModelConfig):
     class PreTrained(DefaultEnabled):
-        model_name: Optional[str] = Field(
+        _model_name: Optional[str] = Field(
             "default",
             pattern=r"(accurate|fast|default|balanced|high_performance|low_performance)",
+            alias="model_name"
         )
 
-        @field_validator("model_name", mode="before")
+        @field_validator("model_name", mode="before", check_fields=False)
         def _validate_model_name(
             cls, v: Optional[str], info: FieldValidationInfo
         ) -> str:
@@ -657,7 +658,7 @@ def _replace_vars(search_str: str, var_pool: Dict) -> Dict:
 
 
 class SystemSettings(BaseModel):
-    model_dir: Optional[Path] = Field(Path(DEF_SRV_SYS_MODELDIR))
+    _model_dir: Optional[Path] = Field(Path(DEF_SRV_SYS_MODELDIR), alis="model_dir")
     image_dir: Optional[Path] = Field(Path(DEF_SRV_SYS_IMAGEDIR))
     config_path: Optional[Path] = Field(Path(DEF_SRV_SYS_CONFDIR))
     variable_data_path: Optional[Path] = Field(DEF_SRV_SYS_DATADIR)
@@ -896,7 +897,7 @@ class APIDetector:
         DeepFaceModelConfig,
         TPUModelConfig,
         TorchModelConfig,
-        UltralyticsModelConfig
+        "UltralyticsModelConfig"
     ]
     _options: Union[
         BaseModelOptions,
@@ -926,7 +927,7 @@ class APIDetector:
             DeepFaceModelConfig,
             TPUModelConfig,
             TorchModelConfig,
-            UltralyticsModelConfig
+            "UltralyticsModelConfig"
         ],
     ):
         from ..ML.Detectors.opencv.cv_yolo import CV2YOLODetector

@@ -246,14 +246,14 @@ async def detect(
     return detection
 
 
-async def threaded_detect(model_hints: List[str], image) -> List[Optional[DetectionResults]]:
+async def threaded_detect(_model_hints: List[str], image) -> List[Optional[DetectionResults]]:
     available_models = get_global_config().available_models
-    model_hints = [normalize_id(model_hint) for model_hint in model_hints]
-    logger.debug(f"threaded_detect: model_hints -> {model_hints}")
+    _model_hints = [normalize_id(model_hint) for model_hint in _model_hints]
+    logger.debug(f"threaded_detect: model_hints -> {_model_hints}")
     detectors: List[APIDetector] = []
     for model in available_models:
         identifiers = {model.name, str(model.id)}
-        if any([normalize_id(model_hint) in identifiers for model_hint in model_hints]):
+        if any([normalize_id(model_hint) in identifiers for model_hint in _model_hints]):
             logger.info(f"Found model: {model.name} ({model.id})")
             detector = get_global_config().get_detector(model)
             detectors.append(detector)
@@ -351,16 +351,16 @@ def login():
     summary="Detect objects in an image using a set of threaded models referenced by name",
 )
 async def group_detect(
-    model_hints: List[str] = Body(
+    hints_model: List[str] = Body(
         ...,
         description="comma seperated model names/UUIDs",
         example="yolov4,97acd7d4-270c-4667-9d56-910e1510e8e8,yolov7 tiny",
     ),
     image: UploadFile = File(...),
 ):
-    logger.info(f"group_detect: {model_hints}")
-    model_hints = model_hints[0].strip('"').split(",")
-    detections = await threaded_detect(model_hints, image)
+    logger.info(f"group_detect: {hints_model}")
+    hints_model = hints_model[0].strip('"').split(",")
+    detections = await threaded_detect(hints_model, image)
 
     det: DetectionResults
     for det in detections:
@@ -448,6 +448,7 @@ class MLAPI:
 
     def start(self):
         _avail = {}
+        # logger.debug(f"\n\n{get_global_config().available_models = }\n\n")
         for model in get_global_config().available_models:
             _avail[normalize_id(model.name)] = str(model.id)
         logger.info(f"AVAILABLE MODELS! --> {_avail}")

@@ -25,7 +25,7 @@ class DefaultEnabled(BaseModel):
     _v = field_validator("enabled", mode="before")(validate_enabled)
 
 
-class DefaultNotEnabled(DefaultEnabled):
+class DefaultNotEnabled(BaseModel):
     enabled: bool = Field(False)
 
     _v = field_validator("enabled", mode="before")(validate_not_enabled)
@@ -61,7 +61,7 @@ class LoggingSettings(LoggingLevelBase):
     class IntegrateZMLogging(DefaultNotEnabled):
         debug_level: int = Field(default=4)
 
-    level = logging.INFO
+    level: int = logging.INFO
     console: ConsoleLogging = Field(default_factory=ConsoleLogging)
     syslog: SyslogLogging = Field(default_factory=SyslogLogging)
     integrate_zm: IntegrateZMLogging = Field(default_factory=IntegrateZMLogging)
@@ -94,7 +94,7 @@ class DetectionResults(BaseModel, arbitrary_types_allowed=True):
     success: bool = Field(...)
     type: ModelType = Field(...)
     processor: ModelProcessor = Field(...)
-    model_name: str = Field(...)
+    _model_name: str = Field(..., alias="model_name")
     results: Optional[List[Result]] = Field(None)
     removed: Optional[List[Result]] = Field(None)
 

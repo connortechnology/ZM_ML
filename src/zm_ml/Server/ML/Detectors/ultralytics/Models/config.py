@@ -9,12 +9,13 @@ class UltralyticsModelConfig(BaseModelConfig):
     """Configuration for the Detector"""
 
     class PreTrained(DefaultEnabled):
-        model_name: str = Field(
+        _model_name: str = Field(
             "yolo_nas_s",
             description="Name of the ultralytics model",
+            alias="model_name",
         )
 
-        @field_validator("model_name", mode="before")
+        @field_validator("_model_name", mode="before")
         def _validate_model_name(cls, v: Optional[str], info: FieldValidationInfo) -> str:
             assert info.config is not None
             # print(info.config.get('title'))
