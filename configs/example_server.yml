@@ -185,7 +185,7 @@ models:
 
     detection_options:
       confidence: 0.2
-      nms: 0.4
+      nms: 0.65
 
   - name: YOLOv4 Tiny  # Name is converted to lowercase, spaces are preserved; 'yolov4 tiny'
     enabled: true

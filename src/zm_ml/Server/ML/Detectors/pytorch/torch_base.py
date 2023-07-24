@@ -38,7 +38,7 @@ else:
 
 from .....Shared.Models.Enums import ModelProcessor
 from .....Shared.Models.config import DetectionResults, Result
-from ....Models.config import PyTorchModelConfig
+from ....Models.config import TorchModelConfig
 from ....Log import SERVER_LOGGER_NAME
 from ...file_locks import FileLock
 
@@ -59,7 +59,7 @@ class TorchDetector(FileLock):
     weights: WEIGHTS_TYPES
     device: torch.device
 
-    def __init__(self, model_config: PyTorchModelConfig):
+    def __init__(self, model_config: TorchModelConfig):
         if any([torch is None, torchvision is None]):
             raise ImportError(f"{LP} Torch or Torchvision not installed, cannot use Torch detectors")
         global g

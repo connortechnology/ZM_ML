@@ -16,12 +16,12 @@ from pydantic import (
     IPvAnyAddress,
     PositiveInt,
     SecretStr,
-    AnyUrl,
 )
 from pydantic_settings import BaseSettings
 
 from .validators import validate_model_labels
 from ..Log import SERVER_LOGGER_NAME
+from ..ML.Detectors.ultralytics.Models.config import UltralyticsModelConfig
 from ...Server.Models.DEFAULTS import *
 from ...Shared.Models.Enums import (
     ModelType,
@@ -37,7 +37,6 @@ from ...Shared.Models.Enums import (
 )
 from ...Shared.Models.config import Testing, LoggingSettings
 from ...Shared.Models.validators import (
-    validate_no_scheme_url,
     validate_replace_localhost,
     str2path,
 )
@@ -142,6 +141,10 @@ class BaseModelOptions(BaseModel):
         0.2, ge=0.0, le=1.0, descritpiton="Confidence Threshold"
     )
 
+class UltralyticsModelOptions(BaseModelOptions):
+    nms: Optional[float] = Field(
+        0.7, ge=0.0, le=1.0, description="Non-Maximum Suppression Threshold (IoU)"
+    )
 
 class CV2YOLOModelOptions(BaseModelOptions):
     nms: Optional[float] = Field(
@@ -318,7 +321,7 @@ class CV2TFModelOptions(BaseModelOptions):
     pass
 
 
-class PyTorchModelOptions(BaseModelOptions):
+class TorchModelOptions(BaseModelOptions):
     nms: Optional[float] = Field(
         0.3, ge=0.0, le=1.0, description="Non-Maximum Suppression Threshold"
     )
@@ -375,7 +378,8 @@ class BaseModelConfig(BaseModel):
         PlateRecognizerModelOptions,
         ALPRModelOptions,
         TPUModelOptions,
-        PyTorchModelOptions,
+        TorchModelOptions,
+        UltralyticsModelOptions,
         None,
     ] = Field(
         default_factory=BaseModelOptions,
@@ -549,7 +553,7 @@ class VirelAIModelConfig(BaseModelConfig):
 from ...Shared.Models.config import DefaultEnabled
 
 
-class PyTorchModelConfig(BaseModelConfig):
+class TorchModelConfig(BaseModelConfig):
     class PreTrained(DefaultEnabled):
         model_name: Optional[str] = Field(
             "default",
@@ -753,9 +757,6 @@ class Settings(BaseModel, arbitrary_types_allowed=True):
                         from ..ML.Detectors.ultralytics.Models.config import (
                             UltralyticsModelConfig,
                         )
-                        from ..ML.Detectors.ultralytics.yolo import (
-                            UltralyticsYOLODetector,
-                        )
 
                         if _sub_fw in [
                             UltralyticsSubFrameWork.POSE,
@@ -766,6 +767,9 @@ class Settings(BaseModel, arbitrary_types_allowed=True):
 
                         elif _sub_fw == UltralyticsSubFrameWork.OBJECT:
                             final_model_config = UltralyticsModelConfig(**model)
+                            final_model_config.detection_options = UltralyticsModelOptions(
+                                **_options
+                            )
 
                     elif _framework == ModelFrameWork.OPENCV:
                         config = None
@@ -793,8 +797,8 @@ class Settings(BaseModel, arbitrary_types_allowed=True):
                         config.detection_options = TPUModelOptions(**_options)
                         final_model_config = config
                     elif _framework == ModelFrameWork.TORCH:
-                        config = PyTorchModelConfig(**model)
-                        config.detection_options = PyTorchModelOptions(**_options)
+                        config = TorchModelConfig(**model)
+                        config.detection_options = TorchModelOptions(**_options)
                         final_model_config = config
                     else:
                         raise NotImplementedError(
@@ -890,6 +894,8 @@ class APIDetector:
         FaceRecognitionLibModelConfig,
         DeepFaceModelConfig,
         TPUModelConfig,
+        TorchModelConfig,
+        UltralyticsModelConfig
     ]
     _options: Union[
         BaseModelOptions,
@@ -899,6 +905,8 @@ class APIDetector:
         ALPRModelOptions,
         FaceRecognitionLibModelDetectionOptions,
         CV2YOLOModelOptions,
+        TorchModelOptions,
+        UltralyticsModelOptions,
     ]
 
     def __repr__(self):
@@ -916,7 +924,8 @@ class APIDetector:
             FaceRecognitionLibModelConfig,
             DeepFaceModelConfig,
             TPUModelConfig,
-            PyTorchModelConfig,
+            TorchModelConfig,
+            UltralyticsModelConfig
         ],
     ):
         from ..ML.Detectors.opencv.cv_yolo import CV2YOLODetector
@@ -926,6 +935,7 @@ class APIDetector:
         from ..ML.Detectors.virelai import VirelAI
         from ..ML.Detectors.aws_rekognition import AWSRekognition
         from ..ML.Detectors.pytorch.torch_base import TorchDetector
+        from ..ML.Detectors.ultralytics.yolo.base import UltralyticsYOLODetector
 
         self.config = model_config
         self.id = self.config.id
@@ -941,6 +951,8 @@ class APIDetector:
                 OpenAlprCloud,
                 VirelAI,
                 AWSRekognition,
+                TorchDetector,
+                UltralyticsYOLODetector,
             ]
         ] = None
         self._load_model()

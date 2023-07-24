@@ -45,5 +45,4 @@ class UltralyticsModelConfig(BaseModelConfig):
     pretrained: PreTrained = Field(default_factory=PreTrained)
     gpu_idx: Optional[int] = None
 
-    detection_options = None
     model_type = ModelType.OBJECT
