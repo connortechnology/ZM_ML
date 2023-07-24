@@ -14,7 +14,7 @@ class UltralyticsModelConfig(BaseModelConfig):
             description="Name of the ultralytics model",
         )
 
-        @field_validator("model_name", mode="before", always=True)
+        @field_validator("model_name", mode="before")
         def _validate_model_name(cls, v: Optional[str], info: FieldValidationInfo) -> str:
             assert info.config is not None
             # print(info.config.get('title'))

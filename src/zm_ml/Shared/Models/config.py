@@ -22,19 +22,19 @@ class Testing(BaseModel):
 class DefaultEnabled(BaseModel):
     enabled: bool = Field(True)
 
-    _v = field_validator("enabled", mode="before", always=True)(validate_enabled)
+    _v = field_validator("enabled", mode="before")(validate_enabled)
 
 
 class DefaultNotEnabled(DefaultEnabled):
     enabled: bool = Field(False)
 
-    _v = field_validator("enabled", mode="before", always=True)(validate_not_enabled)
+    _v = field_validator("enabled", mode="before")(validate_not_enabled)
 
 
 class LoggingLevelBase(BaseModel):
     level: Optional[int] = None
 
-    _validate_log_level = field_validator("level", mode="before", always=True)(
+    _validate_log_level = field_validator("level", mode="before")(
         validate_log_level
     )
 

@@ -369,7 +369,7 @@ class OverRideStaticObjects(BaseModel):
     ignore_labels: Optional[List[str]] = None
 
     _validate_difference = field_validator(
-        "difference", mode="before", always=True
+        "difference", mode="before"
     )(validate_percentage_or_pixels)
 
 
@@ -446,7 +446,7 @@ class ConfigFileModel(BaseModel):
     monitors: Optional[Dict[int, MonitorsSettings]] = Field(default_factory=dict)
 
     _validate_config_path = field_validator(
-        "config_path", mode="before", always=True
+        "config_path", mode="before"
     )(validate_dir)
 
 
@@ -469,9 +469,9 @@ class ClientEnvVars(BaseSettings):
     api: Optional[ZoneMinderSettings] = Field(default_factory=ZoneMinderSettings)
 
     _validate_client_conf_file = field_validator(
-        "client_conf_file", mode="before", always=True, check_fields=False
+        "client_conf_file", mode="before", check_fields=False
     )(validate_file)
     _validate_zm_conf_dir = field_validator(
-        "zm_conf_dir", "ml_conf_dir", mode="before", always=True
+        "zm_conf_dir", "ml_conf_dir", mode="before"
     )(validate_dir)
 
