@@ -1,6 +1,6 @@
 from typing import Dict, List, AnyStr
 
-from .yolo import UltralyticsYOLODetector
+from .yolo.base import UltralyticsYOLODetector
 
 PRETRAINED_MODEL_NAMES: Dict[AnyStr, List[AnyStr]] = {
     "yolov5u": [
