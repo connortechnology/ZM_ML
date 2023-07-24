@@ -90,13 +90,13 @@ class TorchDetector(FileLock):
         else:
             import os
 
-            if self.config.pretrained:
-                logger.debug(f"{LP} 'pretrained' has a value, using pretrained weights...")
+            if self.config.pretrained and self.config.pretrained.enabled is True:
+                logger.debug(f"{LP} 'pretrained' model requested, using pretrained weights...")
                 _pth = os.environ.get("TORCH_HOME", None)
                 if _pth:
                     logger.warning(f"{LP} 'TORCH_HOME' is already set, working around it...")
                 os.environ["TORCH_HOME"] = self.cache_dir.as_posix()
-                _pt = self.config.pretrained
+                _pt = self.config.pretrained.model_name
                 conf, nms = self.options.confidence, self.options.nms
 
                 if _pt:

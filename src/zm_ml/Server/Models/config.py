@@ -33,7 +33,7 @@ from ...Shared.Models.Enums import (
     HTTPSubFrameWork,
     OpenCVSubFrameWork,
     ALPRSubFrameWork,
-    UltralyticsSubFrameWork
+    UltralyticsSubFrameWork,
 )
 from ...Shared.Models.config import Testing, LoggingSettings
 from ...Shared.Models.validators import (
@@ -340,6 +340,7 @@ class BaseModelConfig(BaseModel):
     :param sub_framework: sub-framework to use for model
     :param detection_options: Model options (if any)
     """
+
     id: uuid.UUID = Field(
         default_factory=uuid.uuid4, description="Unique ID of the model", init=False
     )
@@ -358,7 +359,12 @@ class BaseModelConfig(BaseModel):
 
     # todo: add validator that detects framework and sets a default sub framework if it is None.
     sub_framework: Optional[
-        Union[OpenCVSubFrameWork, HTTPSubFrameWork, ALPRSubFrameWork, UltralyticsSubFrameWork]
+        Union[
+            OpenCVSubFrameWork,
+            HTTPSubFrameWork,
+            ALPRSubFrameWork,
+            UltralyticsSubFrameWork,
+        ]
     ] = Field(UltralyticsSubFrameWork, description="sub-framework to use for model")
 
     detection_options: Union[
@@ -370,7 +376,7 @@ class BaseModelConfig(BaseModel):
         ALPRModelOptions,
         TPUModelOptions,
         PyTorchModelOptions,
-        None
+        None,
     ] = Field(
         default_factory=BaseModelOptions,
         description="Default Configuration for the model",
@@ -407,9 +413,7 @@ class TPUModelConfig(BaseModelConfig):
         exclude=True,
     )
 
-    _validate_labels = field_validator("labels", always=True)(
-        validate_model_labels
-    )
+    _validate_labels = field_validator("labels", always=True)(validate_model_labels)
 
     @field_validator("config", "input", "classes", mode="before", always=True)
     def str_to_path(cls, v, info: FieldValidationInfo) -> Optional[Path]:
@@ -454,9 +458,7 @@ class CV2YOLOModelConfig(BaseModelConfig):
         exclude=True,
     )
 
-    _validate_labels = field_validator("labels", always=True)(
-        validate_model_labels
-    )
+    _validate_labels = field_validator("labels", always=True)(validate_model_labels)
 
     @field_validator("config", "input", "classes", mode="before", always=True)
     def str_to_path(cls, v, info: FieldValidationInfo) -> Optional[Path]:
@@ -543,18 +545,24 @@ class DeepFaceModelConfig(BaseModelConfig):
 class VirelAIModelConfig(BaseModelConfig):
     pass
 
-from ...Shared.Models.config import DefaultEnabled
-class PyTorchModelConfig(BaseModelConfig):
 
+from ...Shared.Models.config import DefaultEnabled
+
+
+class PyTorchModelConfig(BaseModelConfig):
     class PreTrained(DefaultEnabled):
-        model_name: Optional[str] = Field("default", pattern=r"(accurate|fast|default|balanced|high_performance|low_performance)")
+        model_name: Optional[str] = Field(
+            "default",
+            pattern=r"(accurate|fast|default|balanced|high_performance|low_performance)",
+        )
 
         @field_validator("model_name", mode="before", always=True)
-        def _validate_model_name(cls, v: Optional[str], info: FieldValidationInfo) -> str:
+        def _validate_model_name(
+            cls, v: Optional[str], info: FieldValidationInfo
+        ) -> str:
             if v is None:
                 v = "default"
             return v
-
 
     input: Optional[Path] = None
     classes: Optional[Path] = None
@@ -563,9 +571,7 @@ class PyTorchModelConfig(BaseModelConfig):
 
     gpu_idx: Optional[int] = None
 
-    pretrained: Optional[str] = Field(
-        None, pattern=r"(accurate|fast|default|balanced|high_performance|low_performance)"
-    )
+    pretrained: Optional[PreTrained] = Field(default_factory=PreTrained)
 
     # this is not to be configured by the user. It is parsed classes from the labels file (or default if no file).
     labels: List[str] = Field(
@@ -575,9 +581,7 @@ class PyTorchModelConfig(BaseModelConfig):
         exclude=True,
     )
 
-    _validate_labels = field_validator("labels", always=True)(
-        validate_model_labels
-    )
+    _validate_labels = field_validator("labels", always=True)(validate_model_labels)
     _validate = field_validator("input", "classes", mode="before", always=True)(
         str2path
     )
@@ -671,7 +675,6 @@ class Settings(BaseModel, arbitrary_types_allowed=True):
         None, description="Available models"
     )
 
-
     def get_lock_settings(self):
         return self.locks
 
@@ -747,15 +750,22 @@ class Settings(BaseModel, arbitrary_types_allowed=True):
                         # todo: init models and check if success?
                         final_model_config = config
                     elif _framework == ModelFrameWork.ULTRALYTICS:
-                        from ..ML.Detectors.ultralytics.Models.config import UltralyticsModelConfig
-                        from ..ML.Detectors.ultralytics.yolo import UltralyticsYOLODetector
+                        from ..ML.Detectors.ultralytics.Models.config import (
+                            UltralyticsModelConfig,
+                        )
+                        from ..ML.Detectors.ultralytics.yolo import (
+                            UltralyticsYOLODetector,
+                        )
 
-                        if _sub_fw in [UltralyticsSubFrameWork.POSE, UltralyticsSubFrameWork.SEGMENTATION, UltralyticsSubFrameWork.CLASSIFICATION]:
+                        if _sub_fw in [
+                            UltralyticsSubFrameWork.POSE,
+                            UltralyticsSubFrameWork.SEGMENTATION,
+                            UltralyticsSubFrameWork.CLASSIFICATION,
+                        ]:
                             logger.warning(f"Not implemented: {_sub_fw}")
 
                         elif _sub_fw == UltralyticsSubFrameWork.OBJECT:
                             final_model_config = UltralyticsModelConfig(**model)
-
 
                     elif _framework == ModelFrameWork.OPENCV:
                         config = None
@@ -1013,7 +1023,9 @@ class APIDetector:
                 if _model.id == self.id:
                     get_global_config().available_models.remove(_model)
                     break
-            raise ImportError(f"Library missing, cannot create detector for {self.config.name}")
+            raise ImportError(
+                f"Library missing, cannot create detector for {self.config.name}"
+            )
 
         try:
             if self.config.framework == ModelFrameWork.OPENCV:
@@ -1197,7 +1209,6 @@ class GlobalConfig(BaseModel, arbitrary_types_allowed=True):
         default_factory=list, description="Loaded Detectors"
     )
 
-
     def get_detector(self, model: BaseModelConfig) -> Optional[APIDetector]:
         """Get a detector by ID"""
         ret_: Optional[APIDetector] = None
@@ -1223,4 +1234,3 @@ class ServerEnvVars(BaseSettings, case_sensitive=True):
     conf_file: str = Field(
         None, env="ML_SERVER_CONF_FILE", description="Server YAML config file"
     )
-

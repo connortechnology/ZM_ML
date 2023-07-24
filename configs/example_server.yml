@@ -99,9 +99,12 @@ locks:
     timeout: 13
 
 # -- Define what models the server will offer, name is case insensitive and preserves spaces.
+# -- CHANGED! Default framework is now ultralytics (torch), not opencv. OpenCV is still supported.
 models:
   # -- The model name is how you will call it in the API request
   - name: yolov8
+    # Optional, for user reference.
+    description: "Ultralytics YOLO v8 pretrained model"
     # Optional. Defaults to True.
     enabled: yes
     # opencv, torch, ultralytics, coral, face_recognition, alpr, http
@@ -109,23 +112,29 @@ models:
     framework: ultralytics
     # Optional. Defaults to cpu - cpu/gpu
     processor: cpu
+    # If processor is set to 'gpu', you can set the index of the GPU to use
+    gpu_idx: 0
     # Optional. Default: object - object, segmentation, pose, classification
     sub_framework: object
 
+    # Use pretrained model instead of your own
+    pretrained:
+      enabled: yes
+      model_name: yolov8s
+
+    # user trained model support is being worked on
+    # input: /path/to/model.pt
+    # classes: /path/to/classes/file.txt
+
 
   - name: YOLOv4  # Name will be lower cased, spaces are preserved; 'yolov4'
-    enabled: no  # Optional. Defaults to True.
-    description: "yolov4 pretrained DarkNet model"  # Optional, for user reference.
-    # opencv, coral, face_recognition, alpr, http
-    framework: opencv  # Optional. Defaults to opencv.
+    enabled: no
+    framework: opencv
     # -- sub_framework is the various backends the framework can make use of
-    # -- darknet is the default for opencv, but you can also use onnx, caffe, etc.
-    # -- See the OpenCV docs and ZM ML wiki for more info.
+    # -- darknet is the default for opencv, but you can also use onnx
     sub_framework: darknet  # Optional, defaults to darknet for opencv. (onnx, caffe, etc.) **WIP**
-    # -- object/face/alpr (for identification)
-    model_type: object # Required. Defaults to object
-    # -- cpu/gpu/tpu, for now.
-    processor: cpu  # Optional. Defaults to cpu
+    # -- cpu/gpu/tpu
+    processor: cpu
 
     # -- Model file is required for models that require input.
     # -- Config file is optional, only some models require it.
@@ -151,12 +160,14 @@ models:
 
   - name: torch test
     description: testing pretrained torch model
-#    enabled: no
+    enabled: no
     framework: torch
     # Use pretrained model with weights or configure input to your own model and classes
     # NOTE: if pretrained is defined, input, classes and num_classes are ignored
     # accurate|fast|default|high_performance|low_performance
-    pretrained: fast
+    pretrained:
+      enabled: yes
+      model_name: default
 
 #    input: /path/to/model.pt
 #    classes: /path/to/classes/file.txt
