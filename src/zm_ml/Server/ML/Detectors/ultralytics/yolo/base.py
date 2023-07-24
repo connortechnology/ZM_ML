@@ -81,7 +81,7 @@ class UltralyticsYOLODetector(FileLock):
             logger.debug(
                 f"{LP} loading model into processor memory: {self.name} ({self.id})"
             )
-            load_timer = time.perf_counter()
+            conf, nms = self.options.confidence, self.options.nms
             if self.config.pretrained and self.config.pretrained.enabled is True:
                 logger.debug(
                     f"{LP} 'pretrained' model requested, using pretrained weights..."
@@ -93,7 +93,6 @@ class UltralyticsYOLODetector(FileLock):
                     )
                 os.environ["TORCH_HOME"] = self.cache_dir.as_posix()
                 _pt = self.config.pretrained.model_name
-                conf, nms = self.options.confidence, self.options.nms
                 sub_fw = self.config.sub_framework
 
 
