@@ -63,7 +63,7 @@ class UltralyticsYOLODetector(FileLock):
         self.config = config
         self.id = self.config.id
         self.name = self.config.name
-        self.model_name = self.config.model_name
+        self.model_name = self.config.pretrained.name
         self.yolo_model_type = self.config.sub_framework
 
         self.device = self._get_device()

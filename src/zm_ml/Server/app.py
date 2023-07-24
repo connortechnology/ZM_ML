@@ -415,12 +415,7 @@ class MLAPI:
         self.cached_settings = parse_client_config_file(self.cfg_file)
         get_global_config().config = self.cached_settings
         init_logs(self.cached_settings)
-
-        # Complete logging initialization, file handler and flush buffers into the file
-
-        # logger.debug(f"{g.settings = }")
-        logger.info(f"should be loading models")
-
+        logger.info(f"Starting to load models...")
         available_models = (
             get_global_config().available_models
         ) = self.cached_settings.available_models
@@ -438,6 +433,8 @@ class MLAPI:
             logger.info(
                 f"perf:{LP} TOTAL ThreadPool loading models took {time.perf_counter() - timer:.5f} s"
             )
+        else:
+            logger.warning(f"No models found in config file!")
 
         return self.cached_settings
 

@@ -132,6 +132,7 @@ class FilterConfigFileModel(BaseModel):
 
 
             @field_validator("input", "config", "labels")
+            @classmethod
             def check_path(cls, v, info: FieldValidationInfo):
                 if v:
                     v = str2path(v)
@@ -148,6 +149,7 @@ class FilterConfigFileModel(BaseModel):
         models: List[str] = Field(default_factory=list)
 
         @field_validator("host", mode="before")
+        @classmethod
         def _validate_host(cls, v, info: FieldValidationInfo):
             logger.info(f"Validating KEY: {info.field_name} VALUE: {v} - {type(v)}")
             if v:
@@ -189,7 +191,9 @@ class FilterConfigFileModel(BaseModel):
 
 
     _validate_1 = field_validator("import_zones", mode="before")(str2bool)
+
     @field_validator("zm_conf", mode="before")
+    @classmethod
     def _validate_2(cls, v, info: FieldValidationInfo):
         if v:
             v = str2path(v)

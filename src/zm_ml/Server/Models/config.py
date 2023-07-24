@@ -12,7 +12,9 @@ from pydantic import (
     BaseModel,
     Field,
     FieldValidationInfo,
+    ValidationInfo,
     field_validator,
+    model_validator,
     IPvAnyAddress,
     PositiveInt,
     SecretStr,
@@ -73,6 +75,7 @@ class LockSettings(DefaultEnabled):
     )
 
     @field_validator("gpu", "cpu", "tpu", mode="before")
+    @classmethod
     def set_lock_name(cls, v, info: FieldValidationInfo):
         if v:
             assert isinstance(v, (LockSetting, Dict)), f"Invalid type: {type(v)}"
@@ -93,6 +96,7 @@ class LockSettings(DefaultEnabled):
             raise ValueError(f"Invalid device type: {device}")
 
     @field_validator("dir", mode="before")
+    @classmethod
     def validate_lock_dir(cls, v):
         if not v:
             v = f"{tempfile.gettempdir()}/zm_mlapi/locks"
@@ -306,6 +310,7 @@ class PlateRecognizerModelOptions(BaseModelOptions):
     )
 
     @field_validator("config", "payload")
+    @classmethod
     def check_json_serializable(cls, v):
         try:
             json.dumps(v)
@@ -313,13 +318,6 @@ class PlateRecognizerModelOptions(BaseModelOptions):
             raise ValueError("Must be JSON serializable, check formatting...")
         return v
 
-
-class DeepFaceModelOptions(BaseModelOptions):
-    pass
-
-
-class CV2TFModelOptions(BaseModelOptions):
-    pass
 
 
 class TorchModelOptions(BaseModelOptions):
@@ -388,6 +386,7 @@ class BaseModelConfig(BaseModel):
     )
 
     @field_validator("name")
+    @classmethod
     def check_name(cls, v):
         v = str(v).strip().casefold()
         return v
@@ -421,10 +420,11 @@ class TPUModelConfig(BaseModelConfig):
     _validate_labels = field_validator("labels")(validate_model_labels)
 
     @field_validator("config", "input", "classes", mode="before")
+    @classmethod
     def str_to_path(cls, v, info: FieldValidationInfo) -> Optional[Path]:
         msg = f"{info.field_name} must be a path or a string of a path"
-        model_name = info.config.get("name", "Unknown Model")
-        model_input: Optional[Path] = info.config.get("input")
+        model_name = info.data.get("name", "Unknown Model")
+        model_input: Optional[Path] = info.data.get("input")
         lp = f"Model Name: {model_name} ->"
 
         if v is None:
@@ -466,10 +466,11 @@ class CV2YOLOModelConfig(BaseModelConfig):
     _validate_labels = field_validator("labels")(validate_model_labels)
 
     @field_validator("config", "input", "classes", mode="before")
+    @classmethod
     def str_to_path(cls, v, info: FieldValidationInfo) -> Optional[Path]:
         msg = f"{info.field_name} must be a path or a string of a path"
-        model_name = info.config.get("name", "Unknown Model")
-        model_input: Optional[Path] = info.config.get("input")
+        model_name = info.data.get("name", "Unknown Model")
+        model_input: Optional[Path] = info.data.get("input")
 
         if v is None:
             # logger.debug(f"{lp} {info.field_name} is None, passing as it is Optional")
@@ -556,13 +557,13 @@ from ...Shared.Models.config import DefaultEnabled
 
 class TorchModelConfig(BaseModelConfig):
     class PreTrained(DefaultEnabled):
-        _model_name: Optional[str] = Field(
+        name: Optional[str] = Field(
             "default",
             pattern=r"(accurate|fast|default|balanced|high_performance|low_performance)",
-            alias="model_name"
         )
 
-        @field_validator("model_name", mode="before", check_fields=False)
+        @field_validator("name", mode="before", check_fields=False)
+        @classmethod
         def _validate_model_name(
             cls, v: Optional[str], info: FieldValidationInfo
         ) -> str:
@@ -681,15 +682,16 @@ class Settings(BaseModel, arbitrary_types_allowed=True):
         None, description="Available models"
     )
 
+
     def get_lock_settings(self):
         return self.locks
 
-    @field_validator("available_models")
-    def validate_available_models(cls, v, info: FieldValidationInfo):
-        models = info.config.get("models")
+    @model_validator(mode="after")
+    def _validate_model_after(self) -> "Settings":
+        v = []
+        models = self.models
         if models:
             disabled_models: list = []
-            v = []
             for model in models:
                 if not model:
                     logger.warning(
@@ -815,7 +817,9 @@ class Settings(BaseModel, arbitrary_types_allowed=True):
                     disabled_models.append(model.get("name"))
             if disabled_models:
                 logger.debug(f"Skipped these disabled models: {disabled_models}")
-        return v
+        if v:
+            self.available_models = v
+        return self
 
 
 def parse_client_config_file(cfg_file: Path) -> Optional[Settings]:
@@ -1042,6 +1046,7 @@ class APIDetector:
             )
 
         try:
+            logger.debug(f"DBG>>> {self.config}")
             if self.config.framework == ModelFrameWork.OPENCV:
                 if (
                     self.config.sub_framework == OpenCVSubFrameWork.DARKNET
@@ -1050,6 +1055,7 @@ class APIDetector:
                     from ..ML.Detectors.opencv.cv_yolo import CV2YOLODetector
 
                     self.model = CV2YOLODetector(self.config)
+
             elif self.config.framework == ModelFrameWork.HTTP:
                 sub_fw = self.config.sub_framework
                 if sub_fw == HTTPSubFrameWork.REKOGNITION:
@@ -1083,12 +1089,16 @@ class APIDetector:
 
                 self.model = TorchDetector(self.config)
 
+            elif self.config.framework == ModelFrameWork.ULTRALYTICS:
+                from ..ML.Detectors.ultralytics.yolo.base import UltralyticsYOLODetector
+
+                self.model = UltralyticsYOLODetector(self.config)
             else:
                 logger.warning(
                     f"CANT CREATE DETECTOR -> Framework NOT IMPLEMENTED!!! {self.config.framework}"
                 )
         except Exception as e:
-            logger.warning(f"Error loading model: {e}")
+            logger.warning(f"Error loading model: {e}", exc_info=True)
 
     def is_processor_available(self) -> bool:
         """Check if the processor is available"""
@@ -1152,21 +1162,6 @@ class APIDetector:
                         logger.debug(
                             f"Found {cuda_devices} CUDA device(s) that OpenCV can use"
                         )
-                        available = True
-            elif framework == ModelFrameWork.TENSORFLOW:
-                try:
-                    import tensorflow as tf
-                except ImportError:
-                    logger.warning(
-                        "tensorflow not installed, cannot load any models that use tensorflow GPU processor"
-                    )
-                    available = None
-                else:
-                    if not tf.config.list_physical_devices("GPU"):
-                        logger.warning(
-                            "No CUDA devices found, cannot load any models that use the GPU processor"
-                        )
-                    else:
                         available = True
             elif framework == ModelFrameWork.TORCH:
                 try:

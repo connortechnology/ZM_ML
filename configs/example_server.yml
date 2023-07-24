@@ -123,7 +123,7 @@ models:
       # see: YOLOv5: https://docs.ultralytics.com/models/yolov5/
       # YOLOv8: https://docs.ultralytics.com/models/yolov8/
       # YOLO-NAS: https://docs.ultralytics.com/models/yolo-nas/
-      model_name: yolov8s
+      name: yolov8s
 
     # user trained model support is being worked on
     # input: /path/to/model.pt
@@ -174,7 +174,7 @@ models:
     # accurate|fast|default|high_performance|low_performance
     pretrained:
       enabled: yes
-      model_name: default
+      name: default
 
 #    input: /path/to/model.pt
 #    classes: /path/to/classes/file.txt
@@ -196,6 +196,8 @@ models:
 
   - name: YOLOv4 Tiny  # Name is converted to lowercase, spaces are preserved; 'yolov4 tiny'
     enabled: true
+    framework: opencv
+    sub_framework: darknet
     model_type: object
     description: "yolov4 Tiny pretrained DarkNet model"
     processor: cpu
@@ -252,6 +254,8 @@ models:
 
   - name: YOLOv4-P6  # yolov4-p6
     enabled: false
+    framework: opencv
+    sub_framework: darknet
     processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
     input: "${MODEL_DIR}/yolo/yolov4-p6.weights"
     config: "${MODEL_DIR}/yolo/yolov4-p6.cfg"
@@ -265,6 +269,8 @@ models:
 
   - name: yolov7 tiny
     enabled: yes
+    framework: opencv
+    sub_framework: darknet
     description: "yolov7 tiny pretrained DarkNet model - good for low powered cpu"
     input: "${MODEL_DIR}/yolo/yolov7-tiny.weights"
     config: "${MODEL_DIR}/yolo/yolov7-tiny.cfg"
@@ -275,6 +281,8 @@ models:
   - name: yolov7
     processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
     enabled: no
+    framework: opencv
+    sub_framework: darknet
     description: "YOLO v7 pretrained DarkNet model"
     input: "${MODEL_DIR}/yolo/yolov7.weights"
     config: "${MODEL_DIR}/yolo/yolov7.cfg"
@@ -289,6 +297,8 @@ models:
   - name: yolov7x
     processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
     enabled: no
+    framework: opencv
+    sub_framework: darknet
     description: "YOLO v7-X pretrained DarkNet model"
     input: "${MODEL_DIR}/yolo/yolov7x.weights"
     config: "${MODEL_DIR}/yolo/yolov7x.cfg"

@@ -16,11 +16,11 @@ PRETRAINED_MODEL_NAMES: Dict[AnyStr, List[AnyStr]] = {
         "yolov5x6u",
     ],
     "yolov8": [
-        "yolov8n.pt",
-        "yolov8s.pt",
-        "yolov8m.pt",
-        "yolov8l.pt",
-        "yolov8x.pt",
+        "yolov8n",
+        "yolov8s",
+        "yolov8m",
+        "yolov8l",
+        "yolov8x",
     ],
     "nas": [
         "yolo_nas_s",

@@ -51,6 +51,7 @@ class TokensStructure(BaseModel):
         """
 
         @field_validator("intlist", "monlist", mode="before")
+        @classmethod
         def convert_to_list(cls, v):
             if v:
                 if isinstance(v, str):
@@ -59,6 +60,7 @@ class TokensStructure(BaseModel):
             return v
 
         @field_validator("pushstate", mode="before")
+        @classmethod
         def set_pushstate(cls, v):
             affirmative = ("enabled", "activated")
             negative = ("disabled", "deactivated")

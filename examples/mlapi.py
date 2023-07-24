@@ -1,8 +1,7 @@
-#!//opt/zm_ml/data/venv/bin/python3
 #!/usr/bin/env python3
 
 """A Script to start the MLAPI server."""
-from zm_ml.Server.app import create_logs, MLAPI, init_logs
+from zm_ml.Server.app import create_logs, MLAPI
 
 logger = create_logs()
 
@@ -22,7 +21,6 @@ if __name__ == "__main__":
     lp = f"{script_name}::"
     args = _parse_cli()
     config_file = args.get("config")
-    secrets_file = args.get("secrets")
     if not config_file:
         # check ENV
         logger.info(f"{lp} No config file specified, checking ENV 'ML_SERVER_CONF_FILE'")
