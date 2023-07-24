@@ -99,9 +99,8 @@ COLORS: List[Tuple[int, int, int]] = []
 ZM_DB: Optional[ZMDB] = None
 
 
-class BaseModel(PydanticBaseModel):
-    class Config:
-        arbitrary_types_allowed = True
+class BaseModel(PydanticBaseModel, arbitrary_types_allowed=True):
+    pass
 
 
 class FilterConfigFileModel(BaseModel):

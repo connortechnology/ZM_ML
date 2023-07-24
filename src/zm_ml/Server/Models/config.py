@@ -149,7 +149,7 @@ class CV2YOLOModelOptions(BaseModelOptions):
     )
 
 
-class TPUModelOptions(BaseModelOptions):
+class TPUModelOptions(BaseModelOptions, extra="allow"):
     class NMSOptions(BaseModel):
         enabled: bool = Field(True, description="Enable Non-Maximum Suppression")
         threshold: Optional[float] = Field(
@@ -157,9 +157,6 @@ class TPUModelOptions(BaseModelOptions):
         )
 
     nms: NMSOptions = Field(default_factory=NMSOptions, description="NMS Options")
-
-    class Config:
-        extra = "allow"
 
 
 class FaceRecognitionLibModelDetectionOptions(BaseModelOptions):
@@ -546,74 +543,29 @@ class DeepFaceModelConfig(BaseModelConfig):
 class VirelAIModelConfig(BaseModelConfig):
     pass
 
-
-class CV2TFModelConfig(BaseModelConfig):
-    input: Path = Field(
-        None,
-        description="model file/dir path (Optional)",
-        example="/opt/models/frozen_inference_graph.pb",
-    )
-    classes: Path = Field(default=None, description="model labels file path (Optional)")
-    config: Path = Field(
-        default=None,
-        description="model config file path (Optional)",
-        example="/opt/models/ssd_inception_v2_coco_2017_11_17.pbtxt",
-    )
-    height: Optional[int] = Field(
-        416, ge=1, description="Model input height (resized for model)"
-    )
-    width: Optional[int] = Field(
-        416, ge=1, description="Model input width (resized for model)"
-    )
-    square: Optional[bool] = Field(
-        False, description="Zero pad the image to be a square"
-    )
-    cv2_cuda_fp_16: Optional[bool] = Field(
-        False,
-        description="model uses Floating Point 16 Backend for GPU (EXPERIMENTAL!)",
-    )
-
-    labels: List[str] = Field(
-        default=None,
-        description="model labels parsed into a list of strings",
-        repr=False,
-        exclude=True,
-    )
-
-    _validate_labels = field_validator("labels", always=True)(
-        validate_model_labels
-    )
-
-    @field_validator("config", "input", "classes", mode="before", always=True)
-    def str_to_path(cls, v, info: FieldValidationInfo) -> Optional[Path]:
-        msg = f"{info.field_name} must be a path or a string of a path"
-        model_name = info.config.get("name", "Unknown Model")
-        model_input: Optional[Path] = info.config.get("input")
-
-        if v is None:
-            return v
-        elif not isinstance(v, (Path, str)):
-            raise ValueError(msg)
-        elif isinstance(v, str):
-            v = Path(v)
-        if info.field_name == "config":
-            if model_input and model_input.suffix == ".weights":
-                msg = f"'{info.field_name}' is required when 'input' is a DarkNet .weights file"
-        return v
-
-
+from ...Shared.Models.config import DefaultEnabled
 class PyTorchModelConfig(BaseModelConfig):
+
+    class PreTrained(DefaultEnabled):
+        model_name: Optional[str] = Field("default", pattern=r"(accurate|fast|default|balanced|high_performance|low_performance)")
+
+        @field_validator("model_name", mode="before", always=True)
+        def _validate_model_name(cls, v: Optional[str], info: FieldValidationInfo) -> str:
+            if v is None:
+                v = "default"
+            return v
+
+
     input: Optional[Path] = None
     classes: Optional[Path] = None
 
     num_classes: Optional[int] = None
-    gpu_idx: Optional[int] = None
-    pretrained: Optional[str] = Field(
-        None, regex=r"(accurate|fast|default|balanced|high_performance|low_performance)"
-    )
 
-    conf: Optional[float] = Field(None, ge=0, le=1)
-    nms: Optional[float] = Field(None, ge=0, le=1)
+    gpu_idx: Optional[int] = None
+
+    pretrained: Optional[str] = Field(
+        None, pattern=r"(accurate|fast|default|balanced|high_performance|low_performance)"
+    )
 
     # this is not to be configured by the user. It is parsed classes from the labels file (or default if no file).
     labels: List[str] = Field(
@@ -1234,7 +1186,7 @@ class APIDetector:
         return self.model.detect(image)
 
 
-class GlobalConfig(BaseModel):
+class GlobalConfig(BaseModel, arbitrary_types_allowed=True):
     available_models: List[BaseModelConfig] = Field(
         default_factory=list, description="Available models, call by ID"
     )
@@ -1245,8 +1197,6 @@ class GlobalConfig(BaseModel):
         default_factory=list, description="Loaded Detectors"
     )
 
-    class Config:
-        arbitrary_types_allowed = True
 
     def get_detector(self, model: BaseModelConfig) -> Optional[APIDetector]:
         """Get a detector by ID"""
@@ -1267,15 +1217,10 @@ class GlobalConfig(BaseModel):
         return ret_
 
 
-class ServerEnvVars(BaseSettings):
+class ServerEnvVars(BaseSettings, case_sensitive=True):
     """Server Environment Variables"""
 
     conf_file: str = Field(
         None, env="ML_SERVER_CONF_FILE", description="Server YAML config file"
     )
 
-    class Config:
-        # env_file = ".env"
-        # env_file_encoding = "utf-8"
-        case_sensitive = True
-        # extra = "forbid"

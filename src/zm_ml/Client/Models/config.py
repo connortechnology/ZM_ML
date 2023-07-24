@@ -35,7 +35,7 @@ from ..Models.DEFAULTS import *
 logger = logging.getLogger(CLIENT_LOGGER_NAME)
 
 
-class ZMDBSettings(BaseSettings):
+class ZMDBSettings(BaseSettings, extra="allow"):
     host: Union[IPvAnyAddress, AnyUrl, None] = Field(None, env="ML_CLIENT_DB_HOST")
     port: Optional[int] = Field(None, env="ML_CLIENT_DB_PORT")
     user: Optional[str] = Field(None, env="ML_CLIENT_DB_USER")
@@ -47,9 +47,6 @@ class ZMDBSettings(BaseSettings):
         validate_replace_localhost
     )
 
-    class Config:
-        extra = "allow"
-
 
 class SystemSettings(BaseModel):
     image_dir: Optional[Path] = Field(Path(DEF_CLNT_SYS_IMAGEDIR))
@@ -59,12 +56,9 @@ class SystemSettings(BaseModel):
     thread_workers: Optional[int] = Field(DEF_CLNT_SYS_THREAD_WORKERS)
 
 
-class ZoneMinderSettings(BaseSettings):
+class ZoneMinderSettings(BaseSettings, extra="allow"):
     class ZMMisc(BaseSettings):
         write_notes: bool = Field(True, env="ML_CLIENT_ZONEMINDER_MISC_WRITE_NOTES")
-
-        class Config:
-            extra = "allow"
 
 
     class ZMAPISettings(BaseSettings):

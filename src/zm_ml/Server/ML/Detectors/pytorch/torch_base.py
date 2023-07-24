@@ -142,7 +142,10 @@ class TorchDetector(FileLock):
 
 
     def _convert_image(self, image: np.ndarray) -> torch.Tensor:
-        # convert numpy array to torch tensor
+        """Convert Image from numpy array to torch tensor and convert to channels first
+
+        :param (np.ndarray) image: numpy array
+        """
         ret = torch.from_numpy(image)
         # convert to channels first
         ret = ret.permute(2, 0, 1)
@@ -217,10 +220,10 @@ class TorchDetector(FileLock):
                 self.release_lock()
 
                 logger.debug(
-                    f"{LP} Max Memory >>> allocated: {torch.cuda.max_memory_allocated() / 1024 ** 2:.0f} MB :: reserved: {torch.cuda.max_memory_reserved() / 1024 ** 2:.0f} MB"
+                    f"{LP} CUDA Max Memory >>> allocated: {torch.cuda.max_memory_allocated() / 1024 ** 2:.0f} MB :: reserved: {torch.cuda.max_memory_reserved() / 1024 ** 2:.0f} MB"
                 )
                 logger.debug(
-                    f"{LP} Current Memory allocated: {torch.cuda.memory_allocated() / 1024 ** 2:.0f} MB :: reserved: {torch.cuda.memory_reserved() / 1024 ** 2:.0f} MB"
+                    f"{LP} CUDA Current Memory allocated: {torch.cuda.memory_allocated() / 1024 ** 2:.0f} MB :: reserved: {torch.cuda.memory_reserved() / 1024 ** 2:.0f} MB"
                 )
                 # logger.debug(f"{LP} memory stats: {torch.cuda.memory_stats()}")
                 # logger.debug(f"{LP} memory summary: {torch.cuda.memory_summary(self.device)}")
