@@ -73,7 +73,7 @@ class LockSettings(BaseModel):
         default_factory=LockSetting, description="TPU Lock Settings"
     )
 
-    @field_validator("gpu", "cpu", "tpu", always=True, mode="before")
+    @field_validator("gpu", "cpu", "tpu", mode="before")
     def set_lock_name(cls, v, info: FieldValidationInfo):
         if v:
             assert isinstance(v, LockSetting), f"Invalid type: {type(v)}"
@@ -92,7 +92,7 @@ class LockSettings(BaseModel):
         else:
             raise ValueError(f"Invalid device type: {device}")
 
-    @field_validator("dir", mode="before", always=True)
+    @field_validator("dir", mode="before")
     def validate_lock_dir(cls, v):
         if not v:
             v = f"{tempfile.gettempdir()}/zm_mlapi/locks"
@@ -418,9 +418,9 @@ class TPUModelConfig(BaseModelConfig):
         exclude=True,
     )
 
-    _validate_labels = field_validator("labels", always=True)(validate_model_labels)
+    _validate_labels = field_validator("labels")(validate_model_labels)
 
-    @field_validator("config", "input", "classes", mode="before", always=True)
+    @field_validator("config", "input", "classes", mode="before")
     def str_to_path(cls, v, info: FieldValidationInfo) -> Optional[Path]:
         msg = f"{info.field_name} must be a path or a string of a path"
         model_name = info.config.get("name", "Unknown Model")
@@ -463,9 +463,9 @@ class CV2YOLOModelConfig(BaseModelConfig):
         exclude=True,
     )
 
-    _validate_labels = field_validator("labels", always=True)(validate_model_labels)
+    _validate_labels = field_validator("labels")(validate_model_labels)
 
-    @field_validator("config", "input", "classes", mode="before", always=True)
+    @field_validator("config", "input", "classes", mode="before")
     def str_to_path(cls, v, info: FieldValidationInfo) -> Optional[Path]:
         msg = f"{info.field_name} must be a path or a string of a path"
         model_name = info.config.get("name", "Unknown Model")
@@ -561,7 +561,7 @@ class TorchModelConfig(BaseModelConfig):
             pattern=r"(accurate|fast|default|balanced|high_performance|low_performance)",
         )
 
-        @field_validator("model_name", mode="before", always=True)
+        @field_validator("model_name", mode="before")
         def _validate_model_name(
             cls, v: Optional[str], info: FieldValidationInfo
         ) -> str:
@@ -586,8 +586,8 @@ class TorchModelConfig(BaseModelConfig):
         exclude=True,
     )
 
-    _validate_labels = field_validator("labels", always=True)(validate_model_labels)
-    _validate = field_validator("input", "classes", mode="before", always=True)(
+    _validate_labels = field_validator("labels")(validate_model_labels)
+    _validate = field_validator("input", "classes", mode="before")(
         str2path
     )
 
@@ -683,7 +683,7 @@ class Settings(BaseModel, arbitrary_types_allowed=True):
     def get_lock_settings(self):
         return self.locks
 
-    @field_validator("available_models", always=True)
+    @field_validator("available_models")
     def validate_available_models(cls, v, info: FieldValidationInfo):
         models = info.config.get("models")
         if models:
