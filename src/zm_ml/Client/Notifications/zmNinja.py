@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Union, Tuple, Dict, List
 
-from pydantic import BaseModel, Field, validator, SecretStr, AnyUrl, IPvAnyAddress
+from pydantic import BaseModel, Field, field_validator, SecretStr, AnyUrl, IPvAnyAddress
 
 from ..main import get_global_config
 from ...Shared.configs import GlobalConfig
@@ -50,7 +50,7 @@ class TokensStructure(BaseModel):
         }
         """
 
-        @validator("intlist", "monlist", pre=True, always=True)
+        @field_validator("intlist", "monlist", mode="before")
         def convert_to_list(cls, v):
             if v:
                 if isinstance(v, str):
@@ -58,7 +58,7 @@ class TokensStructure(BaseModel):
 
             return v
 
-        @validator("pushstate", pre=True, always=True)
+        @field_validator("pushstate", mode="before")
         def set_pushstate(cls, v):
             affirmative = ("enabled", "activated")
             negative = ("disabled", "deactivated")

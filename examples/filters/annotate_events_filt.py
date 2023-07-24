@@ -20,19 +20,19 @@ from pathlib import Path
 from typing import List, Optional, NamedTuple, Tuple, Dict, Union, Any
 
 from zm_ml.Shared.Models.validators import (
-    _validate_replace_localhost,
     str2path,
-    str2bool, _validate_dir,
+    str2bool, validate_replace_localhost, validate_dir,
 )
 
 try:
-    import pydantic.fields
+
     from pydantic import (
         BaseModel as PydanticBaseModel,
         Field,
         AnyUrl,
         IPvAnyAddress,
-        validator,
+        field_validator,
+    FieldValidationInfo
     )
 except ImportError:
     warnings.warn("pydantic not installed, please install it to use this script", ImportWarning)
@@ -66,10 +66,6 @@ except ImportError:
 
 from zm_ml.Client.Libs.DB import ZMDB
 from zm_ml.Client.Models.config import (
-    SystemSettings,
-    MonitorsSettings,
-    MatchFilters,
-    ZoneMinderSettings,
     ClientEnvVars,
     ZMDBSettings,
 )
@@ -111,8 +107,8 @@ class FilterConfigFileModel(BaseModel):
             height: Optional[int] = 0
             keep_aspect: bool = True
 
-            _validate_1 = validator(
-                "enabled", "keep_aspect", allow_reuse=True, pre=True
+            _validate_1 = field_validator(
+                "enabled", "keep_aspect", mode="before"
             )(str2bool)
 
         resize: ResizeSettings = Field(default_factory=ResizeSettings)
@@ -121,7 +117,7 @@ class FilterConfigFileModel(BaseModel):
         enabled: bool = True
         every: Optional[int] = 10
 
-        _validate_1 = validator("enabled", allow_reuse=True, pre=True)(str2bool)
+        _validate_1 = field_validator("enabled", mode="before")(str2bool)
 
     class LocalSettings(BaseModel):
         class LocalModelSettings(BaseModel):
@@ -135,11 +131,11 @@ class FilterConfigFileModel(BaseModel):
             height: int = 416
 
 
-            @validator("input", "config", "labels", always=True)
-            def check_path(cls, v, field: pydantic.fields.ModelField, **kwargs):
+            @field_validator("input", "config", "labels")
+            def check_path(cls, v, info: FieldValidationInfo):
                 if v:
                     v = str2path(v)
-                    assert v.is_file(), f"{field.name} must be a valid file"
+                    assert v.is_file(), f"{info.field_name} must be a valid file"
                 return v
 
         enabled: bool = True
@@ -151,11 +147,11 @@ class FilterConfigFileModel(BaseModel):
         port: int = 5000
         models: List[str] = Field(default_factory=list)
 
-        @validator("host", allow_reuse=True, pre=True)
-        def _validate_host(cls, v, field):
-            logger.info(f"Validating KEY: {field.name} VALUE: {v} - {type(v)}")
+        @field_validator("host", mode="before")
+        def _validate_host(cls, v, info: FieldValidationInfo):
+            logger.info(f"Validating KEY: {info.field_name} VALUE: {v} - {type(v)}")
             if v:
-                v = _validate_replace_localhost(v)
+                v = validate_replace_localhost(v)
                 logger.debug(f"After validation: {v} - {type(v)}")
             return v
 
@@ -165,8 +161,8 @@ class FilterConfigFileModel(BaseModel):
             path: Path = Field("/var/log/zm")
             filename: str = "annotated"
 
-            _validate_1 = validator("enabled", allow_reuse=True, pre=True)(str2bool)
-            _validate_2 = validator("path", allow_reuse=True)(str2path)
+            _validate_1 = field_validator("enabled", mode="before")(str2bool)
+            _validate_2 = field_validator("path")(str2path)
 
         debug: bool = False
         file: LogFileSettings = Field(default_factory=LogFileSettings)
@@ -175,7 +171,7 @@ class FilterConfigFileModel(BaseModel):
         enabled: bool = False
         every: int = 1
 
-        _validate_1 = validator("enabled", allow_reuse=True, pre=True)(str2bool)
+        _validate_1 = field_validator("enabled", mode="before")(str2bool)
 
     substitutions: Dict[str, str] = Field(default_factory=dict)
     zm_conf: Path = Field("/etc/zm")
@@ -191,13 +187,13 @@ class FilterConfigFileModel(BaseModel):
     # filters: MatchFilters = Field(default_factory=MatchFilters)
     # monitors: Dict[int, MonitorsSettings] = Field(default_factory=dict)
 
-    _validate_1 = validator("import_zones", pre=True, allow_reuse=True)(str2bool)
 
-    @validator("zm_conf", pre=True, always=True)
-    def _validate_2(cls, v, field, values, config):
+    _validate_1 = field_validator("import_zones", mode="before")(str2bool)
+    @field_validator("zm_conf", mode="before")
+    def _validate_2(cls, v, info: FieldValidationInfo):
         if v:
             v = str2path(v)
-            v = _validate_dir(v)
+            v = validate_dir(v)
         return v
 
 
