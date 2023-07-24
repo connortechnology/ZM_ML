@@ -98,7 +98,7 @@ locks:
     max: 1
     timeout: 13
 
-# -- Define what models the server will offer, name is case insensitive and preserves spaces.
+# -- Define what models the server will offer, name is case-insensitive and preserves spaces.
 # -- CHANGED! Default framework is now ultralytics (torch), not opencv. OpenCV is still supported.
 models:
   # -- The model name is how you will call it in the API request
@@ -120,11 +120,22 @@ models:
     # Use pretrained model instead of your own
     pretrained:
       enabled: yes
+      # see: YOLOv5: https://docs.ultralytics.com/models/yolov5/
+      # YOLOv8: https://docs.ultralytics.com/models/yolov8/
+      # YOLO-NAS: https://docs.ultralytics.com/models/yolo-nas/
       model_name: yolov8s
 
     # user trained model support is being worked on
     # input: /path/to/model.pt
     # classes: /path/to/classes/file.txt
+
+    # -- Options that are specific to the framework and/or sub_framework
+    detection_options:
+      # -- The model will only return detections with a confidence score higher than this
+      # -- The client can filter by confidence further, but this is a good starting point to reduce noise.
+      confidence: 0.2  # Optional. Defaults to 0.2.
+      # -- Non Max Suppression threshold. Higher values will remove more overlapping boxes
+      nms: 0.4  # Optional. Defaults to 0.4.
 
 
   - name: YOLOv4  # Name will be lower cased, spaces are preserved; 'yolov4'
@@ -132,12 +143,13 @@ models:
     framework: opencv
     # -- sub_framework is the various backends the framework can make use of
     # -- darknet is the default for opencv, but you can also use onnx
-    sub_framework: darknet  # Optional, defaults to darknet for opencv. (onnx, caffe, etc.) **WIP**
-    # -- cpu/gpu/tpu
+    sub_framework: darknet
+    # -- cpu/gpu
+    # NOTE: gpu requires OpenCV to be compiled with CUDA/cuDNN support!!!
     processor: cpu
 
     # -- Model file is required for models that require input.
-    # -- Config file is optional, only some models require it.
+    # -- Config file is optional, only .weights input requires a config file.
     input: "${MODEL_DIR}/yolo/yolov4_new.weights"  # Optional. This is the model file itself.
     config: "${MODEL_DIR}/yolo/yolov4_new.cfg"  # Optional (.weights requires .cfg, .onnx and .tflite does not).
     #classes: "${MODEL_DIR}/coco.names"  # Optional. Default is COCO 2017 classes.
@@ -149,14 +161,9 @@ models:
     # -- 1920x1080 -> 1920x1920 with a black bg where the new pixels are
     square: no  # Optional. Defaults to False.
 
-    # -- Options that are specific to the framework and sub_framework
-    # -- These options can be changed by API calls.
     detection_options:
-      # -- The model will only return detections with a confidence score higher than this
-      # -- The client can filter by confidence further, but this is a good starting point to reduce noise.
-      confidence: 0.2  # Optional. Defaults to 0.2.
-      # -- Non Max Suppression threshold. Higher values will remove more overlapping boxes
-      nms: 0.4  # Optional. Defaults to 0.4.
+      confidence: 0.2
+      nms: 0.4
 
   - name: torch test
     description: testing pretrained torch model

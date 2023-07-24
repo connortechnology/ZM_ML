@@ -94,11 +94,21 @@ class UltralyticsYOLODetector(FileLock):
                 os.environ["TORCH_HOME"] = self.cache_dir.as_posix()
                 _pt = self.config.pretrained.model_name
                 conf, nms = self.options.confidence, self.options.nms
+                sub_fw = self.config.sub_framework
+
+
 
                 if _pt:
+                    if _pt.startswith("yolo_nas_"):
+                        self.model = ultralytics.NAS(
+                            _pt, device=self.device, conf=conf, iou=nms
+                        )
+                    elif _pt.startswith("yolov"):
+                        pass
                     self.model = ultralytics.YOLO(
                         _pt, device=self.device, conf=conf, iou=nms
                     )
+
                 self.ok = True
                 if _pth:
                     logger.warning(f"{LP} resetting 'TORCH_HOME' to original value...")
@@ -107,14 +117,18 @@ class UltralyticsYOLODetector(FileLock):
                 logger.warning(f"{LP} Pretrained is not enabled, attempting user supplied model...")
 
                 try:
-                    model_file: str = self.config.input.as_posix()
-                    logger.info(f"{LP} loading FILE -> {model_file}")
+                    _pt: str = self.config.input.as_posix()
+                    logger.info(f"{LP} loading FILE -> {_pt}")
+                    if _pt.startswith("yolo_nas_"):
+                        self.model = ultralytics.NAS(
+                            _pt, device=self.device, conf=conf, iou=nms
+                        )
+                    elif _pt.startswith("yolov"):
+                        pass
                     self.model = ultralytics.YOLO(
-                        model_file,
-                        device=self.device,
-                        conf=self.config.detection_options.confidence,
-                        iou=self.config.detection_options.nms,
+                        _pt, device=self.device, conf=conf, iou=nms
                     )
+
                     self.ok = True
                 except Exception as model_load_exc:
                     logger.error(
