@@ -4,7 +4,7 @@ import tempfile
 import time
 import uuid
 from pathlib import Path
-from typing import Union, Dict, List, Optional, Any
+from typing import Union, Dict, List, Optional, Any, TYPE_CHECKING
 
 import numpy as np
 import yaml
@@ -21,7 +21,6 @@ from pydantic_settings import BaseSettings
 
 from .validators import validate_model_labels
 from ..Log import SERVER_LOGGER_NAME
-from ..ML.Detectors.ultralytics.Models.config import UltralyticsModelConfig
 from ...Server.Models.DEFAULTS import *
 from ...Shared.Models.Enums import (
     ModelType,
@@ -40,6 +39,8 @@ from ...Shared.Models.validators import (
     validate_replace_localhost,
     str2path,
 )
+if TYPE_CHECKING:
+    from ..ML.Detectors.ultralytics.Models.config import UltralyticsModelConfig
 
 logger = logging.getLogger(SERVER_LOGGER_NAME)
 
