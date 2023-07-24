@@ -1,7 +1,8 @@
 from __future__ import annotations
 import time
+from functools import lru_cache
 from logging import getLogger
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, List
 from warnings import warn
 try:
     import cv2
@@ -24,6 +25,7 @@ logger = getLogger(SERVER_LOGGER_NAME)
 
 
 class CV2YOLODetector(CV2Base):
+    _classes: Optional[List] = None
     def __init__(self, model_config: CV2YOLOModelConfig):
         super().__init__(model_config)
         # self.is_locked: bool = False
@@ -32,8 +34,16 @@ class CV2YOLODetector(CV2Base):
         # logger.debug(f"{LP} configuration: {self.config}")
         self.load_model()
 
-    def get_classes(self):
-        return self.config.labels
+    @property
+    @lru_cache
+    def classes(self):
+        if self._classes is None:
+            self._classes = self.config.labels
+        return self._classes
+
+    @classes.setter
+    def classes(self, value: List):
+        self._classes = value
 
     def load_model(self):
         logger.debug(

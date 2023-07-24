@@ -1,4 +1,3 @@
-
 # MIT License
 #
 # Copyright (c) 2019 Alex Shafer
@@ -26,8 +25,8 @@ import os
 import sys
 from typing import Optional, Mapping, Union, Pattern
 
-_simple_re: Pattern = re.compile(r'(?<!\\)\$([A-Za-z0-9_]+)')
-_extended_re: Pattern = re.compile(r'(?<!\\)\$\{([A-Za-z0-9_]+)((:?-)([^}]+))?\}')
+_simple_re: Pattern = re.compile(r"(?<!\\)\$([A-Za-z0-9_]+)")
+_extended_re: Pattern = re.compile(r"(?<!\\)\$\{([A-Za-z0-9_]+)((:?-)([^}]+))?\}")
 
 
 class envsubst:
@@ -38,26 +37,28 @@ class envsubst:
         self.strict = False
         self.env = None
 
-    def sub(self, search_string, env: Union[Optional, Mapping] = None, strict: bool = False):
+    def sub(
+        self, search_string, env: Union[Optional, Mapping] = None, strict: bool = False
+    ):
         """
-            Substitute environment variables in the given string, allows for passing a custom environment mapping.
-            The default behavior is to check the custom environment mapping , the system environment and finally the
-            specified default ("somestring" in the examples). If strict is True, the system environment will not be
-            checked after the custom environment mapping but, the default will still be used (if needed).
+        Substitute environment variables in the given string, allows for passing a custom environment mapping.
+        The default behavior is to check the custom environment mapping , the system environment and finally the
+        specified default ("somestring" in the examples). If strict is True, the system environment will not be
+        checked after the custom environment mapping but, the default will still be used (if needed).
 
-            The following forms are supported:
+        The following forms are supported:
 
-            Simple variables - will use an empty string if the variable is unset
-              $FOO
+        Simple variables - will use an empty string if the variable is unset
+          $FOO
 
-            Bracketed expressions
-              ${FOO}
-                identical to $FOO
-              ${FOO:-somestring}
-                uses "somestring" if $FOO is unset, or is set and empty
-              ${FOO-somestring}
-                uses "somestring" only if $FOO is unset
-            """
+        Bracketed expressions
+          ${FOO}
+            identical to $FOO
+          ${FOO:-somestring}
+            uses "somestring" if $FOO is unset, or is set and empty
+          ${FOO-somestring}
+            uses "somestring" only if $FOO is unset
+        """
         self.strict = strict
         self.env = env
         # handle simple un-bracketed env vars like $FOO
@@ -83,7 +84,7 @@ class envsubst:
 
     def _repl_simple_env_var(self, m):
         var_name = m.group(1)
-        return self._resolve_var(var_name, '')
+        return self._resolve_var(var_name, "")
 
     def _repl_extended_env_var(self, m):
         var_name = m.group(1)
@@ -91,20 +92,21 @@ class envsubst:
         if default_spec:
             default = m.group(4)
             default = _simple_re.sub(self._repl_simple_env_var, default)
-            if m.group(3) == ':-':
+            if m.group(3) == ":-":
                 # use default if var is unset or empty
                 env_var = self._resolve_var(var_name)
                 if env_var:
                     return env_var
                 else:
                     return default
-            elif m.group(3) == '-':
+            elif m.group(3) == "-":
                 # use default if var is unset
                 return self._resolve_var(var_name, default)
             else:
-                raise RuntimeError('unexpected string matched regex')
+                raise RuntimeError("unexpected string matched regex")
         else:
-            return self._resolve_var(var_name, '')
+            return self._resolve_var(var_name, "")
+
 
 def main():
     opened = False
@@ -113,7 +115,7 @@ def main():
     try:
         try:
             fn = sys.argv[1]
-            if fn != '-':
+            if fn != "-":
                 f = open(fn)
                 opened = True
         except IndexError:
@@ -121,7 +123,7 @@ def main():
 
         data = f.read()
         try:
-            data = data.decode('utf-8')
+            data = data.decode("utf-8")
         except AttributeError:
             pass
 
@@ -131,5 +133,5 @@ def main():
             f.close()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

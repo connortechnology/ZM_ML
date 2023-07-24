@@ -3,9 +3,14 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple, List, Any
 
 import numpy as np
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, FieldValidationInfo
 
-from .validators import validate_log_level, str2path, validate_enabled, validate_not_enabled
+from .validators import (
+    validate_log_level,
+    str2path,
+    validate_enabled,
+    validate_not_enabled,
+)
 from .Enums import ModelProcessor, ModelType
 
 
@@ -17,19 +22,21 @@ class Testing(BaseModel):
 class DefaultEnabled(BaseModel):
     enabled: bool = Field(True)
 
-    _v = validator('enabled', pre=True, always=True)(validate_enabled)
+    _v = field_validator("enabled", mode="before", always=True)(validate_enabled)
 
 
 class DefaultNotEnabled(DefaultEnabled):
     enabled: bool = Field(False)
 
-    _v = validator('enabled', pre=True, always=True)(validate_not_enabled)
+    _v = field_validator("enabled", mode="before", always=True)(validate_not_enabled)
 
 
 class LoggingLevelBase(BaseModel):
     level: Optional[int] = None
 
-    _validate_log_level = validator('level', allow_reuse=True, pre=True, always=True)(validate_log_level)
+    _validate_log_level = field_validator("level", mode="before", always=True)(
+        validate_log_level
+    )
 
 
 class LoggingSettings(LoggingLevelBase):
@@ -40,15 +47,14 @@ class LoggingSettings(LoggingLevelBase):
         address: Optional[str] = Field("")
 
     class FileLogging(DefaultEnabled, LoggingLevelBase):
-        path: Path = Field('/var/log/zm')
-        filename_prefix: str = Field("zmML")
+        path: Path = Field("/var/log/zm")
+        filename_prefix: str = Field("zmml")
         file_name: Optional[str] = None
         user: str = Field(default="www-data")
         group: str = Field(default="www-data")
 
-        _validate_path = validator("path", allow_reuse=True, pre=True)(
-            str2path
-        )
+        _validate_path = field_validator("path", mode="before")(str2path)
+
     class SanitizeLogging(DefaultNotEnabled):
         replacement_str: str = Field(default="<sanitized>")
 
@@ -71,7 +77,11 @@ class Result(BaseModel):
     def __eq__(self, other):
         if not isinstance(other, Result):
             return False
-        return self.label == other.label and self.confidence == other.confidence and self.bounding_box == other.bounding_box
+        return (
+            self.label == other.label
+            and self.confidence == other.confidence
+            and self.bounding_box == other.bounding_box
+        )
 
     def __str__(self):
         return f"{self.label} ({self.confidence:.2f}) @ {self.bounding_box}"
@@ -80,7 +90,7 @@ class Result(BaseModel):
         return f"<{self.label} ({self.confidence * 100:.2f}%) @ {self.bounding_box}>"
 
 
-class DetectionResults(BaseModel):
+class DetectionResults(BaseModel, arbitrary_types_allowed=True):
     success: bool = Field(...)
     type: ModelType = Field(...)
     processor: ModelProcessor = Field(...)
@@ -89,13 +99,14 @@ class DetectionResults(BaseModel):
     removed: Optional[List[Result]] = Field(None)
 
     image: Optional[np.ndarray] = Field(None, repr=False)
-    # Possibly pass back a URL or Path for the client to grab the image from (virel.ai)
+    # Flag that annotated image needs to be grabbed by other means (virel.ai)
     extra_image_data: Optional[Dict[str, Any]] = Field(None, repr=False)
-
-    class Config:
-        arbitrary_types_allowed = True
 
     def get_labels(self) -> List[Optional[str]]:
         if not self.results or self.results is None:
             return []
-        return [r.label for r in self.results], [r.confidence for r in self.results], [r.bounding_box for r in self.results]
+        return (
+            [r.label for r in self.results],
+            [r.confidence for r in self.results],
+            [r.bounding_box for r in self.results],
+        )

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import time
 from logging import getLogger
-from typing import TYPE_CHECKING, Optional, Union, List, Tuple, Any, Dict
-import warnings
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
+
 try:
     import torch
 except ImportError:

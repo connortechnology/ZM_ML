@@ -17,8 +17,8 @@ from pydantic import (
     PositiveInt,
     SecretStr,
     AnyUrl,
-
 )
+from pydantic_settings import BaseSettings
 
 from .validators import validate_model_labels
 from ..Log import SERVER_LOGGER_NAME
@@ -74,10 +74,11 @@ class LockSettings(BaseModel):
     )
 
     @field_validator("gpu", "cpu", "tpu", always=True, mode="before")
-    def set_lock_name(cls, v, field: FieldValidationInfo):
+    def set_lock_name(cls, v, info: FieldValidationInfo):
         if v:
+            assert isinstance(v, LockSetting), f"Invalid type: {type(v)}"
             v: LockSetting
-            v.name = f"zm-mlapi_{field.field_name}"
+            v.name = f"zm-mlapi_{info.field_name}"
         return v
 
     def get(self, device: str) -> LockSetting:
@@ -355,7 +356,7 @@ class BaseModelConfig(BaseModel):
         ModelType.DEFAULT, description="model type (object, face, alpr)"
     )
     processor: Optional[ModelProcessor] = Field(
-        ModelProcessor.CPU, description="Processor to use for model"
+        ModelProcessor.DEFAULT, description="Processor to use for model"
     )
 
     # todo: add validator that detects framework and sets a default sub framework if it is None.
@@ -414,22 +415,21 @@ class TPUModelConfig(BaseModelConfig):
     )
 
     @field_validator("config", "input", "classes", mode="before", always=True)
-    def str_to_path(cls, v, field: FieldValidationInfo) -> Optional[Path]:
-        # logger.debug(f"validating {field.name} - {v = } -- {type(v) = } -- {values = }")
-        msg = f"{field.field_name} must be a path or a string of a path"
-        model_name = values.get("name", "Unknown Model")
+    def str_to_path(cls, v, info: FieldValidationInfo) -> Optional[Path]:
+        msg = f"{info.field_name} must be a path or a string of a path"
+        model_name = info.config.get("name", "Unknown Model")
+        model_input: Optional[Path] = info.config.get("input")
         lp = f"Model Name: {model_name} ->"
 
         if v is None:
-            # logger.debug(f"{lp} {field.name} is None, passing as it is Optional")
             return v
         elif not isinstance(v, (Path, str)):
             raise ValueError(msg)
         elif isinstance(v, str):
             v = Path(v)
-        if field.name == "config":
-            if values["input"].suffix == ".weights":
-                msg = f"'{field.name}' is required when 'input' is a DarkNet .weights file"
+        if info.field_name == "config":
+            if model_input and model_input.suffix == ".weights":
+                msg = f"'{info.field_name}' is required when 'input' is a DarkNet .weights file"
         return v
 
 
@@ -462,21 +462,21 @@ class CV2YOLOModelConfig(BaseModelConfig):
     )
 
     @field_validator("config", "input", "classes", mode="before", always=True)
-    def str_to_path(cls, v, values, field) -> Optional[Path]:
-        # logger.debug(f"validating {field.name} - {v = } -- {type(v) = } -- {values = }")
-        msg = f"{field.name} must be a path or a string of a path"
-        model_name = values.get("name", "Unknown Model")
+    def str_to_path(cls, v, info: FieldValidationInfo) -> Optional[Path]:
+        msg = f"{info.field_name} must be a path or a string of a path"
+        model_name = info.config.get("name", "Unknown Model")
+        model_input: Optional[Path] = info.config.get("input")
 
         if v is None:
-            # logger.debug(f"{lp} {field.name} is None, passing as it is Optional")
+            # logger.debug(f"{lp} {info.field_name} is None, passing as it is Optional")
             return v
         elif not isinstance(v, (Path, str)):
             raise ValueError(msg)
         elif isinstance(v, str):
             v = Path(v)
-        if field.name == "config":
-            if values["input"].suffix == ".weights":
-                msg = f"'{field.name}' is required when 'input' is a DarkNet .weights file"
+        if info.field_name == "config":
+            if model_input and model_input.suffix == ".weights":
+                msg = f"'{info.field_name}' is required when 'input' is a DarkNet .weights file"
         return v
 
 
@@ -585,20 +585,20 @@ class CV2TFModelConfig(BaseModelConfig):
     )
 
     @field_validator("config", "input", "classes", mode="before", always=True)
-    def str_to_path(cls, v, values, field) -> Optional[Path]:
-        # logger.debug(f"validating {field.name} - {v = } -- {type(v) = } -- {values = }")
-        msg = f"{field.name} must be a path or a string of a path"
-        model_name = values.get("name", "Unknown Model")
+    def str_to_path(cls, v, info: FieldValidationInfo) -> Optional[Path]:
+        msg = f"{info.field_name} must be a path or a string of a path"
+        model_name = info.config.get("name", "Unknown Model")
+        model_input: Optional[Path] = info.config.get("input")
+
         if v is None:
-            # logger.debug(f"{lp} {field.name} is None, passing as it is Optional")
             return v
         elif not isinstance(v, (Path, str)):
             raise ValueError(msg)
         elif isinstance(v, str):
             v = Path(v)
-        if field.name == "config":
-            if values["input"].suffix == ".weights":
-                msg = f"'{field.name}' is required when 'input' is a DarkNet .weights file"
+        if info.field_name == "config":
+            if model_input and model_input.suffix == ".weights":
+                msg = f"'{info.field_name}' is required when 'input' is a DarkNet .weights file"
         return v
 
 
@@ -704,7 +704,7 @@ class SystemSettings(BaseModel):
     thread_workers: Optional[int] = Field(DEF_SRV_SYS_THREAD_WORKERS)
 
 
-class Settings(BaseModel):
+class Settings(BaseModel, arbitrary_types_allowed=True):
     testing: Testing = Field(default_factory=Testing)
     substitutions: Dict[str, str] = Field(default_factory=dict)
     system: SystemSettings = Field(default_factory=SystemSettings)
@@ -719,15 +719,13 @@ class Settings(BaseModel):
         None, description="Available models"
     )
 
-    class Config:
-        arbitrary_types_allowed = True
 
     def get_lock_settings(self):
         return self.locks
 
     @field_validator("available_models", always=True)
-    def validate_available_models(cls, v, values):
-        models = values.get("models")
+    def validate_available_models(cls, v, info: FieldValidationInfo):
+        models = info.config.get("models")
         if models:
             disabled_models: list = []
             v = []
@@ -738,7 +736,7 @@ class Settings(BaseModel):
                         f"(or an empty model; just a '-') in your config file! Skipping"
                     )
                     continue
-                final_model = None
+                final_model_config = None
                 if model.get("enabled", True) is True:
                     # logger.debug(f"Adding model: {type(model) = } ------ {model = }")
                     _model: Union[
@@ -757,17 +755,17 @@ class Settings(BaseModel):
                         if _sub_fw == HTTPSubFrameWork.REKOGNITION:
                             model["model_type"] = ModelType.OBJECT
                             model["processor"] = ModelProcessor.NONE
-                            final_model = RekognitionModelConfig(**model)
+                            final_model_config = RekognitionModelConfig(**model)
                         elif _sub_fw == HTTPSubFrameWork.VIREL:
                             model["model_type"] = ModelType.OBJECT
                             model["processor"] = ModelProcessor.NONE
-                            final_model = VirelAIModelConfig(**model)
+                            final_model_config = VirelAIModelConfig(**model)
                     elif _framework == ModelFrameWork.FACE_RECOGNITION:
                         model["model_type"] = ModelType.FACE
                         model[
                             "detection_options"
                         ] = FaceRecognitionLibModelDetectionOptions(**_options)
-                        final_model = FaceRecognitionLibModelConfig(**model)
+                        final_model_config = FaceRecognitionLibModelConfig(**model)
 
                     elif _framework == ModelFrameWork.ALPR:
                         model["model_type"] = ModelType.ALPR
@@ -795,7 +793,18 @@ class Settings(BaseModel):
                                 )
 
                         # todo: init models and check if success?
-                        final_model = config
+                        final_model_config = config
+                    elif _framework == ModelFrameWork.ULTRALYTICS:
+                        from ..ML.Detectors.ultralytics.Models.config import UltralyticsModelConfig
+                        from ..ML.Detectors.ultralytics.yolo import UltralyticsYOLODetector
+
+                        if _sub_fw in [UltralyticsSubFrameWork.POSE, UltralyticsSubFrameWork.SEGMENTATION, UltralyticsSubFrameWork.CLASSIFICATION]:
+                            logger.warning(f"Not implemented: {_sub_fw}")
+
+                        elif _sub_fw == UltralyticsSubFrameWork.OBJECT:
+                            final_model_config = UltralyticsModelConfig(**model)
+
+
                     elif _framework == ModelFrameWork.OPENCV:
                         config = None
                         not_impl = [
@@ -816,24 +825,24 @@ class Settings(BaseModel):
                         else:
                             raise ValueError(f"Unknown OpenCV sub-framework: {_sub_fw}")
                         if config:
-                            final_model = config
+                            final_model_config = config
                     elif _framework == ModelFrameWork.CORAL:
                         config = TPUModelConfig(**model)
                         config.detection_options = TPUModelOptions(**_options)
-                        final_model = config
+                        final_model_config = config
                     elif _framework == ModelFrameWork.TORCH:
                         config = PyTorchModelConfig(**model)
                         config.detection_options = PyTorchModelOptions(**_options)
-                        final_model = config
+                        final_model_config = config
                     else:
                         raise NotImplementedError(
                             f"Framework {_framework} not implemented"
                         )
 
                     # load model here
-                    if final_model:
-                        logger.debug(f"Adding model: {final_model.name}")
-                        v.append(final_model)
+                    if final_model_config:
+                        logger.debug(f"Adding model: {final_model_config.name}")
+                        v.append(final_model_config)
                 else:
                     disabled_models.append(model.get("name"))
             if disabled_models:

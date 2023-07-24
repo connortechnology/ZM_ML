@@ -14,7 +14,6 @@ from pydantic import BaseModel, Field, validator, SecretStr, AnyUrl, IPvAnyAddre
 from ..main import get_global_config
 from ...Shared.configs import GlobalConfig
 from ..Log import CLIENT_LOGGER_NAME
-from ..Notifications import CoolDownBase
 
 logger = logging.getLogger(CLIENT_LOGGER_NAME)
 g: Optional[GlobalConfig] = None

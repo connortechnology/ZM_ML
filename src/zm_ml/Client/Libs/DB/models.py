@@ -5,7 +5,7 @@ This is a WIP and is not complete. May need to add support for different version
 
 """
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field
 
 class ZMDBModel(BaseModel):
     """

@@ -8,8 +8,8 @@ import warnings
 import cv2
 import numpy as np
 from pydantic import SecretStr
+import requests
 try:
-    import requests
     from shapely.geometry import Polygon
 except ImportError as e:
     warnings.warn(f"ImportError: {e}", ImportWarning)
@@ -363,48 +363,3 @@ def get_push_auth(api: ZMAPI, user: SecretStr, pw: SecretStr, has_https: bool = 
             }
             push_auth = urlencode(payload, quote_via=quote_plus)
     return push_auth
-
-
-def check_imports():
-    try:
-        import cv2
-
-        maj, min_, patch = "", "", ""
-        x = cv2.__version__.split(".")
-        x_len = len(x)
-        if x_len <= 2:
-            maj, min_ = x
-            patch = "0"
-        elif x_len == 3:
-            maj, min_, patch = x
-            patch = patch.replace("-dev", "") or "0"
-        else:
-            logger.error(f'come and fix me again, cv2.__version__.split(".")={x}')
-
-        cv_ver = int(maj + min_ + patch)
-        if cv_ver < 420:
-            logger.error(
-                f"You are using OpenCV version {cv2.__version__} which does not support CUDA for DNNs. A minimum"
-                f" of 4.2 is required. See https://medium.com/@baudneo/install-zoneminder-1-36-x-6dfab7d7afe7"
-                f" on how to compile and install openCV 4.5.4 with CUDA"
-            )
-        del cv2
-        try:
-            import cv2.dnn
-        except ImportError:
-            logger.error(
-                f"OpenCV does not have DNN support! If you installed from "
-                f"pip you need to install 'opencv-contrib-python'. If you built from source, "
-                f"you did not compile with CUDA/cuDNN"
-            )
-            raise
-    except ImportError as e:
-        logger.error(f"Missing OpenCV 4.2+ (4.6+ recommended): {e}")
-        raise
-
-    try:
-        import numpy
-    except ImportError as e:
-        logger.error(f"Missing numpy: {e}")
-        raise
-    logger.debug("check imports:: All imports found!")

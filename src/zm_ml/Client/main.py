@@ -38,7 +38,7 @@ except ImportError as e:
 
 from .Libs.Media import APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine
 from .Libs.API import ZMAPI
-from .Models.utils import CFGHash, get_push_auth, check_imports
+from .Models.utils import CFGHash, get_push_auth
 from .Models.config import (
     ConfigFileModel,
     ServerRoute,
@@ -65,8 +65,6 @@ if TYPE_CHECKING:
     from .Notifications.MQTT import MQTT
     from .Notifications.ShellScript import ShellScriptNotification
 
-_PR: str = "print():"
-__version__: str = "0.0.1"
 ZM_INSTALLED: Optional[str] = which("zmpkg.pl")
 
 logger = logging.getLogger(CLIENT_LOGGER_NAME)
@@ -75,14 +73,15 @@ logger.addHandler(logging.NullHandler())
 
 g: Optional[GlobalConfig] = None
 LP: str = "Client::"
-logger: Optional[logging.Logger] = None
 
 
 def set_logger(l: logging.Logger) -> None:
     global logger
-
+    if logger is not None:
+        if isinstance(logger, logging.Logger):
+            logger.info(f"{LP} CHANGING LOGGERS! Current: '{logger.name}' - Setting logger to {l.name}")
     logger = l
-    logger.info(f"{LP} Setting logger to {l.name}")
+    logger.info(f"{LP} logger has been changed to {logger.name}")
 
 
 def create_logs() -> logging.Logger:
@@ -515,6 +514,10 @@ class ZMClient:
         """
         Initialize the ZoneMinder Client
         """
+        if not ZM_INSTALLED:
+            _msg = "ZoneMinder is not installed, the client requires to be installed on a ZoneMinder host!"
+            logger.error(_msg)
+            raise RuntimeError(_msg)
         global logger
         lp = f"{LP}init::"
 
@@ -539,7 +542,6 @@ class ZMClient:
         g = get_global_config()
         # DO env vars
         g.Environment = ClientEnvVars()
-        check_imports()
         self.zones: Dict = {}
         self.zone_polygons: List[Polygon] = []
         self.zone_filters: Dict = {}

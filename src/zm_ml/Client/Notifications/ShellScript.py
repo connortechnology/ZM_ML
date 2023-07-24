@@ -1,18 +1,12 @@
 import logging
 import subprocess
-import time
 from pathlib import Path
-from typing import List, NoReturn, Union, Optional, Tuple, Dict
+from typing import Optional, Dict
 
-import numpy as np
-import requests
-import urllib3.exceptions
-from pydantic import BaseModel, Field, AnyUrl
-
-from ..main import get_global_config
-from ...Shared.configs import GlobalConfig
 from ..Log import CLIENT_LOGGER_NAME
 from ..Notifications import CoolDownBase
+from ..main import get_global_config
+from ...Shared.configs import GlobalConfig
 
 logger = logging.getLogger(CLIENT_LOGGER_NAME)
 g: Optional[GlobalConfig] = None

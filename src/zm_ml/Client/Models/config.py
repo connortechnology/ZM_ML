@@ -8,11 +8,11 @@ from pydantic import (
     BaseModel,
     Field,
     AnyUrl,
-    validator,
+    field_validator,
     IPvAnyAddress,
     SecretStr,
-    BaseSettings,
 )
+from pydantic_settings import BaseSettings
 
 from .validators import validate_percentage_or_pixels, validate_resolution, validate_points
 from ...Shared.Models.validators import (
@@ -43,7 +43,7 @@ class ZMDBSettings(BaseSettings):
     name: Optional[str] = Field(None, env="ML_CLIENT_DB_NAME")
     driver: Optional[str] = Field(None, env="ML_CLIENT_DB_DRIVER")
 
-    _validate_host = validator("host", allow_reuse=True, pre=True)(
+    _validate_host = field_validator("host", mode="before")(
         validate_replace_localhost
     )
 
@@ -74,7 +74,7 @@ class ZoneMinderSettings(BaseSettings):
         ssl_verify: Optional[bool] = Field(True, env="ML_CLIENT_ZONEMINDER_API_SSL_VERIFY")
         headers: Optional[Dict] = Field(default_factory=dict, env="ML_CLIENT_ZONEMINDER_API_HEADERS")
 
-        _validate_api_url = validator("api_url", allow_reuse=True, pre=True)(
+        _validate_api_url = field_validator("api_url", mode="before")(
             validate_no_scheme_url
         )
 
@@ -83,12 +83,10 @@ class ZoneMinderSettings(BaseSettings):
     api: Optional[ZMAPISettings] = Field(default_factory=ZMAPISettings)
     db: Optional[ZMDBSettings] = Field(default_factory=ZMDBSettings)
 
-    _validate_portal_url = validator("portal_url", allow_reuse=True, pre=True)(
+    _validate_portal_url = field_validator("portal_url", mode="before")(
         validate_no_scheme_url
     )
 
-    class Config:
-        extra = "allow"
 
 
 class ServerRoute(DefaultEnabled):
@@ -102,10 +100,10 @@ class ServerRoute(DefaultEnabled):
     timeout: Optional[int] = Field(90, ge=0)
 
     # validators
-    _validate_mlapi_host_localhost = validator("host", allow_reuse=True, pre=True)(
+    _validate_mlapi_host_localhost = field_validator("host", mode="before")(
         validate_replace_localhost
     )
-    _validate_mlapi_host_no_scheme = validator("host", allow_reuse=True, pre=True)(
+    _validate_mlapi_host_no_scheme = field_validator("host", mode="before")(
         validate_no_scheme_url
     )
 
@@ -182,7 +180,7 @@ class MLNotificationSettings(BaseModel):
         )
 
         # validators
-        _validate_host_portal = validator("host", "portal", allow_reuse=True, pre=True)(
+        _validate_host_portal = field_validator("host", "portal", mode="before")(
             validate_no_scheme_url
         )
 
@@ -218,7 +216,7 @@ class MLNotificationSettings(BaseModel):
         priority: Optional[int] = Field(ge=-2, le=2, default=0)
 
         # validators
-        _validate_host_portal = validator("base_url", allow_reuse=True, pre=True)(
+        _validate_host_portal = field_validator("base_url", mode="before")(
             validate_no_scheme_url
         )
 
@@ -282,7 +280,7 @@ class DetectionSettings(BaseModel):
             zmu: Optional[bool] = Field(False)
             zms: Optional[bool] = Field(False)
 
-            _validate_ = validator("shm", "zmu", "zms", allow_reuse=True, pre=True)(validate_not_enabled)
+            _validate_ = field_validator("shm", "zmu", "zms", mode="before")(validate_not_enabled)
 
         class Debug(DefaultNotEnabled):
             path: Optional[Path] = Field(Path("/tmp"))
@@ -324,8 +322,8 @@ class BaseObjectFilters(BaseModel):
     min_area: Union[float, int, str, None] = Field(default=None)
 
     # validators
-    _normalize_areas = validator(
-        "total_max_area", "total_min_area", "max_area", "min_area", allow_reuse=True
+    _normalize_areas = field_validator(
+        "total_max_area", "total_min_area", "max_area", "min_area"
     )(validate_percentage_or_pixels)
 
 
@@ -365,7 +363,7 @@ class StaticObjects(DefaultEnabled):
     labels: Optional[List[str]] = Field(default_factory=list)
     ignore_labels: Optional[List[str]] = Field(default_factory=list)
 
-    _validate_difference = validator("difference", allow_reuse=True)(
+    _validate_difference = field_validator("difference")(
         validate_percentage_or_pixels
     )
 
@@ -376,8 +374,8 @@ class OverRideStaticObjects(BaseModel):
     labels: Optional[List[str]] = None
     ignore_labels: Optional[List[str]] = None
 
-    _validate_difference = validator(
-        "difference", allow_reuse=True, pre=True, always=True
+    _validate_difference = field_validator(
+        "difference", mode="before", always=True
     )(validate_percentage_or_pixels)
 
 
@@ -418,10 +416,10 @@ class MonitorZones(BaseModel):
     filters: Union[MatchFilters, OverRideMatchFilters, None] = Field(
         default_factory=OverRideMatchFilters
     )
-    __validate_resolution = validator("resolution", pre=True, allow_reuse=True)(
+    __validate_resolution = field_validator("resolution", mode="before")(
         validate_resolution
     )
-    __validate_points = validator("points", pre=True, allow_reuse=True)(validate_points)
+    __validate_points = field_validator("points", mode="before")(validate_points)
 
 
 class MonitorsSettings(BaseModel):
@@ -453,8 +451,8 @@ class ConfigFileModel(BaseModel):
     matching: MatchingSettings = Field(default_factory=MatchingSettings)
     monitors: Optional[Dict[int, MonitorsSettings]] = Field(default_factory=dict)
 
-    _validate_config_path = validator(
-        "config_path", allow_reuse=True, always=True, pre=True
+    _validate_config_path = field_validator(
+        "config_path", mode="before", always=True
     )(validate_dir)
 
 
@@ -476,10 +474,10 @@ class ClientEnvVars(BaseSettings):
     db: Optional[ZMDBSettings] = Field(default_factory=ZMDBSettings)
     api: Optional[ZoneMinderSettings] = Field(default_factory=ZoneMinderSettings)
 
-    _validate_client_conf_file = validator(
-        "client_conf_file", allow_reuse=True, pre=True, always=True, check_fields=False
+    _validate_client_conf_file = field_validator(
+        "client_conf_file", mode="before", always=True, check_fields=False
     )(validate_file)
-    _validate_zm_conf_dir = validator(
-        "zm_conf_dir", "ml_conf_dir", allow_reuse=True, pre=True, always=True
+    _validate_zm_conf_dir = field_validator(
+        "zm_conf_dir", "ml_conf_dir", mode="before", always=True
     )(validate_dir)
 

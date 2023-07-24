@@ -3,21 +3,19 @@ import re
 import inspect
 from typing import Optional, Dict, Tuple
 
+from pydantic import FieldValidationInfo
+
 from ..Log import CLIENT_LOGGER_NAME
 
 logger = logging.getLogger(CLIENT_LOGGER_NAME)
 
 
-def validate_percentage_or_pixels(v, values, field):
+def validate_percentage_or_pixels(v, field: FieldValidationInfo):
     # get func name programmatically
     _name_ = inspect.currentframe().f_code.co_name
     if v:
-        # logger.debug(f"{_name_}:: Validating '{field.name}'[Type: {type(v)}] -> {v}")
         re_match = re.match(r"(0*?1?\.?\d*\.?\d*?)(%|px)?$", str(v), re.IGNORECASE)
         if re_match:
-            # logger.debug(
-            #     f"{_name_}:: '{field.name}' is valid REGEX re_match: {re_match.groups()}"
-            # )
             try:
                 starts_with: Optional[re.Match] = None
                 type_of = ""
@@ -64,16 +62,16 @@ def validate_percentage_or_pixels(v, values, field):
                     # logger.debug(f"{type_of} value detected for {field.name} ({v})")
             except TypeError or ValueError as e:
                 logger.warning(
-                    f"{field.name} value: '{v}' could not be converted to a FLOAT! -> {e} "
+                    f"{field.field_name} value: '{v}' could not be converted to a FLOAT! -> {e} "
                 )
                 v = 1
             except Exception as e:
                 logger.warning(
-                    f"{field.name} value: '{v}' could not be converted -> {e} "
+                    f"{field.field_name} value: '{v}' could not be converted -> {e} "
                 )
                 v = 1
         else:
-            logger.warning(f"{field.name} value: '{v}' malformed!")
+            logger.warning(f"{field.field_name} value: '{v}' malformed!")
             v = 1
     return v
 
@@ -141,7 +139,7 @@ def validate_points(v, field, **kwargs):
         orig = str(v)
         if not isinstance(v, (str, list)):
             raise TypeError(
-                f"'{field.name}' Can only be List or string! type={type(v)}"
+                f"'{field.field_name}' Can only be List or string! type={type(v)}"
             )
         elif isinstance(v, str):
             v = [tuple(map(int, x.strip().split(","))) for x in v.split(" ")]
