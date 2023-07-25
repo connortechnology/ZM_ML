@@ -122,6 +122,7 @@ class ZMAPI:
                                     new_zone = MonitorZones(
                                         points=zone_points,
                                         resolution=monitor_resolution,
+                                        imported=True,
                                     )
                                     g.config.monitors[g.mid].zones[zone_name] = new_zone
                                     imported_zones.append({zone_name: new_zone})
@@ -651,29 +652,29 @@ class ZMAPI:
                     )
                 elif resp_status == 404:
                     # split the URL to check if 'token=' 'user(name)=' or 'pass(word)=' are in the URL
-                    logger.warning(f"{lp} Got 404 (Not Found) -> {err}")
+                    logger.warning(f"{lp} Got 404 (Not Found)")
                     # ZM returns 404 when an image cannot be decoded or the requested event does not exist
                 else:
                     logger.debug(
-                        f"{lp} NOT 200|401|404 SOOOOOOOOOOOOOOOO HTTP [{resp_status}] error: {err}"
+                        f"{lp} NOT 200|401|404 SOOOOOOOOOOOOOOOO Code={resp_status} error: {err}"
                     )
             else:
                 content_type = resp.headers.get("content-type")
                 content_length = int(resp.headers.get("content-length", 0))
                 cloudflare = resp.headers.get("Server", "").startswith("cloudflare")
-                logger.debug(
-                    f"{lp} RESPONSE RECEIVED>>> {content_type=} | {content_length=}"
-                    # f"\n\n HEADERS = {resp.headers}\n\n"
-                    f" | CloudFlare={cloudflare}"
-                )
+                # logger.debug(
+                #     f"{lp} RESPONSE RECEIVED>>> {content_type=} | {content_length=}"
+                #     # f"\n\n HEADERS = {resp.headers}\n\n"
+                #     f" | CloudFlare={cloudflare}"
+                # )
                 if content_type.startswith("application/json"):
                     # JSON data
                     _resp = await resp.json()
-                    logger.debug(f"JSON response detected! >>> {str(_resp)[:20]}")
+                    # logger.debug(f"JSON response detected! >>> {str(_resp)[:20]}")
                 elif content_type.startswith("image/"):
                     # RAW image data
                     _resp = await resp.read()
-                    logger.debug(f"Image response detected! {_resp[:20]}")
+                    # logger.debug(f"Image response detected! {_resp[:20]}")
                 else:
                     # TEXT data ?
                     _resp = await resp.text()
@@ -741,11 +742,11 @@ class ZMAPI:
             }
             show_headers = f" headers={show_headers}"
 
-        logger.debug(
-            f"{lp} {show_url} {show_payload if show_payload else ''} "
-            f"{show_query if show_query else ''} "
-            f"{show_headers if show_headers else ''}".rstrip()
-        ) if not quiet else None
+        # logger.debug(
+        #     f"{lp} {show_url} {show_payload if show_payload else ''} "
+        #     f"{show_query if show_query else ''} "
+        #     f"{show_headers if show_headers else ''}".rstrip()
+        # ) if not quiet else None
 
         r: Optional[aiohttp.ClientResponse] = None
         if type_action == "get":

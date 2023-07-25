@@ -12,6 +12,7 @@ from pydantic import (
     FieldValidationInfo,
     IPvAnyAddress,
     SecretStr,
+    computed_field,
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -87,16 +88,17 @@ class ZoneMinderSettings(BaseSettings, extra="allow"):
     )
 
 
+from pydantic import model_validator, ValidationInfo
 
 class ServerRoute(DefaultEnabled):
     # Make 1 attr required so empty entries will fail.
     name: str = Field(...)
     weight: Optional[int] = Field(0)
     host: AnyUrl = Field(...)
-    port: Optional[int] = Field(5000)
     username: Optional[str] = None
     password: Optional[SecretStr] = None
     timeout: Optional[int] = Field(90, ge=0)
+
 
     # validators
     _validate_mlapi_host_localhost = field_validator("host", mode="before")(
@@ -415,6 +417,7 @@ class MonitorZones(BaseModel):
     filters: Union[MatchFilters, OverRideMatchFilters, None] = Field(
         default_factory=OverRideMatchFilters
     )
+    imported: bool = False
     __validate_resolution = field_validator("resolution", mode="before")(
         validate_resolution
     )
