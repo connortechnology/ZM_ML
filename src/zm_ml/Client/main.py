@@ -898,7 +898,8 @@ class ZMClient:
             for route in self.routes:
                 route_loop += 1
                 if route.enabled:
-                    url = f"{str(route.host).rstrip('/')}:{route.port}/detect/group"
+
+                    url = f"{str(route.host)}detect/group"
                     with aiohttp.MultipartWriter("form-data") as mpwriter:
                         part = mpwriter.append_json(models_str)
                         part.set_content_disposition("form-data", name="hints_model")
@@ -911,7 +912,8 @@ class ZMClient:
                             "form-data", name="image", filename=image_name
                         )
                         logger.debug(
-                            f"Sending image to ZM-ML API ['{route.name}' @ {url if not g.config.logging.sanitize.enabled else g.config.logging.sanitize.replacement_str}]"
+                            f"Sending image to 'ZoMi Machine Learning API' ['{route.name}' @ "
+                            f"{url if not g.config.logging.sanitize.enabled else g.config.logging.sanitize.replacement_str}]"
                         )
                         _perf = perf_counter()
                         r: aiohttp.ClientResponse
