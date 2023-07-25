@@ -36,8 +36,7 @@ def validate_replace_localhost(
     # logger.debug(f"Validating ENVVAR {field}: {v}")
     if v:
         if isinstance(v, str):
-            if v == "localhost":
-                v = "127.0.0.1"
+            v.replace("localhost", "127.0.0.1")
     return v
 
 
