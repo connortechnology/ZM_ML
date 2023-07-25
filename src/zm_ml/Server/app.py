@@ -300,7 +300,7 @@ async def available_models_type(model_type: ModelType):
     available_models = get_global_config().available_models
     return {
         "models": [
-            model.dict() for model in available_models if model.model_type == model_type
+            model.dict() for model in available_models if model.type_of == model_type
         ]
     }
 
@@ -358,14 +358,16 @@ async def group_detect(
     ),
     image: UploadFile = File(...),
 ):
-    logger.info(f"group_detect: {hints_model}")
-    hints_model = hints_model[0].strip('"').split(",")
-    detections = await threaded_detect(hints_model, image)
+    logger.info(f"group_detect: {hints_model = } - {image = }")
+    if hints_model:
+        hints_model = hints_model[0].strip('"').split(",")
+        detections = await threaded_detect(hints_model, image)
 
-    det: DetectionResults
-    for det in detections:
-        det = det.json()
-    return detections
+        det: DetectionResults
+        for det in detections:
+            det = det.model_dump()
+        return detections
+    return {"error": "No models specified"}
 
 
 @app.post(

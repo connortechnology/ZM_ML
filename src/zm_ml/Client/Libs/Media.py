@@ -129,17 +129,18 @@ class APIImagePipeLine:
             )
         else:
             logger.debug(f"{lp} processing first frame!")
+            logger.debug(f"{lp} checking snapshot ids enabled!") if self.options.check_snapshots else None
+
         curr_snapshot = None
         if self.options.check_snapshots:
             logger.debug(f"{lp} checking snapshot ids enabled!")
-            logger.debug(f"{g.past_event = } || {self.options.snapshot_frame_skip = }")
             # Check if event data available or get data for snapshot fid comparison
             if (
                 (not g.past_event)
                 and (self.frames_processed > 0)
                 and (
                     self.frames_processed % self.options.snapshot_frame_skip == 0
-                )  # Only run every <x> frames
+                )  # Only run every <x> frames if its a live event
             ):
                 await _grab_event_data(msg=f"grabbing data for snapshot comparisons...")
                 if curr_snapshot := int(g.Event.get("MaxScoreFrameId", 0)):
@@ -154,8 +155,6 @@ class APIImagePipeLine:
                     logger.warning(
                         f"{lp} Event: {g.eid} - No Snapshot Frame ID found in ZM API? -> {g.Event = }",
                     )
-            # if not g.Event:
-            #     _grab_event_data(msg="NO EVENT DATA!!! grabbing from API...")
 
             #  Check if we have already processed this frame ID 
             if self.current_frame in self._processed_fids:

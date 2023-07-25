@@ -79,7 +79,7 @@ class TorchDetector(FileLock):
         self.id = self.config.id
         self.device = self._get_device()
         self.ok = False
-        self.cache_dir = g.config.system.model_dir / "pytorch/cache"
+        self.cache_dir = g.config.system.models_dir / "torch/cache"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         self.load_model()
@@ -238,9 +238,9 @@ class TorchDetector(FileLock):
 
         result = DetectionResults(
             success=True if labels else False,
-            type=self.config.model_type,
+            type=self.config.type_of,
             processor=self.processor,
-            model_name=self.name,
+            name=self.name,
             results=[Result(label=labels[i], confidence=confs[i], bounding_box=b_boxes[i]) for i in range(len(labels))],
             # image=image,
         )
@@ -248,7 +248,7 @@ class TorchDetector(FileLock):
 
         # return {
         #     "success": True if labels else False,
-        #     "type": self.config.model_type,
+        #     "type": self.config._model_type,
         #     "processor": self.processor,
         #     "model_name": self.name,
         #     "label": labels,

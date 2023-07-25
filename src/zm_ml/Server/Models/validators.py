@@ -10,11 +10,13 @@ logger = logging.getLogger(SERVER_LOGGER_NAME)
 
 
 def validate_model_labels(
-    v, info: FieldValidationInfo
+    v, info: FieldValidationInfo, **kwargs
 ) -> Optional[List[str]]:
-    model_name = info.data.get("name", "Unknown Model")
+    logger.debug(f"{kwargs = }\n\n")
+    model_name = kwargs.get("model_name", "Unknown")
+    labels_file: Optional[Path] = kwargs.get("labels_file", None)
     lp = f"Model Name: {model_name} ->"
-    if not (labels_file := info.data.get("classes")):
+    if not labels_file:
         logger.debug(
             f"{lp} 'classes' is not defined. Using *default* COCO 2017 class labels"
         )

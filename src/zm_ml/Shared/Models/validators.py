@@ -41,19 +41,19 @@ def validate_replace_localhost(
     return v
 
 
-def validate_no_scheme_url(v, field):
+def validate_no_scheme_url(v, info: FieldValidationInfo):
     """Validate and transform a URL/IP string into a URL with a scheme"""
     _name_ = inspect.currentframe().f_code.co_name
-    logger.debug(f"{_name_}:: Validating '{field.name}' -> {v}")
+    logger.debug(f"{_name_}:: Validating '{info.field_name}' -> {v}")
     if v:
         import re
 
         if re.match(r"^(http(s)?)://", v):
             pass
-            logger.debug(f"'{field.name}' is valid with schema: {v}")
+            logger.debug(f"'{info.field_name}' is valid with schema: {v}")
         else:
             logger.debug(
-                f"No schema in '{field.name}', prepending http:// to make {field.name} a valid URL"
+                f"No schema in '{info.field_name}', prepending http:// to make {info.field_name} a valid URL"
             )
             v = f"http://{v}"
     return v
@@ -95,7 +95,7 @@ def validate_log_level(v, **kwargs):
     return v
 
 
-def str2path(v: Union[str, Path, None], **kwargs):
+def str2path(v: Union[str, Path, None], info: Optional[FieldValidationInfo] = None, **kwargs):
     """Convert a str to a Path object - pydantic validator
 
     Args:
@@ -103,8 +103,6 @@ def str2path(v: Union[str, Path, None], **kwargs):
     Keyword Args:
         field (FieldValidationInfo): pydantic field object
     """
-    # _name_ = inspect.currentframe().f_code.co_name
-    # logger.debug(f"{_name_}:: Validating '{field.name}' -> {v}")
     if v:
         assert isinstance(v, (Path, str))
         v = Path(v)
@@ -112,17 +110,17 @@ def str2path(v: Union[str, Path, None], **kwargs):
     return v
 
 
-def validate_dir(v, field):
+def validate_dir(v, info: FieldValidationInfo):
     if v:
-        v = str2path(v, field)
+        v = str2path(v, info)
         assert v.exists(), f"Path [{v}] does not exist"
         assert v.is_dir(), f"Path [{v}] is not a directory"
     return v
 
 
-def validate_file(v, field):
+def validate_file(v, info: FieldValidationInfo):
     if v:
-        v = str2path(v, field)
+        v = str2path(v, info)
         assert v.exists(), f"Path [{v}] does not exist"
         assert v.is_file(), f"Path [{v}] is not a file"
     return v

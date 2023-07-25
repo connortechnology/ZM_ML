@@ -65,9 +65,10 @@ class UltralyticsYOLODetector(FileLock):
         self.name = self.config.name
         self.model_name = self.config.pretrained.name
         self.yolo_model_type = self.config.sub_framework
+        self.processor = self.config.processor
 
         self.device = self._get_device()
-        self.cache_dir = g.config.system.model_dir / "ultralytics/cache"
+        self.cache_dir = g.config.system.models_dir / "ultralytics/cache"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     def load_model(self):
@@ -138,13 +139,16 @@ class UltralyticsYOLODetector(FileLock):
                     raise model_load_exc
 
     def _get_device(self) -> Optional[torch.device]:
+        logger.debug(f"{LP} getting device...")
         if torch is None:
             logger.error(f"{LP} Torch not installed, cannot use Ultralytics detectors")
         else:
             dev = "cpu"
             if self.processor == ModelProcessor.GPU:
+                logger.debug(f"{LP} GPU requested...")
                 # todo: allow device index config (possibly use pycuda to get dev names / index for user convenience)
                 if torch.cuda.is_available():
+                    logger.debug(f"{LP} GPU available, ascertaining index...")
                     _idx = 0
                     if self.config.gpu_idx is not None:
                         _idx = self.config.gpu_idx
@@ -154,11 +158,13 @@ class UltralyticsYOLODetector(FileLock):
                             )
                             _idx = 0
                     dev = f"cuda:{_idx}"
+                else:
+                    logger.warning(f"{LP} GPU not available, using CPU...")
             if dev.startswith("cpu"):
                 self.processor = ModelProcessor.CPU
             elif dev.startswith("cuda"):
                 self.processor = ModelProcessor.GPU
-            logger.debug(f"{LP} using device: {dev}")
+            logger.debug(f"{LP} using device: {dev} :: {self.processor}")
             return torch.device(dev)
 
     def detect(self, image: np.ndarray):
@@ -197,9 +203,9 @@ class UltralyticsYOLODetector(FileLock):
 
             result = DetectionResults(
                 success=True if labels else False,
-                type=self.config.model_type,
+                type=self.config._model_type,
                 processor=self.processor,
-                model_name=self.name,
+                name=self.name,
                 results=[
                     Result(
                         label=labels[i], confidence=confs[i], bounding_box=b_boxes[i]

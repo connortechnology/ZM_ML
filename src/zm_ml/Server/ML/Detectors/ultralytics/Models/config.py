@@ -1,9 +1,7 @@
-from typing import Optional, List, Dict, Any, Union
-
-from pydantic import field_validator, FieldValidationInfo, model_validator
-
 from zm_ml.Server.Models.config import *
+
 from ......Shared.Models.config import DefaultEnabled
+
 
 class UltralyticsModelConfig(BaseModelConfig):
     """Configuration for the Detector"""
@@ -36,8 +34,6 @@ class UltralyticsModelConfig(BaseModelConfig):
                     if _type:
                         if isinstance(_type, str):
                             _type = UltralyticsSubFrameWork(_type)
-                        logger.debug(f"Validating model name: {v} for {_type}")
-
                         if _type == UltralyticsSubFrameWork.OBJECT:
                             model_names.extend(PRETRAINED_MODEL_NAMES.get("yolov8", []))
                             model_names.extend(PRETRAINED_MODEL_NAMES.get("yolov5u", []))

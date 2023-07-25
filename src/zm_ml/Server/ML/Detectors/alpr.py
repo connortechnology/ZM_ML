@@ -241,7 +241,7 @@ class PlateRecognizer(AlprBase):
 
         return {
             "success": True if labels else False,
-            "type": self.config.model_type,
+            "type": self.config.type_of,
             "processor": self.processor,
             "model_name": self.name,
             "label": labels,
@@ -343,7 +343,7 @@ class PlateRecognizer(AlprBase):
 
         return {
             "success": True if labels else False,
-            "type": self.config.model_type,
+            "type": self.config.type_of,
             "processor": self.processor,
             "model_name": self.name,
             "label": labels,
@@ -434,7 +434,7 @@ class OpenAlprCloud(AlprBase):
 
         return {
             "success": True if labels else False,
-            "type": self.config.model_type,
+            "type": self.config.type_of,
             "processor": self.processor,
             "model_name": self.name,
             "label": labels,
@@ -532,7 +532,7 @@ class OpenAlprCmdLine(AlprBase):
 
         return {
             "success": True if labels else False,
-            "type": self.config.model_type,
+            "type": self.config.type_of,
             "processor": self.processor,
             "model_name": self.name,
             "label": labels,

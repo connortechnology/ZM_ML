@@ -9,12 +9,9 @@ from pydantic import Field, BaseModel
 
 from ..Client.Log import CLIENT_LOGGER_NAME
 from ..Server.Log import SERVER_LOGGER_NAME
-
-if TYPE_CHECKING:
-    from ..Client.Libs.DB import ZMDB
-    from ..Client.Libs.API import ZMAPI
-    from ..Client.Models.config import ClientEnvVars
-    from ..Client.Models.config import ConfigFileModel
+from ..Client.Libs.API import ZMAPI
+from ..Client.Libs.DB import ZMDB
+from ..Client.Models.config import ClientEnvVars, ConfigFileModel
 
 # find loggers
 loggers = [logging.getLogger(name) for name in logging.root.manager.loggerDict]

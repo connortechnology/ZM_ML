@@ -94,7 +94,7 @@ class DetectionResults(BaseModel, arbitrary_types_allowed=True):
     success: bool = Field(...)
     type: ModelType = Field(...)
     processor: ModelProcessor = Field(...)
-    _model_name: str = Field(..., alias="model_name")
+    name: str = Field(...)
     results: Optional[List[Result]] = Field(None)
     removed: Optional[List[Result]] = Field(None)
 

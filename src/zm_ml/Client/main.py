@@ -79,7 +79,9 @@ def set_logger(l: logging.Logger) -> None:
     global logger
     if logger is not None:
         if isinstance(logger, logging.Logger):
-            logger.info(f"{LP} CHANGING LOGGERS! Current: '{logger.name}' - Setting logger to {l.name}")
+            logger.info(
+                f"{LP} CHANGING LOGGERS! Current: '{logger.name}' - Setting logger to {l.name}"
+            )
     logger = l
     logger.info(f"{LP} logger has been changed to {logger.name}")
 
@@ -307,19 +309,23 @@ def _replace_vars(search_str: str, var_pool: Dict) -> Dict:
 
 
 def get_global_config() -> GlobalConfig:
+    if g is None:
+        return create_global_config()
     return g
 
 
 def set_global_config(config: GlobalConfig) -> None:
     global g
+
     g = config
 
 
 def create_global_config() -> GlobalConfig:
     """Create the global config object."""
     global g
+
     g = GlobalConfig()
-    return get_global_config()
+    return g
 
 
 class StaticObjects(BaseModel):
@@ -349,14 +355,21 @@ class StaticObjects(BaseModel):
             _so = g.config.matching.static_objects.enabled
             _so_caused = "global"
         if g.mid in g.config.monitors:
-            if g.config.monitors[g.mid].static_objects and g.config.monitors[g.mid].static_objects.enabled:
+            if (
+                g.config.monitors[g.mid].static_objects
+                and g.config.monitors[g.mid].static_objects.enabled
+            ):
                 _so = g.config.monitors[g.mid].static_objects.enabled
                 _so_cause = f"monitor: {g.mid}"
         if _so is False or _so is None:
-            logger.debug(f"{lp} static object matching is disabled by {_so_cause} config")
+            logger.debug(
+                f"{lp} static object matching is disabled by {_so_cause} config"
+            )
             return None
         elif _so is True:
-            logger.debug(f"{lp} static object matching is enabled by {_so_cause} config")
+            logger.debug(
+                f"{lp} static object matching is enabled by {_so_cause} config"
+            )
 
         variable_data_path = g.config.system.variable_data_path
         filename = self.filename
@@ -443,12 +456,12 @@ class Notifications:
             self.gotify = Gotify()
             # Gotify config allows for overriding portal url
             if config.gotify.portal:
-                _portal = config.gotify.portal
+                _portal = str(config.gotify.portal)
             else:
-                _portal = g.api.portal_base_url
+                _portal = str(g.api.portal_base_url)
             # get link user auth
             has_https = True
-            if not re.compile(r"^https://").match(_portal):
+            if not re.compile(r"https://").match(_portal):
                 has_https = False
             if config.gotify.clickable_link:
                 self.gotify._push_auth = get_push_auth(
@@ -514,11 +527,12 @@ class ZMClient:
         """
         Initialize the ZoneMinder Client
         """
+        global logger
+
         if not ZM_INSTALLED:
             _msg = "ZoneMinder is not installed, the client requires to be installed on a ZoneMinder host!"
             logger.error(_msg)
             raise RuntimeError(_msg)
-        global logger
         lp = f"{LP}init::"
 
         # setup async signal catcher
@@ -884,10 +898,10 @@ class ZMClient:
             for route in self.routes:
                 route_loop += 1
                 if route.enabled:
-                    url = f"{route.host}:{route.port}/detect/group"
+                    url = f"{str(route.host).rstrip('/')}:{route.port}/detect/group"
                     with aiohttp.MultipartWriter("form-data") as mpwriter:
                         part = mpwriter.append_json(models_str)
-                        part.set_content_disposition("form-data", name="model_hints")
+                        part.set_content_disposition("form-data", name="hints_model")
 
                         part = mpwriter.append(
                             image,
@@ -940,26 +954,30 @@ class ZMClient:
                         ), "Image is not np.ndarray after converting from bytes"
                         image: np.ndarray
                         logger.debug(
-                            f"There are {len(results)} UNFILTERED Results for image '{image_name}' => {results}"
+                            f"There are {len(results)} UNFILTERED Results for image '{image_name}'"
                         )
                         filter_start = perf_counter()
                         res_loop = 0
-                        logger.debug(f"{type(results) = } -- {results = }")
 
                         result: DetectionResults
                         for result in results:
                             res_loop += 1
 
                             if result.success is True:
-
                                 if result.extra_image_data:
-                                    logger.debug(f"There is extra image data in the result: {result.extra_image_data}")
-                                    if 'virel' in result.extra_image_data:
-                                        from zm_ml.Server.ML.Detectors.virelai import VirelAI
+                                    logger.debug(
+                                        f"There is extra image data in the result: {result.extra_image_data}"
+                                    )
+                                    if "virel" in result.extra_image_data:
+                                        from zm_ml.Server.ML.Detectors.virelai import (
+                                            VirelAI,
+                                        )
 
                                         _v = VirelAI()
                                         _v.logger(logger)
-                                        logger.debug(f"virelAI quirk: grab annotated image from their secondary API")
+                                        logger.debug(
+                                            f"virelAI quirk: grab annotated image from their secondary API"
+                                        )
                                         image = _v.get_image(image)
                                         del _v
                                         # write to file
@@ -972,8 +990,6 @@ class ZMClient:
                                 # check strategy
                                 strategy: MatchStrategy = g.config.matching.strategy
                                 if filtered_result.success is True:
-                                    logger.debug(f"DBG>>> {filtered_result = }")
-
                                     final_label = []
                                     final_confidence = []
                                     final_bbox = []
@@ -1022,12 +1038,12 @@ class ZMClient:
                                         logger.debug(
                                             f"\n\nFOUND A BETTER MATCH [{strategy=}] THAN model: {matched_model_names}"
                                             f" image name: {matched_frame_id}: LABELS: {matched_l} with "
-                                            f" model: {result.model_name} image name: {image_name} ||| "
+                                            f" model: {result.name} image name: {image_name} ||| "
                                             f"LABELS: {final_label}\n\n"
                                         )
 
                                         matched_l = final_label
-                                        matched_model_names = result.model_name
+                                        matched_model_names = result.name
                                         matched_c = final_confidence
                                         matched_frame_id = image_name
                                         matched_detection_types = result.type
@@ -1047,7 +1063,7 @@ class ZMClient:
                                     )
 
                                 logger.debug(
-                                    f"perf:: Filtering for {image_name}:{result.model_name} took "
+                                    f"perf:: Filtering for {image_name}:{result.name} took "
                                     f"{perf_counter() - filter_start:.5f} seconds"
                                 )
 
@@ -1126,10 +1142,7 @@ class ZMClient:
                     final_results.append(_fr)
                     logger.debug(f"{lp} {_fr} not in final results, appending")
                 else:
-                    logger.debug(
-                        f"DBG>>> {_fr} IS IN FINAL LIST... "
-                        f"SKIPPING! [DONT WANT DUPLICATE] <<<DBG"
-                    )
+                    pass
 
         result.success = False if not final_results else True
         result.results = final_results
@@ -1166,7 +1179,7 @@ class ZMClient:
         base_filters = None
         # strategy: MatchStrategy = g.config.matching.strategy
         type_ = result.type
-        model_name = result.model_name
+        model_name = result.name
         ret_results = []
         processor = result.processor
         found_match: bool = False
@@ -1194,9 +1207,13 @@ class ZMClient:
         # Outer Loop
         _result: Result
         for _result in result.results:
-            label, confidence, bbox = _result.label, _result.confidence, _result.bounding_box
+            label, confidence, bbox = (
+                _result.label,
+                _result.confidence,
+                _result.bounding_box,
+            )
             i += 1
-            _lp = f"_filter:{image_name}:'{model_name}'::{type_.value.casefold()}::'{label}' {i}/{_lbl_tot}::"
+            _lp = f"filter:{image_name}:{model_name}:'{label}' {i}/{_lbl_tot}:"
 
             #
             # Inner Loop
@@ -1298,9 +1315,9 @@ class ZMClient:
                                 f"{lp} matched ReGex pattern [{pattern.pattern}] ALLOWING..."
                             )
                             if type_ == ModelType.FACE:
-                                logger.debug(
-                                    f"DBG>> This model is typed as {type_} is not OBJECT, skipping non face filters like min_conf, total_max_area, etc."
-                                )
+                                # logger.debug(
+                                #     f"DBG>> This model is typed as {type_} is not OBJECT, skipping non face filters like min_conf, total_max_area, etc."
+                                # )
                                 found_match = True
                                 break
 
@@ -1311,9 +1328,9 @@ class ZMClient:
                                     f"min_conf={type_filter.min_conf}, ALLOWING..."
                                 )
                                 if type_ == ModelType.ALPR:
-                                    logger.debug(
-                                        f"DBG>> This model is typed as {type_} is not OBJECT, skipping non alpr filters like total_max_area, etc."
-                                    )
+                                    # logger.debug(
+                                    #     f"DBG>> This model is typed as {type_} is not OBJECT, skipping non alpr filters like total_max_area, etc."
+                                    # )
                                     found_match = True
                                     break
                                 w, h = g.mon_width, g.mon_height
@@ -1583,15 +1600,23 @@ class ZMClient:
                         continue
                 else:
                     logger.debug(
-                        f"{__lp} NOT in zone [{zone_name}], continuing to next zone..."
+                        f"{__lp} NOT in zone '{zone_name}', continuing to next zone..."
                     )
                 # logger.debug(
                 #     f"\n---------------------END OF ZONE LOOP # {idx} ---------------------"
                 # )
 
             if found_match:
-                logger.debug(f"{_lp} '{label}' PASSED FILTERING")
-                ret_results.append(Result(**{'label': label, 'confidence': confidence, 'bounding_box': bbox}))
+                logger.debug(f"{_lp} PASSED FILTERING")
+                ret_results.append(
+                    Result(
+                        **{
+                            "label": label,
+                            "confidence": confidence,
+                            "bounding_box": bbox,
+                        }
+                    )
+                )
 
                 if (strategy := g.config.matching.strategy) == MatchStrategy.first:
                     logger.debug(
@@ -1599,7 +1624,7 @@ class ZMClient:
                     )
                     break
             else:
-                logger.debug(f"{_lp} '{label}' FAILED FILTERING")
+                logger.debug(f"{_lp} FAILED FILTERING")
                 filter_out(label, confidence, bbox)
 
             # logger.debug(
@@ -2028,7 +2053,7 @@ class ZMClient:
                     # self.notifications.zmninja.send()
 
                 if noti_cfg.mqtt.enabled:
-                    logger.debug(f"{lp} MQTT notification configured, sending")
+                    logger.debug(f"{lp} MQTT notification configured")
                     mqtt_results = {
                         "labels": results["labels"],
                         "model_names": results["model_names"],
@@ -2046,11 +2071,25 @@ class ZMClient:
                     #     image=noti_img,
                     #     mid=g.mid,
                     # )
-                    futures.append(executor.submit(self.notifications.mqtt.publish, fmt_str=prediction_str, results=mqtt_results, image=noti_img, mid=g.mid))
+                    futures.append(
+                        executor.submit(
+                            self.notifications.mqtt.publish,
+                            fmt_str=prediction_str,
+                            results=mqtt_results,
+                            image=noti_img,
+                            mid=g.mid,
+                        )
+                    )
 
                 if noti_cfg.shell_script.enabled:
                     logger.debug(f"{lp} Shell Script notification configured, sending")
-                    futures.append(executor.submit(self.notifications.shell_script.send, prediction_str, results))
+                    futures.append(
+                        executor.submit(
+                            self.notifications.shell_script.send,
+                            prediction_str,
+                            results,
+                        )
+                    )
                     # try:
                     #     self.notifications.shell_script.send(prediction_str, results)
                     # except Exception as exc:
@@ -2074,7 +2113,6 @@ class ZMClient:
 
     async def post_process(self, matches: Dict[str, Any]) -> None:
         labels, scores, boxes = (
-
             matches["labels"],
             matches["confidences"],
             matches["bounding_boxes"],
@@ -2099,7 +2137,9 @@ class ZMClient:
 
         if _skip:
             prepared_image = image
-            logger.debug(f"{LP} No need to annotate, grabbed annotated image from virel.ai")
+            logger.debug(
+                f"{LP} No need to annotate, grabbed annotated image from virel.ai"
+            )
         else:
             logger.debug(f"{lp} Annotating image")
             prepared_image: np.ndarray = draw_bounding_boxes(
@@ -2116,28 +2156,35 @@ class ZMClient:
             if g.config.detection_settings.images.debug.enabled:
                 from .Models.utils import draw_filtered_bboxes
 
-                logger.debug(f"{lp} Debug image configured, drawing filtered out bboxes")
+                logger.debug(
+                    f"{lp} Debug image configured, drawing filtered out bboxes"
+                )
 
                 debug_image = draw_filtered_bboxes(
                     prepared_image, list(self.filtered_labels[image_name])
                 )
                 logger.debug(f"DBG:FIX ME>>> {list(self.filtered_labels[image_name])}")
                 from datetime import datetime
+
                 if g.config.detection_settings.images.debug.path:
                     _dest = g.config.detection_settings.images.debug.path
-                    logger.debug(f"{lp} Debug image PATH configured: {_dest.as_posix()}")
+                    logger.debug(
+                        f"{lp} Debug image PATH configured: {_dest.as_posix()}"
+                    )
                 elif g.config.system.image_dir:
                     _dest = g.config.system.image_dir
-                    logger.debug(f"{lp} Debug image path NOT configured, using system image_dir: {_dest.as_posix()}")
+                    logger.debug(
+                        f"{lp} Debug image path NOT configured, using system image_dir: {_dest.as_posix()}"
+                    )
                 else:
                     _dest = g.config.system.variable_data_path / "images"
-                logger.debug(f"{lp} Debug image path and system image_dir NOT configured"
-                             f" using {{system:variable_data_dir}} as base: {_dest.as_posix()}")
+                logger.debug(
+                    f"{lp} Debug image path and system image_dir NOT configured"
+                    f" using {{system:variable_data_dir}} as base: {_dest.as_posix()}"
+                )
 
                 img_write_success = cv2.imwrite(
-                    _dest.joinpath(
-                        f"debug-img_{datetime.now()}.jpg"
-                    ).as_posix(),
+                    _dest.joinpath(f"debug-img_{datetime.now()}.jpg").as_posix(),
                     debug_image,
                 )
                 if img_write_success:
@@ -2167,7 +2214,6 @@ class ZMClient:
             "boxes": boxes,
             "image_dimensions": image.shape,
         }
-        logger.debug(f"{lp} writing objects.json and objdetect.jpg to '{g.event_path}'")
         try:
             json.dump(obj_json, object_file.open("w"))
         except Exception as custom_push_exc:
@@ -2227,9 +2273,7 @@ class ZMClient:
         old_notes: str = g.Event.get("Notes") or ""
         notes_zone = old_notes.split(":")[-1]
         # if notes_zone:
-        logger.debug(
-            f"DEBUG <>>> NOTES triggered Zone(s) {notes_zone} -- event cause {g.event_cause}"
-        )
+
         new_notes = f"{new_notes} {g.event_cause}"
         if old_notes is not None and g.config.zoneminder.misc.write_notes:
             if new_notes != old_notes:
@@ -2246,12 +2290,9 @@ class ZMClient:
                     )
                 else:
                     logger.debug(
-                        f"{lp} replaced old note -> '{old_notes}' with new note -> '{new_notes}'",
+                        f"{lp} replaced old note: '{new_notes}'",
                     )
             elif new_notes == old_notes:
-                logger.debug(
-                    f"{lp} {'PAST EVENT ->' if g.past_event else ''} new notes are the same as old notes, not updating"
-                    f" -> {new_notes}"
-                )
+                logger.debug(f"{lp} notes do not need updating!")
         # send notifications
         self.send_notifications(prepared_image, pred_out, results=matches)

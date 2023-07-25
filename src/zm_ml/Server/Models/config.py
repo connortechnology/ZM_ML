@@ -352,7 +352,7 @@ class BaseModelConfig(BaseModel):
     framework: ModelFrameWork = Field(
         ModelFrameWork.DEFAULT, description="model framework"
     )
-    _model_type: ModelType = Field(
+    type_of: ModelType = Field(
         ModelType.DEFAULT, description="model type (object, face, alpr)", alias="model_type"
     )
     processor: Optional[ModelProcessor] = Field(
@@ -463,26 +463,28 @@ class CV2YOLOModelConfig(BaseModelConfig):
         exclude=True,
     )
 
-    _validate_labels = field_validator("labels")(validate_model_labels)
+    @model_validator(mode="after")
+    def _validate_model(self):
+        model_name = self.name
+        model_input: Optional[Path] = self.input
+        model_config: Optional[Path] = self.config
+        labels = self.labels
+        logger.debug(f"\n\n\nModel Input: {model_input}\n\n")
 
-    @field_validator("config", "input", "classes", mode="before")
-    @classmethod
-    def str_to_path(cls, v, info: FieldValidationInfo) -> Optional[Path]:
-        msg = f"{info.field_name} must be a path or a string of a path"
-        model_name = info.data.get("name", "Unknown Model")
-        model_input: Optional[Path] = info.data.get("input")
+        self.labels = validate_model_labels(labels, info=None, model_name=model_name, labels_file=self.classes)
 
-        if v is None:
-            # logger.debug(f"{lp} {info.field_name} is None, passing as it is Optional")
-            return v
-        elif not isinstance(v, (Path, str)):
-            raise ValueError(msg)
-        elif isinstance(v, str):
-            v = Path(v)
-        if info.field_name == "config":
-            if model_input and model_input.suffix == ".weights":
-                msg = f"'{info.field_name}' is required when 'input' is a DarkNet .weights file"
-        return v
+
+        for v in (model_input, model_config):
+            assert isinstance(v, (Path, str)), f"Invalid type: {type(v)} for {v}"
+            if v == model_config:
+                if v is None:
+                    if model_input and model_input.suffix == ".weights":
+                        raise ValueError(f"'{v.__class__.name}' is required when 'input' is a DarkNet .weights file")
+                    return v
+            elif isinstance(v, str):
+                v = Path(v)
+
+        return self
 
 
 class FaceRecognitionLibModelConfig(BaseModelConfig):
@@ -659,7 +661,7 @@ def _replace_vars(search_str: str, var_pool: Dict) -> Dict:
 
 
 class SystemSettings(BaseModel):
-    _model_dir: Optional[Path] = Field(Path(DEF_SRV_SYS_MODELDIR), alis="model_dir")
+    models_dir: Optional[Path] = Field(Path(DEF_SRV_SYS_MODELDIR), alias="model_dir")
     image_dir: Optional[Path] = Field(Path(DEF_SRV_SYS_IMAGEDIR))
     config_path: Optional[Path] = Field(Path(DEF_SRV_SYS_CONFDIR))
     variable_data_path: Optional[Path] = Field(DEF_SRV_SYS_DATADIR)
@@ -701,19 +703,21 @@ class Settings(BaseModel, arbitrary_types_allowed=True):
                     continue
                 final_model_config = None
                 if model.get("enabled", True) is True:
-                    # logger.debug(f"Adding model: {type(model) = } ------ {model = }")
                     _model: Union[
                         RekognitionModelConfig,
                         VirelAIModelConfig,
                         FaceRecognitionLibModelConfig,
                         ALPRModelConfig,
                         CV2YOLOModelConfig,
+                        UltralyticsModelConfig,
+                        TorchModelConfig,
                         None,
                     ] = None
-                    _framework = model.get("framework", "opencv")
-                    _sub_fw = model.get("sub_framework", "darknet")
+                    _framework = model.get("framework", "ultralytics")
+                    _sub_fw = model.get("sub_framework", "object")
                     _options = model.get("detection_options", {})
                     _type = model.get("model_type", ModelType.OBJECT)
+                    logger.debug(f"Settings:: validate available models => {_framework = } -- {_sub_fw = } -- {_type = } -- {_options = }")
                     if _framework == ModelFrameWork.HTTP:
                         if _sub_fw == HTTPSubFrameWork.REKOGNITION:
                             model["model_type"] = ModelType.OBJECT
@@ -811,7 +815,7 @@ class Settings(BaseModel, arbitrary_types_allowed=True):
 
                     # load model here
                     if final_model_config:
-                        logger.debug(f"Adding model: {final_model_config.name}")
+                        logger.debug(f"Settings:: Adding to available models: {final_model_config.name}")
                         v.append(final_model_config)
                 else:
                     disabled_models.append(model.get("name"))
@@ -940,7 +944,7 @@ class APIDetector:
         from ..ML.Detectors.alpr import PlateRecognizer, OpenAlprCmdLine, OpenAlprCloud
         from ..ML.Detectors.virelai import VirelAI
         from ..ML.Detectors.aws_rekognition import AWSRekognition
-        from ..ML.Detectors.pytorch.torch_base import TorchDetector
+        from ..ML.Detectors.torch.base import TorchDetector
         from ..ML.Detectors.ultralytics.yolo.base import UltralyticsYOLODetector
 
         self.config = model_config
@@ -1046,7 +1050,6 @@ class APIDetector:
             )
 
         try:
-            logger.debug(f"DBG>>> {self.config}")
             if self.config.framework == ModelFrameWork.OPENCV:
                 if (
                     self.config.sub_framework == OpenCVSubFrameWork.DARKNET
@@ -1085,7 +1088,7 @@ class APIDetector:
                 self.model = TpuDetector(self.config)
 
             elif self.config.framework == ModelFrameWork.TORCH:
-                from ..ML.Detectors.pytorch.torch_base import TorchDetector
+                from ..ML.Detectors.torch.base import TorchDetector
 
                 self.model = TorchDetector(self.config)
 
@@ -1105,6 +1108,7 @@ class APIDetector:
         available = False
         processor = self.config.processor
         framework = self.config.framework
+        logger.debug(f"Checking if {processor} is available to use for {framework}")
         if processor == ModelProcessor.NONE:
             available = True
         if framework == ModelFrameWork.ALPR or framework == ModelFrameWork.REKOGNITION:
@@ -1138,6 +1142,7 @@ class APIDetector:
             else:
                 logger.warning("TPU processor is only available for Coral models!")
         elif processor == ModelProcessor.GPU:
+
             if framework == ModelFrameWork.OPENCV:
                 try:
                     import cv2.cuda
@@ -1163,12 +1168,12 @@ class APIDetector:
                             f"Found {cuda_devices} CUDA device(s) that OpenCV can use"
                         )
                         available = True
-            elif framework == ModelFrameWork.TORCH:
+            elif framework in (ModelFrameWork.ULTRALYTICS, ModelFrameWork.TORCH):
                 try:
                     import torch
                 except ImportError:
                     logger.warning(
-                        "pytorch not installed, cannot load any models that use pytorch"
+                        "torch not installed, cannot load any models that use torch"
                     )
                     available = None
                 else:
@@ -1199,6 +1204,7 @@ class APIDetector:
             elif framework == ModelFrameWork.DEEPFACE:
                 logger.warning("WORKING ON DeepFace models!")
                 available = False
+        logger.debug(f"{processor} is {'NOT ' if not available else ''}available for {framework}")
         return available
 
     def detect(self, image: np.ndarray) -> Dict[str, Any]:

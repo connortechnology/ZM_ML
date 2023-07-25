@@ -142,9 +142,9 @@ class VirelAI:
 
         result = DetectionResults(
             success=True if labels else False,
-            type=self.config.model_type,
+            type=self.config.type_of,
             processor=self.processor,
-            model_name=self.name,
+            name=self.name,
             results=[Result(label=labels[i], confidence=confs[i], bounding_box=b_boxes[i]) for i in range(len(labels))],
         )
 

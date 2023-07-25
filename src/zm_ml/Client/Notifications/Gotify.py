@@ -104,19 +104,24 @@ class Gotify(CoolDownBase):
                     },
                 },
             }
-            resp = requests.post(f"{host}/message?token={token}", json=data)
+            goti_url = f"{host}message?token={token}"
+            logger.debug(f"{lp} sending Gotify notification to host: {goti_url}")
+
+            resp = requests.post(goti_url, json=data)
+            resp.raise_for_status()
         except Exception as custom_push_exc:
             logger.error(f"{lp} ERROR while sending Gotify notification ")
-            logger.debug(f"{lp} EXCEPTION>>> {custom_push_exc}")
+            logger.debug(f"{lp} EXCEPTION>>> {custom_push_exc}", exc_info=True)
         else:
-            # g.logger.debug(f"{lp} response from gotify -> {resp.status_code=} - {resp.text = }")
-            if resp and resp.status_code == 200:
-                logger.debug(f"{lp} Gotify returned SUCCESS")
-                self.write_cooldown(g.mid)
-            elif resp and resp.status_code != 200:
-                logger.debug(
-                    f"{lp} Gotify FAILURE STATUS_CODE: {resp.status_code} -> {resp.json()}"
-                )
+            if resp:
+                if resp.status_code == 200:
+                    logger.debug(f"{lp} Gotify returned SUCCESS")
+                    self.write_cooldown(g.mid)
+                elif resp.status_code != 200:
+                    logger.debug(
+                        f"{lp} Gotify FAILURE STATUS_CODE: {resp.status_code} -> {resp.json()}"
+                    )
+
             else:
                 logger.debug(f"{lp} Gotify FAILURE NO RESPONSE")
                 logger.warning(f"{lp} Gotify failure no response - Possible 401 unauthorized, is the token correct?")

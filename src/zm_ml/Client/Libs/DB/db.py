@@ -28,7 +28,6 @@ except ImportError:
 
 from ...Log import CLIENT_LOGGER_NAME
 from ...Models.config import ZMDBSettings, ClientEnvVars
-from ...main import get_global_config
 
 if TYPE_CHECKING:
     from ....Shared.configs import GlobalConfig
@@ -52,6 +51,8 @@ class ZMDB:
 
     def __init__(self, env: Optional[ClientEnvVars] = None):
         global g
+        from ...main import get_global_config
+
         g = get_global_config()
 
         # TODO: integrate better
@@ -59,6 +60,8 @@ class ZMDB:
             self.env = env
         else:
             self.env = g.Environment
+
+        logger.debug(f"{LP} ENV VARS = {self.env}")
 
         self.engine = None
         self.connection = None

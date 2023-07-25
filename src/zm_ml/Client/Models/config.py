@@ -9,10 +9,11 @@ from pydantic import (
     Field,
     AnyUrl,
     field_validator,
+    FieldValidationInfo,
     IPvAnyAddress,
     SecretStr,
 )
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .validators import validate_percentage_or_pixels, validate_resolution, validate_points
 from ...Shared.Models.validators import (
@@ -36,12 +37,13 @@ logger = logging.getLogger(CLIENT_LOGGER_NAME)
 
 
 class ZMDBSettings(BaseSettings, extra="allow"):
-    host: Union[IPvAnyAddress, AnyUrl, None] = Field(None, env="ML_CLIENT_DB_HOST")
-    port: Optional[int] = Field(None, env="ML_CLIENT_DB_PORT")
-    user: Optional[str] = Field(None, env="ML_CLIENT_DB_USER")
-    password: Optional[SecretStr] = Field(None, env="PASSWORD")
-    name: Optional[str] = Field(None, env="ML_CLIENT_DB_NAME")
-    driver: Optional[str] = Field(None, env="ML_CLIENT_DB_DRIVER")
+    model_config = SettingsConfigDict(env_prefix="ML_CLIENT_DB_")
+    host: Union[IPvAnyAddress, AnyUrl, None] = Field(None)
+    port: Optional[int] = Field(None)
+    user: Optional[str] = Field(None)
+    password: Optional[SecretStr] = Field(None)
+    name: Optional[str] = Field(None)
+    driver: Optional[str] = Field(None)
 
     _validate_host = field_validator("host", mode="before")(
         validate_replace_localhost
@@ -57,22 +59,25 @@ class SystemSettings(BaseModel):
 
 
 class ZoneMinderSettings(BaseSettings, extra="allow"):
+    model_config = SettingsConfigDict(env_prefix="ML_CLIENT_ZONEMINDER_")
     class ZMMisc(BaseSettings):
-        write_notes: bool = Field(True, env="ML_CLIENT_ZONEMINDER_MISC_WRITE_NOTES")
+        model_config = SettingsConfigDict(env_prefix="ML_CLIENT_ZONEMINDER_MISC_")
+        write_notes: bool = Field(True)
 
 
     class ZMAPISettings(BaseSettings):
-        api_url: Optional[AnyUrl] = Field(None, env="ML_CLIENT_ZONEMINDER_API_URL")
-        user: Optional[SecretStr] = Field(None, env="ML_CLIENT_ZONEMINDER_API_USER")
-        password: Optional[SecretStr] = Field(None, env="ML_CLIENT_ZONEMINDER_API_PASSWORD")
-        ssl_verify: Optional[bool] = Field(True, env="ML_CLIENT_ZONEMINDER_API_SSL_VERIFY")
-        headers: Optional[Dict] = Field(default_factory=dict, env="ML_CLIENT_ZONEMINDER_API_HEADERS")
+        model_config = SettingsConfigDict(env_prefix="ML_CLIENT_ZONEMINDER_API_")
+        api_url: Optional[AnyUrl] = Field(None)
+        user: Optional[SecretStr] = Field(None)
+        password: Optional[SecretStr] = Field(None)
+        ssl_verify: Optional[bool] = Field(True)
+        headers: Optional[Dict] = Field(default_factory=dict)
 
         _validate_api_url = field_validator("api_url", mode="before")(
             validate_no_scheme_url
         )
 
-    portal_url: Optional[AnyUrl] = Field(None, env="ML_CLIENT_ZONEMINDER_PORTAL_URL")
+    portal_url: Optional[AnyUrl] = Field(None)
     misc: Optional[ZMMisc] = Field(default_factory=ZMMisc)
     api: Optional[ZMAPISettings] = Field(default_factory=ZMAPISettings)
     db: Optional[ZMDBSettings] = Field(default_factory=ZMDBSettings)
@@ -223,7 +228,7 @@ class MLNotificationSettings(BaseModel):
     class MQTTNotificationSettings(DefaultNotEnabled):
 
         class MQTTImageSettings(DefaultNotEnabled):
-            format: Optional[str] = Field("base64", regex="^(bytes|base64)$")
+            format: Optional[str] = Field("base64", pattern="^(bytes|base64)$")
             retain: Optional[bool] = True
 
         keep_alive: Optional[int] = Field(60, ge=1)
@@ -454,19 +459,17 @@ class ClientEnvVars(BaseSettings):
     zm_conf_dir: Path = Field(
         Path("/etc/zm"),
         description="Path to ZoneMinder config files",
-        env="ZM_CONF_DIR",
     )
     ml_conf_dir: Optional[Path] = Field(
         None,
         description="Path to ZoneMinder ML config file directory (client/server/secrets .yml)",
-        env="ML_CONF_DIR",
     )
     client_conf_file: Optional[Path] = Field(
-        None, description="Path to ZM-ML CLIENT config file", env="ML_CLIENT_CONF_FILE"
+        None, description="Path to ZM-ML CLIENT config file", alias="ML_CLIENT_CONF_FILE"
     )
 
-    db: Optional[ZMDBSettings] = Field(default_factory=ZMDBSettings)
-    api: Optional[ZoneMinderSettings] = Field(default_factory=ZoneMinderSettings)
+    db: Optional[ZMDBSettings] = Field(default_factory=ZMDBSettings, alias="OOGAH_BOOGAH_WHY_DONT_THEY_MAKE_A_WAY_TO_HAVE_NO_ENV")
+    api: Optional[ZoneMinderSettings.ZMAPISettings] = Field(default_factory=ZoneMinderSettings.ZMAPISettings, alias="WHY_DONT_THEY_MAKE_A_WAY_TO_HAVE_NO_ENV_OOGAH_BOOGAH")
 
     _validate_client_conf_file = field_validator(
         "client_conf_file", mode="before", check_fields=False

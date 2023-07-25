@@ -52,7 +52,7 @@ class CV2HOG(CV2Base):
 
         return {
             "success": True if labels else False,
-            "type": self.config.model_type,
+            "type": self.config.type_of,
             "processor": self.processor,
             "model_name": self.name,
             "label": labels,

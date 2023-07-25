@@ -182,7 +182,7 @@ models:
 #    num_classes: 80
 
 #    sub_framework:
-    model_type: object
+    type_of: object
     processor: gpu
     # If using multiple GPUs, set the index of the GPU to use, Ignored if processor is not gpu
     # To print out number of available GPUs: python3 -c "import torch; print(torch.cuda.device_count())"
@@ -198,7 +198,7 @@ models:
     enabled: true
     framework: opencv
     sub_framework: darknet
-    model_type: object
+    type_of: object
     description: "yolov4 Tiny pretrained DarkNet model"
     processor: cpu
     input: "${MODEL_DIR}/yolo/yolov4-tiny.weights"
@@ -213,7 +213,7 @@ models:
 
     framework: coral
     sub_framework: none
-    model_type: object
+    type_of: object
     # -- Change to TPU!
     processor: tpu
 
@@ -235,7 +235,7 @@ models:
     enabled: no
     framework: http
     sub_framework: rekognition
-    model_type: object
+    type_of: object
     processor: none
 
     detection_options:
@@ -246,7 +246,7 @@ models:
     enabled: no
     framework: http
     sub_framework: virel
-    model_type: object
+    type_of: object
     processor: none
 
     detection_options:
@@ -312,7 +312,7 @@ models:
   - name: dlib face
     enabled: no
     description: "dlib face detection/recognition model"
-    model_type: face
+    type_of: face
     framework: face_recognition
 
     # -- These options only apply to when the model is
@@ -374,7 +374,7 @@ models:
     enabled: no
 
 
-    model_type: alpr
+    type_of: alpr
     framework: alpr
     processor: none
     sub_framework: openalpr
@@ -390,7 +390,7 @@ models:
     description: "openalpr local SDK (binary) with a config file to use CUDA GPU"
     enabled: no
 
-    model_type: alpr
+    type_of: alpr
     framework: alpr
     sub_framework: openalpr
     # openalpr config file controls processor, you can put none,cpu,gpu or tpu here.
@@ -406,7 +406,7 @@ models:
 
   - name: 'Platerec'  # The model name is normalized by lower casing, spaces are preserved; 'platerec'
     enabled: no
-    model_type: alpr
+    type_of: alpr
     framework: http
     sub_framework: plate_recognizer
 

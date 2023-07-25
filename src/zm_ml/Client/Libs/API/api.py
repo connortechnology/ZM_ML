@@ -5,6 +5,7 @@ import pickle
 import time
 from typing import Dict, List, Optional, Union, Tuple, TYPE_CHECKING
 import warnings
+
 try:
     import aiohttp
     import jwt
@@ -37,6 +38,7 @@ if TYPE_CHECKING:
     from requests.exceptions import HTTPError, JSONDecodeError
     from urllib3 import disable_warnings
     from urllib3.exceptions import InsecureRequestWarning
+
 
 GRACE: int = 60 * 5  # 5 mins
 lp: str = "api::"
@@ -71,16 +73,16 @@ class ZMAPI:
                 zones = r.get("zones")
                 if zones:
                     logger.debug(
-                        f"{lp} {len(zones)} ZM zones found, checking for 'Inactive' zones"
+                        f"{lp} {len(zones)} ZM zones found, checking for 'Inactive'/'Private' zones"
                     )
                     for zone in zones:
                         zone_name: str = zone.get("Zone", {}).get("Name", "")
                         zone_type: str = zone.get("Zone", {}).get("Type", "")
                         zone_points: str = zone.get("Zone", {}).get("Coords", "")
                         # logger.debug(f"{lp} BEGINNING OF ZONE LOOP - {zone_name=} -- {zone_type=} -- {zone_points=}")
-                        if zone_type.casefold() == "inactive":
+                        if zone_type.casefold() in ["inactive", "privacy", "preclusive"]:
                             logger.debug(
-                                f"{lp} skipping '{zone_name}' as it is set to 'Inactive'"
+                                f"{lp} skipping '{zone_name}' as it is set to '{zone_type.capitalize()}'"
                             )
                             continue
 

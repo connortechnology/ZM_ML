@@ -76,7 +76,7 @@ class TpuDetector(FileLock):
         self.processor: ModelProcessor = self.config.processor
         self.name: str = self.config.name
         self.model: Optional[Interpreter] = None
-        if self.config.model_type == ModelType.FACE:
+        if self.config.type_of == ModelType.FACE:
             logger.debug(
                 f"{LP} ModelType=Face, this is for identification purposes only"
             )
@@ -225,9 +225,9 @@ class TpuDetector(FileLock):
 
         result = DetectionResults(
             success=True if labels else False,
-            type=self.config.model_type,
+            type=self.config.type_of,
             processor=self.processor,
-            model_name=self.name,
+            name=self.name,
             results=[
                 Result(label=labels[i], confidence=confs[i], bounding_box=b_boxes[i])
                 for i in range(len(labels))
