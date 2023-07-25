@@ -196,9 +196,9 @@ def draw_bounding_boxes(
             font_scale = 3.2
             font_thickness = 4
 
-        logger.debug(
-            f"{lp} ({i}/{len(labels)}) w*h={(w, h)} {font_scale=} {font_thickness=} {bbox=} "
-        )
+        # logger.debug(
+        #     f"{lp} ({i}/{len(labels)}) w*h={(w, h)} {font_scale=} {font_thickness=} {bbox=} "
+        # )
         font_type = cv2.FONT_HERSHEY_DUPLEX
         text_size = cv2.getTextSize(label, font_type, font_scale, font_thickness)[0]
         text_width_padded = text_size[0] + 4

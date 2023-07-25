@@ -81,7 +81,7 @@ class Gotify(CoolDownBase):
                 f"{portal}/index.php?view=image&eid={g.eid}&fid="
                 f"objdetect&{image_auth}"
             )
-            logger.debug(f"{image_url = } -- | -- {event_url = }")
+            # logger.debug(f"{image_url = } -- | -- {event_url = }")
             test_ = "https://placekitten.com/400/200"
             markdown_formatted_msg: str = (
                 f"{pred_out}\n{_link_url}"
@@ -105,8 +105,6 @@ class Gotify(CoolDownBase):
                 },
             }
             goti_url = f"{host}message?token={token}"
-            logger.debug(f"{lp} sending Gotify notification to host: {goti_url}")
-
             resp = requests.post(goti_url, json=data)
             resp.raise_for_status()
         except Exception as custom_push_exc:

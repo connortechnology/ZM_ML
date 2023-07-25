@@ -133,14 +133,13 @@ class APIImagePipeLine:
 
         curr_snapshot = None
         if self.options.check_snapshots:
-            logger.debug(f"{lp} checking snapshot ids enabled!")
-            # Check if event data available or get data for snapshot fid comparison
+            # Only run every <x> frames if only if it's a live event
             if (
                 (not g.past_event)
                 and (self.frames_processed > 0)
                 and (
                     self.frames_processed % self.options.snapshot_frame_skip == 0
-                )  # Only run every <x> frames if its a live event
+                )
             ):
                 await _grab_event_data(msg=f"grabbing data for snapshot comparisons...")
                 if curr_snapshot := int(g.Event.get("MaxScoreFrameId", 0)):
