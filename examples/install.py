@@ -25,7 +25,15 @@ DEFAULT_SYSTEM_CREATE_PERMISSIONS = 0o755
 # config files will have their permissions adjusted to this
 DEFAULT_CONFIG_CREATE_PERMISSIONS = 0o755
 # default ML models to install (SEE: available_models{})
-DEFAULT_MODELS = ["yolov4", "yolov4_tiny", "yolov7", "yolov7_tiny"]
+DEFAULT_MODELS = [
+    "yolov4",
+    "yolov4_tiny",
+    "yolov7",
+    "yolov7_tiny",
+    "yolov8m",
+    "yolov8n",
+    "yolo_nas_s",
+]
 REPO_BASE = Path(__file__).parent.parent
 INSTALL_FILE_DIR = Path(__file__).parent
 ZMML_CACHE = REPO_BASE / ".zmml_cache"
@@ -35,6 +43,62 @@ THREADS: Dict[str, Thread] = {}
 
 # Do not change these unless you know what you are doing
 available_models = {
+    "yolov8n": {
+        "folder": "yolo",
+        "model": [
+            "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt"
+        ],
+        "config": [],
+    },
+    "yolov8s": {
+        "folder": "yolo",
+        "model": [
+            "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8s.pt"
+        ],
+        "config": [],
+    },
+    "yolov8m": {
+        "folder": "yolo",
+        "model": [
+            "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8m.pt"
+        ],
+        "config": [],
+    },
+    "yolov8l": {
+        "folder": "yolo",
+        "model": [
+            "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8l.pt"
+        ],
+        "config": [],
+    },
+    "yolov8x": {
+        "folder": "yolo",
+        "model": [
+            "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt"
+        ],
+        "config": [],
+    },
+    "yolo_nas_s": {
+        "folder": "yolo",
+        "model": [
+            "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolo_nas_s.pt"
+        ],
+        "config": [],
+    },
+    "yolo_nas_m": {
+        "folder": "yolo",
+        "model": [
+            "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolo_nas_m.pt"
+        ],
+        "config": [],
+    },
+    "yolo_nas_l": {
+        "folder": "yolo",
+        "model": [
+            "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolo_nas_l.pt"
+        ],
+        "config": [],
+    },
     "yolov4": {
         "folder": "yolo",
         "model": [
@@ -1233,25 +1297,27 @@ def do_install(_inst_type: str):
         _pip_prefix.append(_src)
         logger.info(f"This may appear frozen for a few moments, please be patient...")
         # create venv, upgrade pip and setup tools and install ZoMi ML into the venv
-        _venv = ZoMiEnvBuilder(with_pip=True, cmd=_pip_prefix, upgrade_deps=True, prompt="ZoMi_ML")
+        _venv = ZoMiEnvBuilder(
+            with_pip=True, cmd=_pip_prefix, upgrade_deps=True, prompt="ZoMi_ML"
+        )
         _venv.create(venv_dir)
         content: Optional[str] = None
         if _inst_type == "client":
-            _f: Path = (data_dir / "bin/eventproc.py")
+            _f: Path = data_dir / "bin/eventproc.py"
             # if testing:
             #     _f = (INSTALL_FILE_DIR / "eventproc.py")
         elif _inst_type == "server":
-            _f: Path = (data_dir / "bin/mlapi.py")
+            _f: Path = data_dir / "bin/mlapi.py"
             # if testing:
             #     _f = (INSTALL_FILE_DIR / "mlapi.py")
 
-        test_msg(f"Modifying {_f.as_posix()} to use VENV {_venv.context.env_exec_cmd} shebang")
+        test_msg(
+            f"Modifying {_f.as_posix()} to use VENV {_venv.context.env_exec_cmd} shebang"
+        )
         content = _f.read_text()
         with _f.open("w+") as f:
             f.write(f"#!{_venv.context.env_exec_cmd}\n{content}")
         del content
-
-
 
 
 class Envsubst:
