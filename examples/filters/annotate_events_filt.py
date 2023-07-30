@@ -21,7 +21,8 @@ from typing import List, Optional, NamedTuple, Tuple, Dict, Union, Any
 
 from zm_ml.Shared.Models.validators import (
     str2path,
-    str2bool, validate_replace_localhost, validate_dir,
+    str2bool,
+    validate_dir,
 )
 
 try:
@@ -148,14 +149,6 @@ class FilterConfigFileModel(BaseModel):
         port: int = 5000
         models: List[str] = Field(default_factory=list)
 
-        @field_validator("host", mode="before")
-        @classmethod
-        def _validate_host(cls, v, info: FieldValidationInfo):
-            logger.info(f"Validating KEY: {info.field_name} VALUE: {v} - {type(v)}")
-            if v:
-                v = validate_replace_localhost(v)
-                logger.debug(f"After validation: {v} - {type(v)}")
-            return v
 
     class LoggingSettings(BaseModel):
         class LogFileSettings(BaseModel):
