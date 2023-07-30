@@ -15,8 +15,11 @@ class UltralyticsModelConfig(BaseModelConfig):
     pretrained: PreTrained = Field(default_factory=PreTrained)
     gpu_idx: Optional[int] = None
 
+    # obj det, pose, segment and classification are ALL 'object' ModelType.
     _model_type: ModelType = ModelType.OBJECT
-    input: Optional[Path] = Field(None, description="Path to input model file")
+    input: Optional[Path] = Field(
+        None, description="Path to input model file/check point/config"
+    )
 
     @model_validator(mode="after")
     def _validate_pretrained_name(self):
@@ -24,7 +27,7 @@ class UltralyticsModelConfig(BaseModelConfig):
             if self.pretrained.enabled is True:
                 v = self.pretrained.name
                 if not v:
-                    v = "yolo_nas_s"
+                    v = "yolov8s"
                 if isinstance(v, str):
                     v = v.casefold()
                     from ...ultralytics import PRETRAINED_MODEL_NAMES
@@ -37,21 +40,30 @@ class UltralyticsModelConfig(BaseModelConfig):
                             _type = UltralyticsSubFrameWork(_type)
                         if _type == UltralyticsSubFrameWork.OBJECT:
                             model_names.extend(PRETRAINED_MODEL_NAMES.get("yolov8", []))
-                            model_names.extend(PRETRAINED_MODEL_NAMES.get("yolov5u", []))
+                            model_names.extend(
+                                PRETRAINED_MODEL_NAMES.get("yolov5u", [])
+                            )
                             model_names.extend(PRETRAINED_MODEL_NAMES.get("nas", []))
                         elif _type == UltralyticsSubFrameWork.SEGMENTATION:
-                            model_names.extend(PRETRAINED_MODEL_NAMES.get("yolov8-seg", []))
+                            model_names.extend(
+                                PRETRAINED_MODEL_NAMES.get("yolov8-seg", [])
+                            )
                         elif _type == UltralyticsSubFrameWork.POSE:
-                            model_names.extend(PRETRAINED_MODEL_NAMES.get("yolov8-pose", []))
+                            model_names.extend(
+                                PRETRAINED_MODEL_NAMES.get("yolov8-pose", [])
+                            )
                         elif _type == UltralyticsSubFrameWork.CLASSIFICATION:
-                            model_names.extend(PRETRAINED_MODEL_NAMES.get("yolov8-cls", []))
+                            model_names.extend(
+                                PRETRAINED_MODEL_NAMES.get("yolov8-cls", [])
+                            )
                         if v not in model_names:
                             raise ValueError(
-                                f"Invalid model name: {v}, can only be one of {model_names}")
+                                f"Invalid model name: {v}, can only be one of {model_names}"
+                            )
 
                     else:
-                        raise ValueError(f"sub_framework is not defined, cannot ascertain model name")
+                        raise ValueError(
+                            f"sub_framework is not defined, cannot ascertain model name"
+                        )
 
         return self
-
-
