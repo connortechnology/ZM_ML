@@ -19,7 +19,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from .validators import validate_percentage_or_pixels, validate_resolution, validate_points
 from ...Shared.Models.validators import (
     validate_no_scheme_url,
-    validate_replace_localhost,
     validate_file,
     validate_dir,
     validate_not_enabled,
@@ -46,9 +45,6 @@ class ZMDBSettings(BaseSettings, extra="allow"):
     name: Optional[str] = Field(None)
     driver: Optional[str] = Field(None)
 
-    _validate_host = field_validator("host", mode="before")(
-        validate_replace_localhost
-    )
 
 
 class SystemSettings(BaseModel):
@@ -88,8 +84,6 @@ class ZoneMinderSettings(BaseSettings, extra="allow"):
     )
 
 
-from pydantic import model_validator, ValidationInfo
-
 class ServerRoute(DefaultEnabled):
     # Make 1 attr required so empty entries will fail.
     name: str = Field(...)
@@ -100,10 +94,6 @@ class ServerRoute(DefaultEnabled):
     timeout: Optional[int] = Field(90, ge=0)
 
 
-    # validators
-    _validate_mlapi_host_localhost = field_validator("host", mode="before")(
-        validate_replace_localhost
-    )
     _validate_mlapi_host_no_scheme = field_validator("host", mode="before")(
         validate_no_scheme_url
     )

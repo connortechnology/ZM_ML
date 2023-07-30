@@ -96,7 +96,7 @@ class TorchDetector(FileLock):
                 if _pth:
                     logger.warning(f"{LP} 'TORCH_HOME' is already set, working around it...")
                 os.environ["TORCH_HOME"] = self.cache_dir.as_posix()
-                _pt = self.config.pretrained.model_name
+                _pt = self.config.pretrained.name
                 conf, nms = self.options.confidence, self.options.nms
 
                 if _pt:

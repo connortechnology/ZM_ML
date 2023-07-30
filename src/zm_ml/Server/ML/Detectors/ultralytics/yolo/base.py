@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import time
 import warnings
+from functools import lru_cache
 from logging import getLogger
-from typing import Optional, List, TYPE_CHECKING
+from typing import Optional, List, TYPE_CHECKING, Union
 
 try:
     import torch
@@ -45,7 +46,7 @@ class UltralyticsYOLODetector(FileLock):
     name: str
     config: UltralyticsModelConfig
     model_name: str
-    model: ultralytics.YOLO
+    model: Union[ultralytics.YOLO, ultralytics.NAS, None] = None
     yolo_model_type: UltralyticsSubFrameWork
     processor: ModelProcessor
     _classes: Optional[List] = None
@@ -53,6 +54,7 @@ class UltralyticsYOLODetector(FileLock):
     ok: bool = False
 
     def __init__(self, config: Optional[UltralyticsModelConfig] = None):
+        self.cwd: Optional[str] = None
         if ultralytics is None:
             raise ImportError("Ultralytics not installed!")
         if config is None:
@@ -61,6 +63,7 @@ class UltralyticsYOLODetector(FileLock):
 
         g = get_global_config()
         self.config = config
+        self.options = self.config.detection_options
         self.id = self.config.id
         self.name = self.config.name
         self.model_name = self.config.pretrained.name
@@ -70,6 +73,7 @@ class UltralyticsYOLODetector(FileLock):
         self.device = self._get_device()
         self.cache_dir = g.config.system.models_dir / "ultralytics/cache"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.load_model()
 
     def load_model(self):
         if ultralytics is None:
@@ -82,52 +86,49 @@ class UltralyticsYOLODetector(FileLock):
             logger.debug(
                 f"{LP} loading model into processor memory: {self.name} ({self.id})"
             )
-            conf, nms = self.options.confidence, self.options.nms
             if self.config.pretrained and self.config.pretrained.enabled is True:
                 logger.debug(
                     f"{LP} 'pretrained' model requested, using pretrained weights..."
                 )
-                _pth = os.environ.get("TORCH_HOME", None)
-                if _pth:
-                    logger.warning(
-                        f"{LP} 'TORCH_HOME' is already set, working around it..."
-                    )
-                os.environ["TORCH_HOME"] = self.cache_dir.as_posix()
-                _pt = self.config.pretrained.model_name
+                _pt = self.config.pretrained.name
                 sub_fw = self.config.sub_framework
-
-
-
                 if _pt:
                     if _pt.startswith("yolo_nas_"):
+                        logger.debug(f"{LP} Attempting to load YOLO-NAS model")
                         self.model = ultralytics.NAS(
-                            _pt, device=self.device, conf=conf, iou=nms
+                            _pt
                         )
                     elif _pt.startswith("yolov"):
                         pass
                     self.model = ultralytics.YOLO(
-                        _pt, device=self.device, conf=conf, iou=nms
+                        _pt
                     )
 
+                ARGS = {
+
+                }
+                # This cant be the right way to do this...
+                # self.cwd = os.getcwd()
+                # os.chdir(self.cache_dir)
+                # self.model.MODE(task="detect", mode="predict", project="ultralytics", name="cache", exist_ok=True)
                 self.ok = True
-                if _pth:
-                    logger.warning(f"{LP} resetting 'TORCH_HOME' to original value...")
-                    os.environ["TORCH_HOME"] = _pth
             elif self.config.input and self.config.input.exists():
                 logger.warning(f"{LP} Pretrained is not enabled, attempting user supplied model...")
 
                 try:
-                    _pt: str = self.config.input.as_posix()
+                    _pt = self.config.input
                     logger.info(f"{LP} loading FILE -> {_pt}")
-                    if _pt.startswith("yolo_nas_"):
+                    if _pt.name.startswith("yolo_nas_"):
+                        logger.warning(f"{LP} Attempting to load YOLO-NAS model")
                         self.model = ultralytics.NAS(
-                            _pt, device=self.device, conf=conf, iou=nms
+                            _pt.as_posix()
                         )
-                    elif _pt.startswith("yolov"):
-                        pass
-                    self.model = ultralytics.YOLO(
-                        _pt, device=self.device, conf=conf, iou=nms
-                    )
+                    elif _pt.name.startswith("yolov"):
+                        logger.warning(f"{LP} Attempting to load YOLO model")
+
+                        self.model = ultralytics.YOLO(
+                            _pt.as_posix()
+                        )
 
                     self.ok = True
                 except Exception as model_load_exc:
@@ -137,8 +138,12 @@ class UltralyticsYOLODetector(FileLock):
                     )
                     self.ok = False
                     raise model_load_exc
+                else:
+                    self.model.to(self.device)
+                    logger.debug(f"{LP} model loaded successfully -> {self.model = }")
 
-    def _get_device(self) -> Optional[torch.device]:
+    @lru_cache(maxsize=1)
+    def _get_device(self) -> Optional[str]:
         logger.debug(f"{LP} getting device...")
         if torch is None:
             logger.error(f"{LP} Torch not installed, cannot use Ultralytics detectors")
@@ -165,7 +170,7 @@ class UltralyticsYOLODetector(FileLock):
             elif dev.startswith("cuda"):
                 self.processor = ModelProcessor.GPU
             logger.debug(f"{LP} using device: {dev} :: {self.processor}")
-            return torch.device(dev)
+            return dev
 
     def detect(self, image: np.ndarray):
         if ultralytics is None:
@@ -180,7 +185,7 @@ class UltralyticsYOLODetector(FileLock):
             b_boxes = []
             try:
                 self.acquire_lock()
-                results: ultralytics.engine.results.Boxes = self.model.predict(image)
+                results: ultralytics.engine.results.Boxes = self.model.predict(image, iou=self.options.nms, conf=self.options.confidence)
             except Exception as detect_exc:
                 logger.error(f"{LP} Error model: '{self.name}' - while detecting objects! => {detect_exc}")
                 raise detect_exc
@@ -196,8 +201,8 @@ class UltralyticsYOLODetector(FileLock):
                     # probs = result.probs  # Class probabilities for classification outputs
 
                     b_boxes.extend(boxes.xyxy.round().int().tolist())
-                    confs.extend(boxes.cong.int().tolist())
-                    labels.extend([results.names[i] for i in boxes.cls.int().tolist()])
+                    confs.extend(boxes.conf.float().tolist())
+                    labels.extend([_result.names[i] for i in boxes.cls.int().tolist()])
             finally:
                 self.release_lock()
 

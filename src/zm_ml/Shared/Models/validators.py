@@ -28,17 +28,6 @@ def validate_enabled(v, **kwargs):
         v = True
     return v
 
-def validate_replace_localhost(
-    v,
-    field: Optional[FieldValidationInfo] = None,
-):
-    """Replace 'localhost' with 127.0.0.1"""
-    # logger.debug(f"Validating ENVVAR {field}: {v}")
-    if v:
-        if isinstance(v, str):
-            v.replace("localhost", "127.0.0.1")
-    return v
-
 
 def validate_no_scheme_url(v, info: FieldValidationInfo):
     """Validate and transform a URL/IP string into a URL with a scheme"""

@@ -16,6 +16,7 @@ class UltralyticsModelConfig(BaseModelConfig):
     gpu_idx: Optional[int] = None
 
     _model_type: ModelType = ModelType.OBJECT
+    input: Optional[Path] = Field(None, description="Path to input model file")
 
     @model_validator(mode="after")
     def _validate_pretrained_name(self):

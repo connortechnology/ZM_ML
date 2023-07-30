@@ -12,7 +12,6 @@ logger = logging.getLogger(SERVER_LOGGER_NAME)
 def validate_model_labels(
     v, info: FieldValidationInfo, **kwargs
 ) -> Optional[List[str]]:
-    logger.debug(f"{kwargs = }\n\n")
     model_name = kwargs.get("model_name", "Unknown")
     labels_file: Optional[Path] = kwargs.get("labels_file", None)
     lp = f"Model Name: {model_name} ->"

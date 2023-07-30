@@ -38,7 +38,6 @@ from ...Shared.Models.Enums import (
 )
 from ...Shared.Models.config import Testing, LoggingSettings, DefaultEnabled
 from ...Shared.Models.validators import (
-    validate_replace_localhost,
     str2path,
 )
 if TYPE_CHECKING:
@@ -125,9 +124,6 @@ class ServerSettings(BaseModel):
     )
     jwt: JWTSettings = Field(default_factory=JWTSettings, description="JWT Settings")
 
-    _validate_address = field_validator("address", mode="before")(
-        validate_replace_localhost
-    )
 
 
 class DetectionResult(BaseModel):
@@ -148,7 +144,7 @@ class BaseModelOptions(BaseModel):
 
 class UltralyticsModelOptions(BaseModelOptions):
     nms: Optional[float] = Field(
-        0.7, ge=0.0, le=1.0, description="Non-Maximum Suppression Threshold (IoU)"
+        0.4, ge=0.0, le=1.0, description="Non-Maximum Suppression Threshold (IoU)"
     )
 
 class CV2YOLOModelOptions(BaseModelOptions):
@@ -469,8 +465,6 @@ class CV2YOLOModelConfig(BaseModelConfig):
         model_input: Optional[Path] = self.input
         model_config: Optional[Path] = self.config
         labels = self.labels
-        logger.debug(f"\n\n\nModel Input: {model_input}\n\n")
-
         self.labels = validate_model_labels(labels, info=None, model_name=model_name, labels_file=self.classes)
 
 
