@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Debian based systems - user can adapt for other distros
+# Author: baudneo (@baudneo on X)
 BLUE='\E[1;34m'
 CYAN='\E[1;36m'
 YELLOW='\E[1;33m'
@@ -10,6 +12,18 @@ RESET='\E[0m'
 if [ "$(id -u)" != "0" ]; then
    echo -e "${RED}This script must be run as root${RESET}" 1>&2
    exit 1
+fi
+
+# Check this is a debian based system
+if [ ! -f /etc/debian_version ]; then
+    echo -e "${RED}This script is only for Debian based systems${RESET}" 1>&2
+    exit 1
+fi
+
+# Check for apt
+if ! [ -x "$(command -v apt)" ]; then
+    echo -e "${RED}This script requires apt${RESET}" 1>&2
+    exit 1
 fi
 
 # Get cuda version
@@ -28,7 +42,8 @@ echo -e "${BLUE}❯❯❯ ${CYAN}Installing prerequisites for GPU openALPR local
 # this includes all the ones missing from OpenALPR's guide.
 apt install libtesseract-dev git cmake build-essential libleptonica-dev -y
 apt install liblog4cplus-dev libcurl3-dev libcurl4-openssl-dev -y
-apt install beanstalkd -y
+# beansdtalkd is optional (for local API or something)
+# apt install beanstalkd -y
 #sudo apt install openjdk-8-jdk -y
 
 echo -e "${BLUE}❯❯❯ ${CYAN}Installing OpenALPR${RESET}"

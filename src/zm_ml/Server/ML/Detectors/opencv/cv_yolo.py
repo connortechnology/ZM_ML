@@ -47,7 +47,7 @@ class CV2YOLODetector(CV2Base):
 
     def load_model(self):
         logger.debug(
-            f"{LP} loading model into processor memory: {self.name} ({self.id})"
+            f"{LP} loading model into processor [{self.processor}] memory: {self.name} ({self.id})"
         )
         load_timer = time.perf_counter()
         try:
@@ -116,10 +116,7 @@ class CV2YOLODetector(CV2Base):
                 input_image, conf_threshold, nms_threshold
             )
 
-            logger.debug(
-                f"perf:{LP}{self.processor}: '{self.name}' detection "
-                f"took: {time.perf_counter() - detection_timer:.5f} s"
-            )
+
             for (class_id, confidence, box) in zip(l, c, b):
                 confidence = float(confidence)
                 x, y, _w, _h = (
@@ -165,7 +162,10 @@ class CV2YOLODetector(CV2Base):
             raise all_ex
         finally:
             self.release_lock()
-
+        logger.debug(
+            f"perf:{LP}{self.processor}: '{self.name}' detection "
+            f"took: {time.perf_counter() - detection_timer:.5f} s"
+        )
         result = DetectionResults(
             success=True if labels else False,
             type=self.config.type_of,

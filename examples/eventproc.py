@@ -1,3 +1,4 @@
+#!//opt/zm_ml/data/venv/bin/python3
 #!/usr/bin/env python3
 
 
@@ -26,7 +27,7 @@ if TYPE_CHECKING:
 
 __doc__ = """
 An example that uses ZM's EventStartCommand/EventEndCommand mechanism to run 
-object detection on a ZM event using ZM ML library.
+object detection on a ZM event using ZoMi ML library.
 """
 __version__ = "0.0.1a2"
 # Setup basic console logging (hook into library logging)

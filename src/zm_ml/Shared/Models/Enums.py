@@ -48,6 +48,7 @@ class ModelFrameWork(str, Enum):
     ALPR = "alpr"
     FACE_RECOGNITION = "face_recognition"
     REKOGNITION = "rekognition"
+    ORT = "ort"
     DEFAULT = ULTRALYTICS
 
 

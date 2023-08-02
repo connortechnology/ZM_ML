@@ -1,0 +1,279 @@
+from __future__ import annotations
+
+import time
+import uuid
+from logging import getLogger
+from pathlib import Path
+from typing import Optional, TYPE_CHECKING, List, Tuple, Union, AnyStr, Dict
+from warnings import warn
+
+try:
+    import cv2
+except ImportError:
+    warn("OpenCV not installed, cannot use OpenCV detectors")
+    raise
+try:
+    import onnxruntime as ort
+except ImportError:
+    warn("onnxruntime not installed, cannot use onnxruntime detectors")
+import numpy as np
+
+from ....Shared.Models.Enums import ModelProcessor
+from ..file_locks import FileLock
+from ....Shared.Models.config import DetectionResults, Result
+from ...Log import SERVER_LOGGER_NAME
+
+if TYPE_CHECKING:
+    from ...Models.config import ORTModelConfig, BaseModelOptions, ORTModelOptions
+
+logger = getLogger(SERVER_LOGGER_NAME)
+LP: str = "ORT:"
+
+
+def nms(boxes, scores, iou_threshold):
+    # Sort by score
+    sorted_indices = np.argsort(scores)[::-1]
+
+    keep_boxes = []
+    while sorted_indices.size > 0:
+        # Pick the last box
+        box_id = sorted_indices[0]
+        keep_boxes.append(box_id)
+
+        # Compute IoU of the picked box with the rest
+        ious = compute_iou(boxes[box_id, :], boxes[sorted_indices[1:], :])
+
+        # Remove boxes with IoU over the threshold
+        keep_indices = np.where(ious < iou_threshold)[0]
+
+        # logger.debug(f"{LP} {keep_indices.shape = }, {sorted_indices.shape = }")
+        sorted_indices = sorted_indices[keep_indices + 1]
+
+    return keep_boxes
+
+
+def compute_iou(box, boxes):
+    # Compute xmin, ymin, xmax, ymax for both boxes
+    xmin = np.maximum(box[0], boxes[:, 0])
+    ymin = np.maximum(box[1], boxes[:, 1])
+    xmax = np.minimum(box[2], boxes[:, 2])
+    ymax = np.minimum(box[3], boxes[:, 3])
+
+    # Compute intersection area
+    intersection_area = np.maximum(0, xmax - xmin) * np.maximum(0, ymax - ymin)
+
+    # Compute union area
+    box_area = (box[2] - box[0]) * (box[3] - box[1])
+    boxes_area = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+    union_area = box_area + boxes_area - intersection_area
+
+    # Compute IoU
+    iou = intersection_area / union_area
+
+    return iou
+
+
+def xywh2xyxy(x):
+    # Convert bounding box (x, y, w, h) to bounding box (x1, y1, x2, y2)
+    y = np.copy(x)
+    y[..., 0] = x[..., 0] - x[..., 2] / 2
+    y[..., 1] = x[..., 1] - x[..., 3] / 2
+    y[..., 2] = x[..., 0] + x[..., 2] / 2
+    y[..., 3] = x[..., 1] + x[..., 3] / 2
+    return y
+
+
+class ORTDetector(FileLock):
+    def __init__(self, model_config: ORTModelConfig):
+        super().__init__()
+        if not model_config:
+            raise ValueError(f"{LP} no config passed!")
+        self.config = model_config
+        self.options: ORTModelOptions = self.config.detection_options
+        self.processor: ModelProcessor = self.config.processor
+        self.name: str = self.config.name
+        self.model: Optional[str] = None
+        self.id: uuid.uuid4 = self.config.id
+        self.description: Optional[str] = model_config.description
+        self.session: Optional[ort.InferenceSession] = None
+        self.img_height: int = 0
+        self.img_width: int = 0
+        self.input_names: List[Optional[AnyStr]] = []
+        self.LP: str = f"{LP}'{self.name}':"
+
+        self.input_shape: Tuple[int, int, int] = (0, 0, 0)
+        self.input_height: int = 0
+        self.input_width: int = 0
+
+        self.output_names: List[Optional[AnyStr]]
+        # Initialize model
+        self.initialize_model(self.config.input)
+
+    def __call__(self, image):
+        return self.detect(image)
+
+    def initialize_model(self, path: Path):
+        logger.debug(
+            f"{LP} loading model into processor [{self.processor}] memory: {self.name} ({self.id}) -> {ort.get_device() = }"
+        )
+        providers = ["CPUExecutionProvider"]
+        # Check if GPU is available
+        if self.processor == ModelProcessor.GPU:
+            if ort.get_device() == "GPU":
+                providers.insert(0, "CUDAExecutionProvider")
+            else:
+                logger.warning(
+                    f"{LP} GPU not available, using CPU for model: {self.name}"
+                )
+                self.processor = self.config.processor = ModelProcessor.CPU
+        self.session = ort.InferenceSession(
+            path, providers=providers
+        )
+        # Get model info
+        self.get_input_details()
+        self.get_output_details()
+        self.create_lock()
+
+
+    def detect(self, image: np.ndarray):
+        input_tensor = self.prepare_input(image)
+        logger.debug(
+            f"{LP}detect: '{self.name}' ({self.processor}) - "
+            f"input image {self.img_width}*{self.img_height} - model input {self.config.width}*{self.config.height}"
+            f"{' [squared]' if self.config.square else ''}"
+        )
+
+        # Perform inference on the image
+        outputs = self.inference(input_tensor)
+        b_boxes: np.ndarray
+        confs: np.ndarray
+        labels: np.ndarray
+
+        b_boxes, confs, labels = self.process_output(outputs)
+
+        b_boxes = b_boxes.astype(np.int32)
+        confs = confs.astype(np.float32)
+        labels = labels.astype(np.int32)
+        # get label names from label index
+        labels = [self.config.labels[i] for i in labels]
+        result = DetectionResults(
+            success=True if labels else False,
+            type=self.config.type_of,
+            processor=self.processor,
+            name=self.name,
+            results=[
+                Result(label=labels[i], confidence=confs[i], bounding_box=b_boxes[i])
+                for i in range(len(labels))
+            ],
+        )
+        return result
+
+    def prepare_input(self, image: np.ndarray) -> np.ndarray:
+        """Prepare a numpy array image for onnxruntime InferenceSession"""
+        self.img_height, self.img_width = image.shape[:2]
+
+        input_img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+        if self.config.square:
+
+            logger.debug(f"{LP}detect: '{self.name}' - padding image to square")
+            # Pad image to square
+            input_img = np.pad(
+                input_img,
+                (
+                    (0, max(self.img_height, self.img_width) - self.img_height),
+                    (0, max(self.img_height, self.img_width) - self.img_width),
+                    (0, 0),
+                ),
+                "constant",
+                constant_values=0,
+            )
+
+
+        # Resize input image
+        input_img = cv2.resize(input_img, (self.input_width, self.input_height))
+
+        # Scale input pixel values to 0 to 1
+        input_img = input_img / 255.0
+        input_img = input_img.transpose(2, 0, 1)
+        input_tensor = input_img[np.newaxis, :, :, :].astype(np.float32)
+
+        return input_tensor
+
+    def inference(self, input_tensor) -> Optional[List[Union[np.ndarray, List, Dict]]]:
+        """Perform inference on the prepared input image"""
+        outputs: Optional[List[Union[np.ndarray, List, Dict]]] = None
+        try:
+            self.acquire_lock()
+            start = time.perf_counter()
+            outputs = self.session.run(
+                self.output_names, {self.input_names[0]: input_tensor}
+            )
+        except Exception as e:
+            logger.error(f"{LP} Error while running model: {e}")
+            raise e
+        else:
+            logger.debug(
+                f"perf:{LP}{self.processor}: '{self.name}' detection "
+                f"took: {time.perf_counter() - start:.5f} s"
+            )
+        finally:
+            self.release_lock()
+        return outputs
+
+    def process_output(self, output):
+        predictions = np.squeeze(output[0]).T
+
+        # Filter out object confidence scores below threshold
+        scores = np.max(predictions[:, 4:], axis=1)
+        predictions = predictions[scores > self.options.confidence, :]
+        scores = scores[scores > self.options.confidence]
+
+        if len(scores) == 0:
+            return np.ndarray(), np.ndarray(), np.ndarray()
+
+        # Get the class with the highest confidence
+        class_ids = np.argmax(predictions[:, 4:], axis=1)
+
+        # Get bounding boxes for each object
+        boxes = self.extract_boxes(predictions)
+
+        # Apply non-maxima suppression to suppress weak, overlapping bounding boxes
+        indices = nms(boxes, scores, self.options.nms)
+
+        return boxes[indices], scores[indices], class_ids[indices]
+
+    def extract_boxes(self, predictions):
+        # Extract boxes from predictions
+        boxes = predictions[:, :4]
+
+        # Scale boxes to original image dimensions
+        boxes = self.rescale_boxes(boxes)
+
+        # Convert boxes to xyxy format
+        boxes = xywh2xyxy(boxes)
+
+        return boxes
+
+    def rescale_boxes(self, boxes):
+        # Rescale boxes to original image dimensions
+        input_shape = np.array(
+            [self.input_width, self.input_height, self.input_width, self.input_height]
+        )
+        boxes = np.divide(boxes, input_shape, dtype=np.float32)
+        boxes *= np.array(
+            [self.img_width, self.img_height, self.img_width, self.img_height]
+        )
+        return boxes
+
+    def get_input_details(self):
+        model_inputs = self.session.get_inputs()
+        self.input_names = [model_inputs[i].name for i in range(len(model_inputs))]
+
+        self.input_shape = model_inputs[0].shape
+        self.input_height = self.input_shape[2]
+        self.input_width = self.input_shape[3]
+
+    def get_output_details(self):
+        model_outputs = self.session.get_outputs()
+        self.output_names = [model_outputs[i].name for i in range(len(model_outputs))]

@@ -139,7 +139,8 @@ class UltralyticsYOLODetector(FileLock):
                     self.ok = False
                     raise model_load_exc
                 else:
-                    self.model.to(self.device)
+                    if isinstance(self.model, ultralytics.YOLO):
+                        self.model.to(self.device)
                     logger.debug(f"{LP} model loaded successfully -> {self.model = }")
 
     @lru_cache(maxsize=1)
@@ -179,7 +180,7 @@ class UltralyticsYOLODetector(FileLock):
             )
         else:
             logger.debug(f"{LP} detecting objects in image...")
-            detect_timer = time.perf_counter()
+            detection_timer = time.perf_counter()
             labels = []
             confs = []
             b_boxes = []
@@ -190,9 +191,7 @@ class UltralyticsYOLODetector(FileLock):
                 logger.error(f"{LP} Error model: '{self.name}' - while detecting objects! => {detect_exc}")
                 raise detect_exc
             else:
-                logger.debug(
-                    f"perf::{LP} detection took {time.perf_counter() - detect_timer:.4f}s"
-                )
+
                 # only 1 image so only 1 result (batch size = 1)
                 for _result in results:
                     boxes = _result.boxes  # Boxes object for bbox outputs
@@ -205,7 +204,10 @@ class UltralyticsYOLODetector(FileLock):
                     labels.extend([_result.names[i] for i in boxes.cls.int().tolist()])
             finally:
                 self.release_lock()
-
+            logger.debug(
+                f"perf:{LP}{self.processor}: '{self.name}' detection "
+                f"took: {time.perf_counter() - detection_timer:.5f} s"
+            )
             result = DetectionResults(
                 success=True if labels else False,
                 type=self.config._model_type,
