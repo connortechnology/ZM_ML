@@ -161,7 +161,7 @@ def draw_bounding_boxes(
     # FIXME: need to add scaling dependant on image dimensions
     bgr_slate_colors = SLATE_COLORS[::-1]
     w, h = image.shape[:2]
-    lp = f"image::draw bbox::"
+    lp = f"image:draw bbox::"
     arr_len = len(bgr_slate_colors)
     i = 0
     for label, conf, bbox in zip(labels, confidences, boxes):
@@ -176,6 +176,7 @@ def draw_bounding_boxes(
 
             else:
                 label = f"{label} [{model}]"
+            logger.debug(f"{lp} writing model '{model}'")
         # draw bounding box around object
         cv2.rectangle(image, (bbox[0], bbox[1]), (bbox[2], bbox[3]), bbox_color, 2)
 

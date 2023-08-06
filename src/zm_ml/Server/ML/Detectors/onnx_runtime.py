@@ -126,14 +126,11 @@ class ORTDetector(FileLock):
                     f"{LP} GPU not available, using CPU for model: {self.name}"
                 )
                 self.processor = self.config.processor = ModelProcessor.CPU
-        self.session = ort.InferenceSession(
-            path, providers=providers
-        )
+        self.session = ort.InferenceSession(path, providers=providers)
         # Get model info
         self.get_input_details()
         self.get_output_details()
         self.create_lock()
-
 
     def detect(self, image: np.ndarray):
         input_tensor = self.prepare_input(image)
@@ -142,27 +139,19 @@ class ORTDetector(FileLock):
             f"input image {self.img_width}*{self.img_height} - model input {self.config.width}*{self.config.height}"
             f"{' [squared]' if self.config.square else ''}"
         )
-
-        # Perform inference on the image
         outputs = self.inference(input_tensor)
-        b_boxes: np.ndarray
-        confs: np.ndarray
-        labels: np.ndarray
-
+        b_boxes: List
+        confs: List
+        labels: List
         b_boxes, confs, labels = self.process_output(outputs)
-
-        b_boxes = b_boxes.astype(np.int32)
-        confs = confs.astype(np.float32)
-        labels = labels.astype(np.int32)
-        # get label names from label index
-        labels = [self.config.labels[i] for i in labels]
+        # labels = [self.config.labels[i] for i in labels]
         result = DetectionResults(
             success=True if labels else False,
+            name=self.name,
             type=self.config.type_of,
             processor=self.processor,
-            name=self.name,
             results=[
-                Result(label=labels[i], confidence=confs[i], bounding_box=b_boxes[i])
+                Result(label=self.config.labels[labels[i]], confidence=confs[i], bounding_box=b_boxes[i])
                 for i in range(len(labels))
             ],
         )
@@ -175,7 +164,6 @@ class ORTDetector(FileLock):
         input_img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         if self.config.square:
-
             logger.debug(f"{LP}detect: '{self.name}' - padding image to square")
             # Pad image to square
             input_img = np.pad(
@@ -188,7 +176,6 @@ class ORTDetector(FileLock):
                 "constant",
                 constant_values=0,
             )
-
 
         # Resize input image
         input_img = cv2.resize(input_img, (self.input_width, self.input_height))
@@ -210,8 +197,7 @@ class ORTDetector(FileLock):
                 self.output_names, {self.input_names[0]: input_tensor}
             )
         except Exception as e:
-            logger.error(f"{LP} Error while running model: {e}")
-            raise e
+            logger.error(f"{LP} '{self.config.name}' Error while running model: {e}")
         else:
             logger.debug(
                 f"perf:{LP}{self.processor}: '{self.name}' detection "
@@ -222,26 +208,51 @@ class ORTDetector(FileLock):
         return outputs
 
     def process_output(self, output):
-        predictions = np.squeeze(output[0]).T
+        # x = self.config.extra
 
-        # Filter out object confidence scores below threshold
-        scores = np.max(predictions[:, 4:], axis=1)
-        predictions = predictions[scores > self.options.confidence, :]
-        scores = scores[scores > self.options.confidence]
+        if output is not None:
+            num_outputs = len(output)
+            # Non NAS
+            if num_outputs == 1:
+                predictions = np.squeeze(output[0]).T
+                # Filter out object confidence scores below threshold
+                scores = np.max(predictions[:, 4:], axis=1)
+                # predictions = predictions[scores > self.options.confidence, :]
+                # scores = scores[scores > self.options.confidence]
 
-        if len(scores) == 0:
-            return np.ndarray(), np.ndarray(), np.ndarray()
+                if len(scores) == 0:
+                    # empty results
+                    return np.empty((0, 4)), np.empty((0,)), np.empty((0,))
 
-        # Get the class with the highest confidence
-        class_ids = np.argmax(predictions[:, 4:], axis=1)
+                # Get the class with the highest confidence
+                # Get bounding boxes for each object
+                boxes = self.extract_boxes(predictions)
+                class_ids = np.argmax(predictions[:, 4:], axis=1)
 
-        # Get bounding boxes for each object
-        boxes = self.extract_boxes(predictions)
+            # NAS
+            elif num_outputs == 2:
+                boxes: np.ndarray
+                raw_scores: np.ndarray
+                boxes, raw_scores = output  # get boxes and scores from outputs
+                # find max from scores and flatten it [1, n, num_class] => [n]
+                scores = raw_scores.max(axis=2).flatten()
+                if len(scores) == 0:
+                    # empty results
+                    return np.empty((0, 4)), np.empty((0,)), np.empty((0,))
 
-        # Apply non-maxima suppression to suppress weak, overlapping bounding boxes
-        indices = nms(boxes, scores, self.options.nms)
+                boxes = np.squeeze(boxes, 0)  # squeeze boxes [1, n, 4] => [n, 4]
+                boxes = self.rescale_boxes(boxes)
 
-        return boxes[indices], scores[indices], class_ids[indices]
+                # find index from max scores (class_id) and flatten it [1, n, num_class] => [n]
+                class_ids = np.argmax(raw_scores, axis=2).flatten()
+        else:
+            return np.empty((0, 4)), np.empty((0,)), np.empty((0,))
+
+        indices = cv2.dnn.NMSBoxes(
+            boxes, scores, self.options.confidence, self.options.nms
+        )
+        return boxes[indices].astype(np.int32).tolist(), scores[indices].astype(np.float32).tolist(), class_ids[
+            indices].astype(np.int32).tolist()
 
     def extract_boxes(self, predictions):
         # Extract boxes from predictions

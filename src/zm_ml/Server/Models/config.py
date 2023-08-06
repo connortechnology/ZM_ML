@@ -463,6 +463,7 @@ class ORTModelConfig(BaseModelConfig):
         repr=False,
         exclude=True,
     )
+    extra: Optional[str] = None
 
     @model_validator(mode="after")
     def _validate_model(self):

@@ -84,17 +84,17 @@ class Result(BaseModel):
         )
 
     def __str__(self):
-        return f"{self.label} ({self.confidence:.2f}) @ {self.bounding_box}"
+        return f"'{self.label}' ({self.confidence:.2f}) @ {self.bounding_box}"
 
     def __repr__(self):
-        return f"<{self.label} ({self.confidence * 100:.2f}%) @ {self.bounding_box}>"
+        return f"<'{self.label}' ({self.confidence * 100:.2f}%) @ {self.bounding_box}>"
 
 
 class DetectionResults(BaseModel, arbitrary_types_allowed=True):
     success: bool = Field(...)
+    name: str = Field(...)
     type: ModelType = Field(...)
     processor: ModelProcessor = Field(...)
-    name: str = Field(...)
     results: Optional[List[Result]] = Field(None)
     removed: Optional[List[Result]] = Field(None)
 
