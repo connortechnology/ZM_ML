@@ -148,6 +148,11 @@ class ORTModelOptions(BaseModelOptions):
         0.4, ge=0.0, le=1.0, description="Non-Maximum Suppression Threshold (IoU)"
     )
 
+class TRTModelOptions(BaseModelOptions):
+    nms: Optional[float] = Field(
+        0.4, ge=0.0, le=1.0, description="Non-Maximum Suppression Threshold (IoU)"
+    )
+
 class UltralyticsModelOptions(BaseModelOptions):
     nms: Optional[float] = Field(
         0.4, ge=0.0, le=1.0, description="Non-Maximum Suppression Threshold (IoU)"
@@ -384,6 +389,8 @@ class BaseModelConfig(BaseModel):
         TPUModelOptions,
         TorchModelOptions,
         UltralyticsModelOptions,
+        TRTModelOptions,
+        ORTModelOptions,
         None,
     ] = Field(
         default_factory=BaseModelOptions,
@@ -464,6 +471,43 @@ class ORTModelConfig(BaseModelConfig):
         exclude=True,
     )
     extra: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _validate_model(self):
+        model_name = self.name
+        model_input: Optional[Path] = self.input
+        labels = self.labels
+        self.labels = validate_model_labels(labels, info=None, model_name=model_name, labels_file=self.classes)
+        v = model_input
+        assert isinstance(v, (Path, str)), f"Invalid type: {type(v)} for {v}"
+        if isinstance(v, str):
+            v = Path(v)
+
+        return self
+
+class TRTModelConfig(BaseModelConfig):
+    input: Path = Field(None, description="model file/dir path (Optional)")
+    classes: Path = Field(default=None, description="model labels file path (Optional)")
+    height: Optional[int] = Field(
+        416, ge=1, description="Model input height (resized for model)"
+    )
+    width: Optional[int] = Field(
+        416, ge=1, description="Model input width (resized for model)"
+    )
+    square: Optional[bool] = Field(
+        False, description="Zero pad the image to be a square"
+    )
+
+    gpu_idx: Optional[int] = None
+    lib_path: Optional[Path] = None
+
+
+    labels: List[str] = Field(
+        default=None,
+        description="model labels parsed into a list of strings",
+        repr=False,
+        exclude=True,
+    )
 
     @model_validator(mode="after")
     def _validate_model(self):

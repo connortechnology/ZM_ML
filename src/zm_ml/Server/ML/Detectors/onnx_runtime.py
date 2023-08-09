@@ -4,18 +4,20 @@ import time
 import uuid
 from logging import getLogger
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING, List, Tuple, Union, AnyStr, Dict
+from typing import Optional, TYPE_CHECKING, List, Tuple, Union, AnyStr, Dict, Collection
 from warnings import warn
 
 try:
     import cv2
 except ImportError:
-    warn("OpenCV not installed, cannot use OpenCV detectors")
+    warn("OpenCV not installed! Please install/link to it!")
+
     raise
 try:
     import onnxruntime as ort
 except ImportError:
     warn("onnxruntime not installed, cannot use onnxruntime detectors")
+    ort = None
 import numpy as np
 
 from ....Shared.Models.Enums import ModelProcessor
@@ -105,7 +107,7 @@ class ORTDetector(FileLock):
         self.input_height: int = 0
         self.input_width: int = 0
 
-        self.output_names: List[Optional[AnyStr]]
+        self.output_names: Optional[List[Optional[AnyStr]]] = None
         # Initialize model
         self.initialize_model(self.config.input)
 
@@ -114,7 +116,7 @@ class ORTDetector(FileLock):
 
     def initialize_model(self, path: Path):
         logger.debug(
-            f"{LP} loading model into processor [{self.processor}] memory: {self.name} ({self.id}) -> {ort.get_device() = }"
+            f"{LP} loading model into processor [{self.processor}] memory: {self.name} ({self.id})"
         )
         providers = ["CPUExecutionProvider"]
         # Check if GPU is available
@@ -197,7 +199,7 @@ class ORTDetector(FileLock):
                 self.output_names, {self.input_names[0]: input_tensor}
             )
         except Exception as e:
-            logger.error(f"{LP} '{self.config.name}' Error while running model: {e}")
+            logger.error(f"{LP} '{self.name}' Error while running model: {e}")
         else:
             logger.debug(
                 f"perf:{LP}{self.processor}: '{self.name}' detection "
@@ -207,45 +209,84 @@ class ORTDetector(FileLock):
             self.release_lock()
         return outputs
 
-    def process_output(self, output):
-        # x = self.config.extra
-
-        if output is not None:
+    def process_output(self, output: List[Optional[np.ndarray]]) -> Tuple[List, List, List]:
+        return_empty: bool = False
+        if output:
+            logger.debug(f"{LP} '{self.name}' output shapes: {[o.shape for o in output]}")
+            # NAS new model.export() has FLAT (n, 7) and BATCHED  outputs
             num_outputs = len(output)
-            # Non NAS
             if num_outputs == 1:
-                predictions = np.squeeze(output[0]).T
-                # Filter out object confidence scores below threshold
-                scores = np.max(predictions[:, 4:], axis=1)
-                # predictions = predictions[scores > self.options.confidence, :]
-                # scores = scores[scores > self.options.confidence]
+                if isinstance(output[0], np.ndarray):
+                    if output[0].shape == (1, 84, 8400):
+                        # v8
+                        # (1, 84, 8400) -> (8400, 84)
+                        predictions = np.squeeze(output[0]).T
+                        logger.debug(f"{LP} yolov8 output shape = (1, 84, 8400) detected!")
+                        # Filter out object confidence scores below threshold
+                        scores = np.max(predictions[:, 4:], axis=1)
+                        # predictions = predictions[scores > self.options.confidence, :]
+                        # scores = scores[scores > self.options.confidence]
 
-                if len(scores) == 0:
-                    # empty results
-                    return np.empty((0, 4)), np.empty((0,)), np.empty((0,))
+                        if len(scores) == 0:
+                            return_empty = True
 
-                # Get the class with the highest confidence
-                # Get bounding boxes for each object
-                boxes = self.extract_boxes(predictions)
-                class_ids = np.argmax(predictions[:, 4:], axis=1)
-
-            # NAS
+                        # Get the class with the highest confidence
+                        # Get bounding boxes for each object
+                        boxes = self.extract_boxes(predictions)
+                        class_ids = np.argmax(predictions[:, 4:], axis=1)
+                    elif len(output[0].shape) == 2 and output[0].shape[1] == 7:
+                        logger.debug(f"{LP} YOLO-NAS model.export() FLAT output detected!")
+                        # YLO-NAS .export FLAT output = (n, 7)
+                        flat_predictions = output[0]
+                        # pull out the class index and class score from the predictions
+                        # and convert them to numpy arrays
+                        flat_predictions = np.array(flat_predictions)
+                        class_ids = flat_predictions[:, 6].astype(int)
+                        scores = flat_predictions[:, 5]
+                        # pull the boxes out of the predictions and convert them to a numpy array
+                        boxes = flat_predictions[:, 1:4]
             elif num_outputs == 2:
-                boxes: np.ndarray
-                raw_scores: np.ndarray
-                boxes, raw_scores = output  # get boxes and scores from outputs
-                # find max from scores and flatten it [1, n, num_class] => [n]
-                scores = raw_scores.max(axis=2).flatten()
-                if len(scores) == 0:
-                    # empty results
-                    return np.empty((0, 4)), np.empty((0,)), np.empty((0,))
+                # NAS - .convert_to_onnx() output = [(1, 8400, 4), (1, 8400, 80)]
+                if output[0].shape == (1, 8400, 4) and output[1].shape == (1, 8400, 80):
+                    # YOLO-NAS
+                    logger.debug(f"{LP} YOLO-NAS model.convert_to_onnx() output detected!")
+                    _boxes: np.ndarray
+                    raw_scores: np.ndarray
+                    # get boxes and scores from outputs
+                    _boxes, raw_scores = output
+                    # find max from scores and flatten it [1, n, num_class] => [n]
+                    scores = raw_scores.max(axis=2).flatten()
+                    if len(scores) == 0:
+                        return_empty = True
+                    # squeeze boxes [1, n, 4] => [n, 4]
+                    _boxes = np.squeeze(_boxes, 0)
+                    _boxes = self.rescale_boxes(_boxes)
+                    # find index from max scores (class_id) and flatten it [1, n, num_class] => [n]
+                    class_ids = np.argmax(raw_scores, axis=2).flatten()
+            elif num_outputs == 4:
+                # NAS model.export() batch output len = 4
+                # num_predictions [B, 1]
+                # pred_boxes [B, N, 4]
+                # pred_scores [B, N]
+                # pred_classes [B, N]
+                # Here B corresponds to batch size and N is the maximum number of detected objects per image
+                if len(output[0].shape) == 2 and len(output[1].shape) == 3 and len(output[2].shape) == 2 and len(output[3].shape) == 2:
+                    logger.debug(f"{LP} YOLO-NAS model.export() BATCHED output detected!")
+                    batch_size = output[0].shape[0]
+                    max_detections = output[1].shape[1]
+                    num_predictions, pred_boxes, pred_scores, pred_classes = output
+                    assert num_predictions.shape[0] == 1, "Only batch size of 1 is supported by this function"
 
-                boxes = np.squeeze(boxes, 0)  # squeeze boxes [1, n, 4] => [n, 4]
-                boxes = self.rescale_boxes(boxes)
+                    num_predictions = int(num_predictions.item())
+                    boxes = pred_boxes[0, :num_predictions]
+                    scores = pred_scores[0, :num_predictions]
+                    class_ids = pred_classes[0, :num_predictions]
 
-                # find index from max scores (class_id) and flatten it [1, n, num_class] => [n]
-                class_ids = np.argmax(raw_scores, axis=2).flatten()
+
         else:
+            return_empty = True
+
+        if return_empty:
             return np.empty((0, 4)), np.empty((0,)), np.empty((0,))
 
         indices = cv2.dnn.NMSBoxes(
@@ -255,19 +296,17 @@ class ORTDetector(FileLock):
             indices].astype(np.int32).tolist()
 
     def extract_boxes(self, predictions):
+        """Extract boxes from predictions, scale them and convert from xywh to xyxy format"""
         # Extract boxes from predictions
         boxes = predictions[:, :4]
-
         # Scale boxes to original image dimensions
         boxes = self.rescale_boxes(boxes)
-
         # Convert boxes to xyxy format
         boxes = xywh2xyxy(boxes)
-
         return boxes
 
     def rescale_boxes(self, boxes):
-        # Rescale boxes to original image dimensions
+        """Rescale boxes to original image dimensions"""
         input_shape = np.array(
             [self.input_width, self.input_height, self.input_width, self.input_height]
         )

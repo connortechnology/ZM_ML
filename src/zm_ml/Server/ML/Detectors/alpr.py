@@ -21,7 +21,6 @@ from ...Models.config import (
 )
 from ....Shared.Models.Enums import ModelProcessor, ALPRAPIType, ALPRService
 from ...utils import resize_cv2_image
-
 from ....Server.Log import SERVER_LOGGER_NAME
 
 logger = getLogger(SERVER_LOGGER_NAME)

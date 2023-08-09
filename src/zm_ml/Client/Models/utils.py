@@ -2,7 +2,7 @@ from __future__ import annotations
 import logging
 from hashlib import new
 from pathlib import Path
-from typing import List, Dict, Tuple, Optional, Union, TYPE_CHECKING
+from typing import List, Dict, Tuple, Optional, Union, TYPE_CHECKING, AnyStr
 import warnings
 
 import cv2
@@ -13,12 +13,15 @@ try:
     from shapely.geometry import Polygon
 except ImportError as e:
     warnings.warn(f"ImportError: {e}", ImportWarning)
+    Polygon = None
 
 from ..Log import CLIENT_LOGGER_NAME
 
 if TYPE_CHECKING:
     from ..Libs.API import ZMAPI
+    from ...Shared.configs import GlobalConfig
 
+g: Optional[GlobalConfig] = None
 logger = logging.getLogger(CLIENT_LOGGER_NAME)
 
 SLATE_COLORS: List[Tuple[int, int, int]] = [
@@ -103,46 +106,118 @@ def draw_filtered_bboxes(
     return image
 
 
+def font_scale_from_image_size(image: np.ndarray) -> float:
+    """Returns a font scale and thickness based on the image size.
+
+    Args:
+        image (np.ndarray): The image to get the font scale from.
+
+    Returns:
+        Tuple[float, int]: The font scale, thickness.
+    """
+    w, h = image.shape[:2]
+    font_thickness = 1
+    font_scale = 0.6
+    # FIXME: add something better than this
+    if w >= 720:
+        # 720p+
+        font_scale = 1.0
+        font_thickness = 2
+    elif w >= 1080:
+        # 1080p+
+        font_scale = 1.7
+        font_thickness = 2
+    elif w >= 1880:
+        # 3-4k ish? +
+        font_scale = 3.2
+        font_thickness = 4
+    return font_scale, font_thickness
+
+
 def draw_zones(
     image: np.ndarray,
-    zone_polygons: List[Polygon],
-    poly_color: Tuple[int, int, int] = (255, 255, 255),
+    zone_polygons: List[Dict[AnyStr, Polygon]],
+    poly_color: Tuple[int, int, int] = (0, 0, 255),
     poly_line_thickness: int = 1,
+    show_name: bool = False
 ):
     lp: str = "image::zones::"
     # image = image.copy()
-    if poly_line_thickness:
-        for zone_polygon in zone_polygons:
-            try:
-                """
-                Syntax: cv2.polylines(image, [pts], isClosed, color, thickness)
+    if not poly_line_thickness:
+        poly_line_thickness = 1
 
-                image: It is the image on which circle is to be drawn.
-
-                pts: Array of polygonal curves.
-
-                npts: Array of polygon vertex counters.
-
-                ncontours: Number of curves.
-
-                isClosed: Flag indicating whether the drawn polylines are closed or not. If they are closed, the function draws a line from the last vertex of each curve to its first vertex.
-
-                color: It is the color of polyline to be drawn. For BGR, we pass a tuple.
-
-                thickness: It is thickness of the polyline edges.
-                """
-                cv2.polylines(
-                    image,
-                    [np.asarray(list(zip(*zone_polygon.exterior.coords.xy))[:-1])],
-                    True,
-                    poly_color,
-                    poly_line_thickness,
+    for zone_polygon in zone_polygons:
+        zone_name = zone_polygon["name"]
+        zone_pts = zone_polygon["points"]
+        try:
+            raw_pts = list(zip(*zone_pts.exterior.coords.xy))[:-1]
+            # shape of point array [len(raw_points), 2]
+            _pts = np.asarray(raw_pts).astype(np.int32)
+            # reshape the point array to make it 3D
+            _pts = _pts.reshape(-1, 1, 2)  # now shape [len(raw_points), 1, 2]
+            cv2.polylines(
+                image,
+                [_pts],
+                True,
+                poly_color,
+                poly_line_thickness,
+            )
+        except Exception as exc:
+            logger.error(f"{lp} could not draw zone '{zone_name}' polygon -> {exc}", exc_info=True)
+            return
+        else:
+            logger.debug(f"{lp} Successfully drew zone '{zone_name}' polygon")
+            if show_name:
+                # label the zone
+                font_scale, font_thickness = font_scale_from_image_size(image)
+                font_type = cv2.FONT_HERSHEY_DUPLEX
+                text_size = cv2.getTextSize(
+                    zone_name, font_type, font_scale, font_thickness
+                )[0]
+                text_width_padded = text_size[0] + 4
+                text_height_padded = text_size[1] + 4
+                r_top_left = (
+                    int(zone_pts.centroid.x),
+                    int(zone_pts.centroid.y - text_height_padded),
                 )
-            except Exception as exc:
-                logger.error(f"{lp} could not draw polygon -> {exc}")
-                return
-            else:
-                logger.debug(f"{lp} Successfully drew polygon")
+                r_bottom_right = (
+                    int(zone_pts.centroid.x + text_width_padded),
+                    int(zone_pts.centroid.y),
+                )
+                try:
+                    # # Make sure the text is inside the image
+                    # if r_bottom_right[0] > image.shape[1]:
+                    #     r_bottom_right = (image.shape[1], r_bottom_right[1])
+                    #     r_top_left = (
+                    #         r_bottom_right[0] - text_width_padded,
+                    #         r_top_left[1],
+                    #     )
+                    # if r_bottom_right[1] > image.shape[0]:
+                    #     r_bottom_right = (r_bottom_right[0], image.shape[0])
+                    #     r_top_left = (
+                    #         r_top_left[0],
+                    #         r_bottom_right[1] - text_height_padded,
+                    #     )
+                    # Background
+                    cv2.rectangle(image, r_top_left, r_bottom_right, (0, 0, 0), -1)
+                    # adjust text to be on background
+                    text_pos = (r_top_left[0] + 2, r_bottom_right[1] - 2)
+                    cv2.putText(
+                        image,
+                        text=zone_name,
+                        org=text_pos,
+                        fontFace=font_type,
+                        fontScale=font_scale,
+                        color=[255, 255, 255],
+                        thickness=font_thickness,
+                        lineType=cv2.LINE_AA,
+                        bottomLeftOrigin=False,
+                    )
+                except Exception as exc:
+                    logger.error(f"{lp} could not label zone name: '{zone_name}' -> {exc}", exc_info=True)
+                    return
+                else:
+                    logger.debug(f"{lp} Successfully labeled zone name: '{zone_name}'")
     return image
 
 
@@ -181,25 +256,7 @@ def draw_bounding_boxes(
         cv2.rectangle(image, (bbox[0], bbox[1]), (bbox[2], bbox[3]), bbox_color, 2)
 
         # write label
-        font_thickness = 1
-        font_scale = 0.6
-        # FIXME: add something better than this
-        if w >= 720:
-            # 720p+
-            font_scale = 1.0
-            font_thickness = 2
-        elif w >= 1080:
-            # 1080p+
-            font_scale = 1.7
-            font_thickness = 2
-        elif w >= 1880:
-            # 3-4k ish? +
-            font_scale = 3.2
-            font_thickness = 4
-
-        # logger.debug(
-        #     f"{lp} ({i}/{len(labels)}) w*h={(w, h)} {font_scale=} {font_thickness=} {bbox=} "
-        # )
+        font_scale, font_thickness = font_scale_from_image_size(image)
         font_type = cv2.FONT_HERSHEY_DUPLEX
         text_size = cv2.getTextSize(label, font_type, font_scale, font_thickness)[0]
         text_width_padded = text_size[0] + 4
@@ -208,8 +265,6 @@ def draw_bounding_boxes(
         r_bottom_right = (bbox[0] + text_width_padded, bbox[1])
         # Background
         cv2.rectangle(image, r_top_left, r_bottom_right, bbox_color, -1)
-        # cv2.putText(image, text, (x, y), font, font_scale, color, thickness)
-
         # Make sure the text is inside the image
         if r_bottom_right[0] > w:
             r_bottom_right = (w, r_bottom_right[1])

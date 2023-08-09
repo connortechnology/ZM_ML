@@ -278,14 +278,30 @@ class DetectionSettings(BaseModel):
 
         class Annotations(BaseModel):
             class Zones(DefaultNotEnabled):
-                color: Union[str, Tuple[int, int, int], None] = Field((255, 0, 0))
+                color: Union[Tuple[int, int, int], None] = Field((255, 0, 0), description="Color of polygon line in BGR")
                 thickness: Optional[int] = Field(2)
+                show_name: Optional[bool] = Field(False, description="Overlay the zone name on the image")
+
+                @field_validator("color", mode="before")
+                def _validate_color(cls, v):
+                    if v:
+                        if isinstance(v, str):
+                            v = tuple(int(x) for x in v.lstrip('(').rstrip(')').split(','))
+                        if not isinstance(v, tuple) or len(v) != 3:
+                            raise ValueError("Must be a tuple of 3 integers")
+                        for x in v:
+                            if not isinstance(x, int) or x < 0 or x > 255:
+                                raise ValueError("Must be a tuple of 3 integers between 0 and 255")
+                    assert isinstance(v, (tuple, None))
+                    return v
+
 
             class Models(DefaultEnabled):
                 processor: Optional[bool] = Field(False)
 
             zones: Optional[Zones] = Field(default_factory=Zones)
             model: Optional[Models] = Field(default_factory=Models)
+
             confidence: Optional[bool] = Field(True)
 
         class Training(DefaultEnabled):

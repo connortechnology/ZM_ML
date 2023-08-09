@@ -898,7 +898,6 @@ class ZMClient:
             for route in self.routes:
                 route_loop += 1
                 if route.enabled:
-
                     url = f"{str(route.host)}detect/group"
                     with aiohttp.MultipartWriter("form-data") as mpwriter:
                         part = mpwriter.append_json(models_str)
@@ -1236,9 +1235,12 @@ class ZMClient:
                     )
                     continue
                 zone_points = zone_data.points
+                # points already validated
                 zone_polygon = Polygon(zone_points)
-                if zone_polygon not in self.zone_polygons:
-                    self.zone_polygons.append(zone_polygon)
+                _data = {"name": zone_name, "points": zone_polygon}
+
+                if _data not in self.zone_polygons:
+                    self.zone_polygons.append(_data)
                 bbox_polygon = Polygon(self._bbox2points(bbox))
 
                 if bbox_polygon.intersects(zone_polygon):
@@ -2138,14 +2140,22 @@ class ZMClient:
         write_processor = g.config.detection_settings.images.annotation.model.processor
 
         if _skip:
-            prepared_image = image
-            logger.debug(
-                f"{LP} No need to annotate, grabbed annotated image from virel.ai"
-            )
+            logger.debug(f"{LP} No need to annotate, grabbing pre annotated image")
         else:
-            logger.debug(f"{lp} Annotating image")
+            if g.config.detection_settings.images.annotation.zones.enabled:
+                from .Models.utils import draw_zones
+
+                logger.debug(f"{lp} Annotating zones")
+                prepared_image = draw_zones(
+                    prepared_image,
+                    self.zone_polygons,
+                    g.config.detection_settings.images.annotation.zones.color,
+                    g.config.detection_settings.images.annotation.zones.thickness,
+                    g.config.detection_settings.images.annotation.zones.show_name,
+                )
+            logger.debug(f"{lp} Annotating detections")
             prepared_image: np.ndarray = draw_bounding_boxes(
-                image,
+                prepared_image,
                 labels=labels,
                 confidences=scores,
                 boxes=boxes,
@@ -2155,60 +2165,57 @@ class ZMClient:
                 write_model=write_model,
                 write_processor=write_processor,
             )
-            if g.config.detection_settings.images.debug.enabled:
-                from .Models.utils import draw_filtered_bboxes
+        if g.config.detection_settings.images.debug.enabled:
+            from .Models.utils import draw_filtered_bboxes
 
+            logger.debug(f"{lp} Debug image configured, drawing filtered out bboxes")
+
+            debug_image = draw_filtered_bboxes(
+                prepared_image, list(self.filtered_labels[image_name])
+            )
+            logger.debug(f"DBG:FIX ME>>> {list(self.filtered_labels[image_name])}")
+            from datetime import datetime
+
+            if g.config.detection_settings.images.debug.path:
+                _dest = g.config.detection_settings.images.debug.path
+                logger.debug(f"{lp} Debug image PATH configured: {_dest.as_posix()}")
+            elif g.config.system.image_dir:
+                _dest = g.config.system.image_dir
                 logger.debug(
-                    f"{lp} Debug image configured, drawing filtered out bboxes"
+                    f"{lp} Debug image path NOT configured, using system image_dir: {_dest.as_posix()}"
                 )
-
-                debug_image = draw_filtered_bboxes(
-                    prepared_image, list(self.filtered_labels[image_name])
-                )
-                logger.debug(f"DBG:FIX ME>>> {list(self.filtered_labels[image_name])}")
-                from datetime import datetime
-
-                if g.config.detection_settings.images.debug.path:
-                    _dest = g.config.detection_settings.images.debug.path
-                    logger.debug(
-                        f"{lp} Debug image PATH configured: {_dest.as_posix()}"
-                    )
-                elif g.config.system.image_dir:
-                    _dest = g.config.system.image_dir
-                    logger.debug(
-                        f"{lp} Debug image path NOT configured, using system image_dir: {_dest.as_posix()}"
-                    )
-                else:
-                    _dest = g.config.system.variable_data_path / "images"
+            else:
+                _dest = g.config.system.variable_data_path / "images"
                 logger.debug(
                     f"{lp} Debug image path and system image_dir NOT configured"
                     f" using {{system:variable_data_dir}} as base: {_dest.as_posix()}"
                 )
 
-                img_write_success = cv2.imwrite(
-                    _dest.joinpath(f"debug-img_{datetime.now()}.jpg").as_posix(),
-                    debug_image,
-                )
-                if img_write_success:
-                    logger.debug(f"{lp} Debug image written to disk.")
-                else:
-                    logger.warning(f"{lp} Debug image failed to write to disk.")
-                del debug_image
-
-        if g.config.detection_settings.images.annotation.zones.enabled:
-            from .Models.utils import draw_zones
-
-            logger.debug(f"{lp} Drawing zones")
-            prepared_image = draw_zones(
-                prepared_image,
-                self.zone_polygons,
-                g.config.detection_settings.images.annotation.zones.color,
-                g.config.detection_settings.images.annotation.zones.thickness,
+            img_write_success = cv2.imwrite(
+                _dest.joinpath(f"debug-img_{datetime.now()}.jpg").as_posix(),
+                debug_image,
             )
+            if img_write_success:
+                logger.debug(f"{lp} Debug image written to disk.")
+            else:
+                logger.warning(f"{lp} Debug image failed to write to disk.")
+            del debug_image
 
         jpg_file = g.event_path / "objdetect.jpg"
         object_file = g.event_path / "objects.json"
-        objdetect_jpg = cv2.imwrite(jpg_file.as_posix(), prepared_image)
+        objdetect_jpg = False
+        try:
+            objdetect_jpg = cv2.imwrite(jpg_file.as_posix(), prepared_image)
+        except Exception as write_img_exc:
+            logger.error(
+                f"{lp} objdetect.jpg failed to write to disk: err_msg=> \n{write_img_exc}\n"
+            )
+        else:
+            if objdetect_jpg:
+                logger.debug(f"{lp} objdetect.jpg written to disk @ '{jpg_file}'")
+            else:
+                logger.warning(f"{lp} objdetect.jpg failed to write to disk.")
+
         obj_json = {
             "frame_id": image_name,
             "labels": labels,
@@ -2224,10 +2231,6 @@ class ZMClient:
             )
         else:
             logger.debug(f"{lp} objects.json written to disk @ '{object_file}'")
-        if objdetect_jpg:
-            logger.debug(f"{lp} objdetect.jpg written to disk @ '{jpg_file}'")
-        else:
-            logger.warning(f"{lp} objdetect.jpg failed to write to disk.")
 
         _frame_id = matches["frame_id"]
         prefix = f"[{_frame_id}] "
