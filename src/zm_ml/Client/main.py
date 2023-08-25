@@ -863,14 +863,16 @@ class ZMClient:
         import aiohttp
 
         image_loop = 0
-        while self.image_pipeline.is_image_stream_active():
+        # Use an async generator to get images from the image pipeline
+        async for image, image_name in self.image_pipeline.image_generator():
             image_loop += 1
-            image, image_name = await self.image_pipeline.get_image()
 
             if image is None:
+                # None is returned if no image was returned by API
                 logger.warning(f"{lp} No image returned! trying again...")
                 continue
             if image is False:
+                # False is returned if the image stream has been exhausted
                 logger.warning(f"{lp} Image stream has been exhausted!")
                 break
 
@@ -898,6 +900,7 @@ class ZMClient:
             reply: Optional[Dict[str, Any]] = None
 
             route_loop: int = 0
+        # todo: load balance routes?
             for route in self.routes:
                 route_loop += 1
                 if route.enabled:

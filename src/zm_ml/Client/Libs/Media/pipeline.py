@@ -226,6 +226,13 @@ class APIImagePipeLine:
 
             return self._process_frame(skip=True)
 
+    async def image_generator(self):
+        """Generator to return images from the API"""
+        while self.frames_processed < self.total_max_frames:
+            yield await self.get_image()
+        pass
+
+
     def is_image_stream_active(self) -> bool:
         _cont = self.frames_processed < self.total_max_frames
         if not _cont:
