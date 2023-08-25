@@ -13,16 +13,21 @@ from pydantic import (
     IPvAnyAddress,
     SecretStr,
     computed_field,
+    model_validator,
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from .validators import validate_percentage_or_pixels, validate_resolution, validate_points
+from .validators import (
+    validate_percentage_or_pixels,
+    validate_resolution,
+    validate_points,
+)
 from ...Shared.Models.validators import (
     validate_no_scheme_url,
     validate_file,
     validate_dir,
     validate_not_enabled,
-    validate_enabled
+    validate_enabled,
 )
 from ...Shared.Models.config import (
     Testing,
@@ -46,7 +51,6 @@ class ZMDBSettings(BaseSettings, extra="allow"):
     driver: Optional[str] = Field(None)
 
 
-
 class SystemSettings(BaseModel):
     image_dir: Optional[Path] = Field(Path(DEF_CLNT_SYS_IMAGEDIR))
     config_path: Optional[Path] = Field(Path(DEF_CLNT_SYS_CONFDIR))
@@ -57,10 +61,10 @@ class SystemSettings(BaseModel):
 
 class ZoneMinderSettings(BaseSettings, extra="allow"):
     model_config = SettingsConfigDict(env_prefix="ML_CLIENT_ZONEMINDER_")
+
     class ZMMisc(BaseSettings):
         model_config = SettingsConfigDict(env_prefix="ML_CLIENT_ZONEMINDER_MISC_")
         write_notes: bool = Field(True)
-
 
     class ZMAPISettings(BaseSettings):
         model_config = SettingsConfigDict(env_prefix="ML_CLIENT_ZONEMINDER_API_")
@@ -92,7 +96,6 @@ class ServerRoute(DefaultEnabled):
     username: Optional[str] = None
     password: Optional[SecretStr] = None
     timeout: Optional[int] = Field(90, ge=0)
-
 
     _validate_mlapi_host_no_scheme = field_validator("host", mode="before")(
         validate_no_scheme_url
@@ -218,7 +221,6 @@ class MLNotificationSettings(BaseModel):
         args: Optional[List[str]] = None
 
     class MQTTNotificationSettings(DefaultNotEnabled):
-
         class MQTTImageSettings(DefaultNotEnabled):
             format: Optional[str] = Field("base64", pattern="^(bytes|base64)$")
             retain: Optional[bool] = True
@@ -239,7 +241,9 @@ class MLNotificationSettings(BaseModel):
 
         image: Optional[MQTTImageSettings] = Field(default_factory=MQTTImageSettings)
 
-    mqtt: Optional[MQTTNotificationSettings] = Field(default_factory=MQTTNotificationSettings)
+    mqtt: Optional[MQTTNotificationSettings] = Field(
+        default_factory=MQTTNotificationSettings
+    )
     zmninja: Optional[ZMNinjaNotificationSettings] = Field(
         default_factory=ZMNinjaNotificationSettings
     )
@@ -255,12 +259,65 @@ class MLNotificationSettings(BaseModel):
 
 
 class APIPullMethod(DefaultNotEnabled):
-    fps: Optional[int] = Field(1)
+    fps: Optional[int] = Field(
+        1, description="Frames per second to capture. Cannot be used with sbf."
+    )
+    sbf: Optional[int] = Field(
+        None,
+        description="Seconds between frame "
+        "(for image sources that only update every <x> seconds). "
+        "Cannot be used with fps.",
+    )
     attempts: Optional[int] = Field(3)
     delay: Optional[float] = Field(1.0)
     check_snapshots: Optional[bool] = Field(True)
     snapshot_frame_skip: Optional[int] = Field(3)
     max_frames: Optional[int] = Field(0)
+    _lp: str = Field("", description='logging prefix', repr=False)
+
+
+    @model_validator(mode="after")
+    def _validate_model_after(self):
+        self._lp = f"{self.__class__.__name__}:"
+        if self.fps and self.sbf:
+            logger.warning(f"{self._lp} fps and sbf cannot both be set, sbf takes precedence")
+            self.fps = None
+        elif not self.fps and not self.sbf:
+            logger.warning(f"{self._lp} fps and sbf are both not set, defaulting to 1 fps")
+            self.fps = 1
+        return self
+
+
+class ZMSPullMethod(DefaultNotEnabled):
+    fps: Optional[int] = Field(
+        1, description="Frames per second to capture. Cannot be used with sbf."
+    )
+    sbf: Optional[int] = Field(
+        None,
+        description="Seconds between frame "
+        "(for image sources that only update every <x> seconds). "
+        "Cannot be used with fps.",
+    )
+    url: Optional[AnyUrl] = Field(
+        None, description="URL to the nph-zms cgi script (ex: http://zm.example.com/zm/cgi-bin/nph-zms). If not supplied it will be auto-detected."
+    )
+    attempts: Optional[int] = Field(3, description="Number of attempts to get a frame")
+    delay: Optional[float] = Field(1.0, description="Delay between attempts")
+    max_frames: Optional[int] = Field(0, description="Maximum number of frames to process")
+
+    _lp: str = Field("", description='logging prefix', repr=False)
+
+    @model_validator(mode="after")
+    def _validate_model_after(self):
+        self._lp = f"{self.__class__.__name__}:"
+        if self.fps and self.sbf:
+            logger.warning(f"{self._lp} fps and sbf cannot both be set, sbf takes precedence")
+            self.fps = None
+        elif not self.fps and not self.sbf:
+            logger.warning(f"{self._lp} fps and sbf are both not set, defaulting to 1 fps")
+            self.fps = 1
+        return self
+
 
 
 class DetectionSettings(BaseModel):
@@ -269,32 +326,41 @@ class DetectionSettings(BaseModel):
             shm: Optional[bool] = Field(False)
             api: Optional[APIPullMethod] = Field(default_factory=APIPullMethod)
             zmu: Optional[bool] = Field(False)
-            zms: Optional[bool] = Field(False)
+            zms: Optional[ZMSPullMethod] = Field(default_factory=ZMSPullMethod)
 
-            _validate_ = field_validator("shm", "zmu", "zms", mode="before")(validate_not_enabled)
+            _validate_ = field_validator("shm", "zmu", "zms", mode="before")(
+                validate_not_enabled
+            )
 
         class Debug(DefaultNotEnabled):
             path: Optional[Path] = Field(Path("/tmp"))
 
         class Annotations(BaseModel):
             class Zones(DefaultNotEnabled):
-                color: Union[Tuple[int, int, int], None] = Field((255, 0, 0), description="Color of polygon line in BGR")
+                color: Union[Tuple[int, int, int], None] = Field(
+                    (255, 0, 0), description="Color of polygon line in BGR"
+                )
                 thickness: Optional[int] = Field(2)
-                show_name: Optional[bool] = Field(False, description="Overlay the zone name on the image")
+                show_name: Optional[bool] = Field(
+                    False, description="Overlay the zone name on the image"
+                )
 
                 @field_validator("color", mode="before")
                 def _validate_color(cls, v):
                     if v:
                         if isinstance(v, str):
-                            v = tuple(int(x) for x in v.lstrip('(').rstrip(')').split(','))
+                            v = tuple(
+                                int(x) for x in v.lstrip("(").rstrip(")").split(",")
+                            )
                         if not isinstance(v, tuple) or len(v) != 3:
                             raise ValueError("Must be a tuple of 3 integers")
                         for x in v:
                             if not isinstance(x, int) or x < 0 or x > 255:
-                                raise ValueError("Must be a tuple of 3 integers between 0 and 255")
+                                raise ValueError(
+                                    "Must be a tuple of 3 integers between 0 and 255"
+                                )
                     assert isinstance(v, (tuple, None))
                     return v
-
 
             class Models(DefaultEnabled):
                 processor: Optional[bool] = Field(False)
@@ -370,9 +436,7 @@ class StaticObjects(DefaultEnabled):
     labels: Optional[List[str]] = Field(default_factory=list)
     ignore_labels: Optional[List[str]] = Field(default_factory=list)
 
-    _validate_difference = field_validator("difference")(
-        validate_percentage_or_pixels
-    )
+    _validate_difference = field_validator("difference")(validate_percentage_or_pixels)
 
 
 class OverRideStaticObjects(BaseModel):
@@ -381,9 +445,9 @@ class OverRideStaticObjects(BaseModel):
     labels: Optional[List[str]] = None
     ignore_labels: Optional[List[str]] = None
 
-    _validate_difference = field_validator(
-        "difference", mode="before"
-    )(validate_percentage_or_pixels)
+    _validate_difference = field_validator("difference", mode="before")(
+        validate_percentage_or_pixels
+    )
 
 
 class MatchFilters(BaseModel):
@@ -393,7 +457,9 @@ class MatchFilters(BaseModel):
 
 
 class OverRideMatchFilters(BaseModel):
-    object: Optional[OverRideObjectFilters] = Field(default_factory=OverRideObjectFilters)
+    object: Optional[OverRideObjectFilters] = Field(
+        default_factory=OverRideObjectFilters
+    )
     face: Optional[OverRideFaceFilters] = Field(default_factory=OverRideFaceFilters)
     alpr: Optional[OverRideAlprFilters] = Field(default_factory=OverRideAlprFilters)
 
@@ -459,9 +525,14 @@ class ConfigFileModel(BaseModel):
     matching: MatchingSettings = Field(default_factory=MatchingSettings)
     monitors: Optional[Dict[int, MonitorsSettings]] = Field(default_factory=dict)
 
-    _validate_config_path = field_validator(
-        "config_path", mode="before"
-    )(validate_dir)
+    _validate_config_path = field_validator("config_path", mode="before")(validate_dir)
+    @model_validator(mode="after")
+    def _validate_model_after(self):
+        """check for url attr in ZMSPullMethod"""
+
+
+        pass
+
 
 
 class ClientEnvVars(BaseSettings):
@@ -474,11 +545,19 @@ class ClientEnvVars(BaseSettings):
         description="Path to ZoneMinder ML config file directory (client/server/secrets .yml)",
     )
     client_conf_file: Optional[Path] = Field(
-        None, description="Path to ZM-ML CLIENT config file", alias="ML_CLIENT_CONF_FILE"
+        None,
+        description="Path to ZM-ML CLIENT config file",
+        alias="ML_CLIENT_CONF_FILE",
     )
 
-    db: Optional[ZMDBSettings] = Field(default_factory=ZMDBSettings, alias="OOGAH_BOOGAH_WHY_DONT_THEY_MAKE_A_WAY_TO_HAVE_NO_ENV")
-    api: Optional[ZoneMinderSettings.ZMAPISettings] = Field(default_factory=ZoneMinderSettings.ZMAPISettings, alias="WHY_DONT_THEY_MAKE_A_WAY_TO_HAVE_NO_ENV_OOGAH_BOOGAH")
+    db: Optional[ZMDBSettings] = Field(
+        default_factory=ZMDBSettings,
+        alias="OOGAH_BOOGAH_WHY_DONT_THEY_MAKE_A_WAY_TO_HAVE_NO_ENV",
+    )
+    api: Optional[ZoneMinderSettings.ZMAPISettings] = Field(
+        default_factory=ZoneMinderSettings.ZMAPISettings,
+        alias="WHY_DONT_THEY_MAKE_A_WAY_TO_HAVE_NO_ENV_OOGAH_BOOGAH",
+    )
 
     _validate_client_conf_file = field_validator(
         "client_conf_file", mode="before", check_fields=False
@@ -486,4 +565,3 @@ class ClientEnvVars(BaseSettings):
     _validate_zm_conf_dir = field_validator(
         "zm_conf_dir", "ml_conf_dir", mode="before"
     )(validate_dir)
-

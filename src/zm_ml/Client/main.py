@@ -36,7 +36,7 @@ except ImportError as e:
         ImportWarning,
     )
 
-from .Libs.Media import APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine
+from .Libs.Media.pipeline import APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine, ZMSImagePipeLine
 from .Libs.API import ZMAPI
 from .Models.utils import CFGHash, get_push_auth
 from .Models.config import (
@@ -500,7 +500,7 @@ class ZMClient:
     routes: List[ServerRoute]
     mid: int
     eid: int
-    image_pipeline: Union[APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine]
+    image_pipeline: Union[APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine, ZMSImagePipeLine]
     _comb: Dict
 
     @staticmethod
@@ -765,13 +765,16 @@ class ZMClient:
         if img_pull_method.shm is True:
             raise NotImplementedError(f"SHM image pulling is not supported yet")
             # self.image_pipeline = SHMImagePipeLine()
-        elif img_pull_method.api.enabled is True:
+        elif img_pull_method.api and img_pull_method.api.enabled is True:
             logger.debug(f"{lp} Using ZM API for image source")
             self.image_pipeline = APIImagePipeLine(img_pull_method.api)
         elif img_pull_method.zmu is True:
             raise NotImplementedError(f"ZMU image pulling is not supported yet")
             pass
             # self.image_pipeline = ZMUImagePipeLine()
+        elif img_pull_method.zms and img_pull_method.zms.enabled is True:
+            logger.debug(f"{lp} Using ZMS CGI for image source")
+            self.image_pipeline = ZMSImagePipeLine(img_pull_method.zms)
 
         models: Optional[Dict] = None
         self.static_objects.pickle()
@@ -811,7 +814,7 @@ class ZMClient:
 
         if not self.zones:
             logger.debug(f"{lp} No zones found, adding full image with base filters")
-            self.zones["!ZM-ML!_full_image"] = MonitorZones.construct(
+            self.zones["!ZM-ML!_full_image"] = MonitorZones.model_construct(
                 points=[
                     (0, 0),
                     (g.mon_width, 0),
@@ -934,7 +937,7 @@ class ZMClient:
                                 logger.error(
                                     f"{lp}route '{route.name}' returned ERROR status {status} \n{r}"
                                 )
-                    if img_pull_method.api.enabled is True:
+                    if any([img_pull_method.api.enabled, img_pull_method.zms.enabled]):
                         assert isinstance(
                             image, bytes
                         ), "Image is not bytes after getting from pipeline"

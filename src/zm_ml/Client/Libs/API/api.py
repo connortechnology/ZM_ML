@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+import asyncio
 import datetime
 import logging
 import pickle
@@ -38,7 +40,6 @@ if TYPE_CHECKING:
     from requests.exceptions import HTTPError, JSONDecodeError
     from urllib3 import disable_warnings
     from urllib3.exceptions import InsecureRequestWarning
-
 
 GRACE: int = 60 * 5  # 5 mins
 lp: str = "api::"
@@ -80,7 +81,11 @@ class ZMAPI:
                         zone_type: str = zone.get("Zone", {}).get("Type", "")
                         zone_points: str = zone.get("Zone", {}).get("Coords", "")
                         # logger.debug(f"{lp} BEGINNING OF ZONE LOOP - {zone_name=} -- {zone_type=} -- {zone_points=}")
-                        if zone_type.casefold() in ["inactive", "privacy", "preclusive"]:
+                        if zone_type.casefold() in [
+                            "inactive",
+                            "privacy",
+                            "preclusive",
+                        ]:
                             logger.debug(
                                 f"{lp} skipping '{zone_name}' as it is set to '{zone_type.capitalize()}'"
                             )
@@ -618,6 +623,8 @@ class ZMAPI:
         payload: Optional[Dict] = None,
         headers: Optional[Dict] = None,
         type_action: str = "get",
+        use_creds: bool = False,
+        zms_req: bool = False,
         re_auth: bool = True,
         quiet: bool = False,
     ):
@@ -630,26 +637,132 @@ class ZMAPI:
 
         async def parse_response(resp: aiohttp.ClientResponse):
             """Parses the response from the API call."""
+            from aiohttp import client_exceptions
+
             resp_status = resp.status
+            boundary: Optional[str] = None
+            images = []
 
             try:
+                _resp: Union[bytes, str, Dict, List, None] = None
+                nph_headers: Union[Dict, bytes, None] = None
                 resp.raise_for_status()
+                # chunk iterating logic here to mitigate timeouts
+                if resp_status == 200:
+                    content_type = resp.headers.get("content-type")
+                    content_length = resp.headers.get("content-length")
+                    if content_length is not None:
+                        content_length = int(content_length)
+                    cloudflare = resp.headers.get("Server", "").startswith("cloudflare")
+                    transfer_encoding = resp.headers.get("Transfer-Encoding", "")
+
+                    if content_type.startswith("application/json"):
+                        # JSON data
+                        _resp = await resp.json()
+
+                    elif content_type.startswith("text/plain"):
+                        # text data
+                        _resp = await resp.text()
+
+                    elif content_type.startswith("multipart/x-mixed-replace"):
+                        logger.debug(
+                            f"{lp} Content-Type='{content_type}' (ZMS CGI?)"
+                        )
+                        if "boundary=" in content_type:
+                            boundary = f"{content_type.split('boundary=')[1]}".encode()
+                            logger.debug(
+                                f"{lp} boundary found in content-type header: {boundary}"
+                            )
+                            # RFC calls for a leading '--' on the boundary
+                            boundary = b"--" + boundary
+
+                        if transfer_encoding == "chunked":
+                            logger.debug(
+                                f"{lp} 'Transfer-Encoding'={transfer_encoding}, iterating chunks"
+                            )
+                            chunk_size = 1024
+                            _resp = b""
+                            _begin = False
+                            i = 0
+
+                            # ZMS mode=jpeg sends a stream of images, we only want the fid we asked for
+                            # ZM interprets that as the starting frame of the stream.
+
+                            async for chunk in resp.content.iter_chunked(chunk_size):
+                                i += 1
+                                if boundary and boundary in chunk:
+                                    if _begin is False:
+                                        _begin = True
+                                        # strip out the first boundary
+                                        _resp += chunk.split(boundary + b"\r\n")[1]
+                                        continue
+                                    else:
+                                        logger.debug(
+                                            f"{lp} boundary found in chunk (size: {chunk_size}) #{i}, "
+                                            f"breaking out of stream loop"
+                                        )
+                                        _resp += chunk.split(b"\r\n" + boundary)[0]
+                                        _begin = False
+                                        break
+
+                                _resp += chunk
+                        else:
+                            await resp.read()
+                        # split out nph headers from response
+                        # example_response = b"Content-Type: image/jpeg\r\nContent-Length: 373781\r\n\r\n\xff\xd8\xff\xe0"
+
+                        if _resp:
+                            if _resp.startswith(b'Content-Type: image/jpeg'):
+                                split_resp = _resp.split(b"\r\n\r\n")
+                                logger.debug(f"{lp} stripping out nph headers from response - {len(split_resp) = }")
+                                logger.debug(f"{lp} {[ x[min(75, len(x)-1)] for x in split_resp if x ]}")
+                                if len(split_resp)>= 2:
+                                    nph_headers, _resp = split_resp[:2]
+                                    if nph_headers:
+                                        nph_headers = {
+                                            x.decode().split(": ")[0]: x.decode().split(": ")[1]
+                                            for x in nph_headers.split(b"\r\n")
+                                            if x
+                                        }
+                                        if (
+                                            "Content-Type" in nph_headers
+                                            and nph_headers["Content-Type"]
+                                        ):
+                                            content_type = nph_headers["Content-Type"]
+                                            logger.debug(
+                                                f"{lp} DBG>>> UPDATING 'content-type' header with nph response - "
+                                                f"{content_type}"
+                                            )
+
+                                        if "Content-Length" in nph_headers:
+                                            content_length = int(nph_headers["Content-Length"])
+                                            logger.debug(
+                                                f"{lp} DBG>>> UPDATING 'content-length' headers with nph response - "
+                                                f"{content_length}"
+                                            )
+
+                    else:
+                        _resp = await resp.read()
+
             except aiohttp.ClientResponseError as err:
                 if resp_status == 401:
-                    logger.error(
-                        f"{lp} 401 Unauthorized, attempting to re-authenticate"
-                    )
-                    self._login()
-                    logger.debug(
-                        f"{lp} re-authentication complete, retrying async request"
-                    )
-                    return await self.make_async_request(
-                        url=url,
-                        query=query,
-                        payload=payload,
-                        type_action=type_action,
-                        re_auth=False,
-                    )
+                    if self.access_token:
+                        logger.error(
+                            f"{lp} 401 Unauthorized, attempting to re-authenticate"
+                        )
+                        self._login()
+                        logger.debug(
+                            f"{lp} re-authentication complete, retrying async request"
+                        )
+                        return await self.make_async_request(
+                            url=url,
+                            query=query,
+                            payload=payload,
+                            type_action=type_action,
+                            re_auth=False,
+                        )
+                    else:
+                        raise err
                 elif resp_status == 404:
                     # split the URL to check if 'token=' 'user(name)=' or 'pass(word)=' are in the URL
                     logger.warning(f"{lp} Got 404 (Not Found)")
@@ -658,43 +771,33 @@ class ZMAPI:
                     logger.debug(
                         f"{lp} NOT 200|401|404 SOOOOOOOOOOOOOOOO Code={resp_status} error: {err}"
                     )
+            except asyncio.TimeoutError as err:
+                logger.error(f"{lp} Timeout error: {err}", exc_info=True)
             else:
-                content_type = resp.headers.get("content-type")
-                content_length = int(resp.headers.get("content-length", 0))
-                cloudflare = resp.headers.get("Server", "").startswith("cloudflare")
-                # logger.debug(
-                #     f"{lp} RESPONSE RECEIVED>>> {content_type=} | {content_length=}"
-                #     # f"\n\n HEADERS = {resp.headers}\n\n"
-                #     f" | CloudFlare={cloudflare}"
-                # )
-                if content_type.startswith("application/json"):
-                    # JSON data
-                    _resp = await resp.json()
-                    # logger.debug(f"JSON response detected! >>> {str(_resp)[:20]}")
-                elif content_type.startswith("image/"):
-                    # RAW image data
-                    _resp = await resp.read()
-                    # logger.debug(f"Image response detected! {_resp[:20]}")
-                else:
-                    # TEXT data ?
-                    _resp = await resp.text()
-                    logger.debug(f"Text response?????  >>> {_resp}")
 
+                # logger.debug(
+                #     f"{lp} RESPONSE RECEIVED>>> CloudFlare={cloudflare} | {content_type=} | {content_length=}"
+                #     f"\n\n HEADERS = {resp.headers}"
+                # )
+
+                if content_length is not None:
                     if content_length > 0:
-                        if _resp.casefold().startswith("no frame found"):
-                            #  r.text = 'No Frame found for event(69129) and frame id(280)']
-                            logger.warning(
-                                f"{lp} Frame was not found by API! >>> {resp.text}"
-                            )
-                        else:
-                            logger.debug(
-                                f"{lp} raising RE_LOGIN ValueError -> Non 0 byte response: {resp.text}"
-                            )
-                            raise ValueError("RE_LOGIN")
+                        if isinstance(_resp, str):
+                            if _resp.casefold().startswith("no frame found"):
+                                #  r.text = 'No Frame found for event(69129) and frame id(280)']
+                                logger.warning(
+                                    f"{lp} Frame was not found by ZM API! >>> {resp.text}"
+                                )
+                            else:
+                                logger.debug(
+                                    f"{lp} raising RE_LOGIN ValueError -> Non 0 byte response: {resp.text}"
+                                )
+                                raise ValueError("RE_LOGIN")
                     elif content_length <= 0:
                         # ZM returns 0 byte body if index not found (cant find frame ID/out of bounds)
                         logger.debug(
-                            f"{lp} WAS THIS AN IMAGE REQUEST? cant find frame ID?"
+                            f"{lp} 'content-length' = {content_length} - WAS THIS AN IMAGE REQUEST? "
+                            f"ZM cant find frame ID?"
                         )
                 return _resp
 
@@ -707,7 +810,12 @@ class ZMAPI:
 
         type_action = type_action.casefold()
         if self.access_token:
-            query["token"] = self.access_token
+            if not use_creds:
+                query["token"] = self.access_token
+            else:
+                query["user"] = self.username
+                query["pass"] = self.password
+
         show_url: str = (
             url.replace(self.portal_base_url, self.sanitize_str)
             if self.sanitize
@@ -751,22 +859,41 @@ class ZMAPI:
         r: Optional[aiohttp.ClientResponse] = None
         if type_action == "get":
             async with self.async_session.get(
-                url, params=query, ssl=ssl, headers=headers
+                url,
+                params=query,
+                ssl=ssl,
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=5),
             ) as r:
                 return await parse_response(r)
         elif type_action == "post":
             async with self.async_session.post(
-                url, data=payload, params=query, ssl=ssl, headers=headers
+                url,
+                data=payload,
+                params=query,
+                ssl=ssl,
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=5),
             ) as r:
                 return await parse_response(r)
         elif type_action == "put":
             async with self.async_session.put(
-                url, data=payload, params=query, ssl=ssl, headers=headers
+                url,
+                data=payload,
+                params=query,
+                ssl=ssl,
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=5),
             ) as r:
                 return await parse_response(r)
         elif type_action == "delete":
             async with self.async_session.delete(
-                url, data=payload, params=query, ssl=ssl, headers=headers
+                url,
+                data=payload,
+                params=query,
+                ssl=ssl,
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=5),
             ) as r:
                 return await parse_response(r)
         else:
@@ -796,20 +923,20 @@ class ZMAPI:
             headers.update(config_headers)
 
         logger.debug(f"{lp} DEBUG>>> headers: {headers}")
-        if self.access_token:
-            query["token"] = self.access_token
-        show_url: str = (
-            url.replace(self.portal_base_url, self.sanitize_str)
-            if self.sanitize
-            else url
-        )
         show_tkn: str = ""
         if self.access_token:
+            query["token"] = self.access_token
             show_tkn = (
                 f"{self.access_token[:20]}...{self.sanitize_str}"
                 if self.sanitize
                 else self.access_token
             )
+
+        show_url: str = (
+            url.replace(self.portal_base_url, self.sanitize_str)
+            if self.sanitize
+            else url
+        )
         show_payload: str = ""
         show_query: Union[str, Dict] = f"token: '{show_tkn}'"
         if not self.access_token:

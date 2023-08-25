@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional, Union, Tuple, TYPE_CHECKING, Any, Dict
 import warnings
 
+import pydantic.version
 from pydantic import SecretStr
 
 try:
@@ -31,6 +32,7 @@ from ...Models.config import ZMDBSettings, ClientEnvVars
 
 if TYPE_CHECKING:
     from ....Shared.configs import GlobalConfig
+
     # from sqlalchemy import MetaData, create_engine, select
     # from sqlalchemy.engine import Engine, Connection, CursorResult, ResultProxy
     # from sqlalchemy.exc import SQLAlchemyError
@@ -48,6 +50,7 @@ class ZMDB:
     config: ZMDBSettings
     conf_file_data: Optional[SectionProxy]
     env: Optional[ClientEnvVars]
+    cgi_path: str
 
     def __init__(self, env: Optional[ClientEnvVars] = None):
         global g
@@ -66,6 +69,7 @@ class ZMDB:
         self.engine = None
         self.connection = None
         self.meta = None
+        g.db = self
         self.config = self.init_config()
         self._db_create()
 
@@ -113,9 +117,9 @@ class ZMDB:
                 logger.error(f"{LP} error opening ZoneMinder .conf files! -> {files}")
             else:
                 logger.debug(f"{LP} ZoneMinder .conf files -> {files}")
-                # for section in config_file.sections():
-                # for key, value in config_file.items(section):
-                #     logger.debug(f"{section} >>> {key} = {value}")
+                for section in config_file.sections():
+                    for key, value in config_file.items(section):
+                        logger.debug(f"{section} >>> {key} = {value}")
                 return config_file["zm_root"]
 
     def init_config(self):
@@ -131,26 +135,48 @@ class ZMDB:
         # todo: get db type from zm .conf files for driver string?
 
         self.conf_file_data = self.read_zm_configs()
+        self.cgi_path = self.conf_file_data.get("zm_path_cgi", "COULDNT GET: ZM_PATH_CGI")
+        # ZM_PATH_CGI=/usr/lib/zoneminder/cgi-bin
+        _pydantic_attrs = [
+            "construct",
+            "copy",
+            "dict",
+            "from_orm",
+            "json",
+            "p",
+            "parse_file",
+            "parse_obj",
+            "parse_raw",
+            "schema",
+            "schema_json",
+            "update_forward_refs",
+            "validate",
+        ]
+        _pydantic_v2_attrs = [
+            "model_computed_fields",
+            "model_config",
+            "model_construct",
+            "model_copy",
+            "model_dump",
+            "model_dump_json",
+            "model_extra",
+            "model_fields",
+            "model_fields_set",
+            "model_json_schema",
+            "model_parametrized_name",
+            "model_post_init",
+            "model_rebuild",
+            "model_validate",
+            "model_validate_json",
+            "settings_customise_sources",
+        ]
+        _pydantic_attrs.extend(_pydantic_v2_attrs)
         db_config_with_env = self.env.db
         logger.debug(f"{LP} ENV VARS = {db_config_with_env}")
         for _attr in dir(db_config_with_env):
             if _attr.startswith("_"):
                 continue
-            elif _attr in [
-                "construct",
-                "copy",
-                "dict",
-                "from_orm",
-                "json",
-                "p",
-                "parse_file",
-                "parse_obj",
-                "parse_raw",
-                "schema",
-                "schema_json",
-                "update_forward_refs",
-                "validate",
-            ]:
+            elif _attr in _pydantic_attrs:
                 continue
             elif _attr in ["host", "port", "user", "password", "name", "driver"]:
                 if not (set_to := getattr(db_config_with_env, _attr)):
@@ -184,7 +210,7 @@ class ZMDB:
                     unset_ += "CFG .CONFs "
                     set_to = defaults[_attr]
                     xtra_ = f" (defaulting to '{set_to}' from internal defaults)"
-                logger.debug(f"{LP} [{unset_.rstrip()}] unset for db.{_attr}{xtra_}")
+                logger.debug(f"{LP} [{unset_.rstrip()}] unset for db. {_attr}{xtra_}")
                 setattr(db_config_with_env, _attr, set_to)
         return db_config_with_env
 
@@ -472,7 +498,7 @@ class ZMDB:
                 f"{LP} the database query did not return a monitor name ('Name') for monitor ID {mid}"
             )
         if mon_pre:
-                final_str += f"Monitor PreEventCount: {mon_pre} "
+            final_str += f"Monitor PreEventCount: {mon_pre} "
         else:
             logger.warning(
                 f"{LP} the database query did not return monitor pre-event count ('PreEventCount') for monitor ID {mid}"

@@ -260,7 +260,7 @@ class ORTDetector(FileLock):
                         return_empty = True
                     # squeeze boxes [1, n, 4] => [n, 4]
                     _boxes = np.squeeze(_boxes, 0)
-                    _boxes = self.rescale_boxes(_boxes)
+                    boxes = self.rescale_boxes(_boxes)
                     # find index from max scores (class_id) and flatten it [1, n, num_class] => [n]
                     class_ids = np.argmax(raw_scores, axis=2).flatten()
             elif num_outputs == 4:
@@ -281,8 +281,6 @@ class ORTDetector(FileLock):
                     boxes = pred_boxes[0, :num_predictions]
                     scores = pred_scores[0, :num_predictions]
                     class_ids = pred_classes[0, :num_predictions]
-
-
         else:
             return_empty = True
 
@@ -292,6 +290,7 @@ class ORTDetector(FileLock):
         indices = cv2.dnn.NMSBoxes(
             boxes, scores, self.options.confidence, self.options.nms
         )
+        logger.debug(f"{LP} NMS indices: {type(indices) = } -- {indices =}")
         return boxes[indices].astype(np.int32).tolist(), scores[indices].astype(np.float32).tolist(), class_ids[
             indices].astype(np.int32).tolist()
 
