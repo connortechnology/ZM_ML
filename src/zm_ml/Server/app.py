@@ -47,7 +47,7 @@ if TYPE_CHECKING:
     )
 from .Models.config import BaseModelConfig
 
-__version__ = "0.0.1a"
+__version__ = "0.0.1a3"
 __version_type__ = "dev"
 logger = logging.getLogger(SERVER_LOGGER_NAME)
 logger.setLevel(logging.DEBUG)

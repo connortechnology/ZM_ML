@@ -29,7 +29,7 @@ __doc__ = """
 An example that uses ZM's EventStartCommand/EventEndCommand mechanism to run 
 object detection on a ZM event using ZoMi ML library.
 """
-__version__ = "0.0.1a2"
+__version__ = "0.0.1a3"
 # Setup basic console logging (hook into library logging)
 logger: logging.Logger = create_logs()
 zm_client: Optional[ZMClient] = None

@@ -179,7 +179,7 @@ console.setFormatter(log_formatter)
 logger.addHandler(console)
 
 # Misc.
-__version__ = "0.0.1a1"
+__version__ = "0.0.1a3"
 __dependancies__ = "psutil", "requests", "tqdm", "distro"
 __doc__ = """Install ZM-ML Server / Client"""
 
@@ -1280,7 +1280,7 @@ def do_install(_inst_type: str):
             if "ML_INSTALL_ROUTE_PORT" not in _ENV:
                 _ENV["ML_INSTALL_ROUTE_PORT"] = "5000"
 
-            # todo: add support for CLI and interactive mode to specify mlapi route info and ZM api info.
+            # todo: add support for interactive mode to specify mlapi route info and ZM api info.
             #  this will allow to not edit config file after install
 
         _src: str = (
@@ -1508,6 +1508,7 @@ class ZoMiEnvBuilder(venv.EnvBuilder):
 
         # set python executable to venv executable
         self.install_cmd.insert(0, context.env_exec_cmd)
+        logger.debug(f"venv builder:DBG>>> About to run install command: '{self.install_cmd}'")
 
         try:
             ran = subprocess.run(
