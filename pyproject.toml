@@ -7,27 +7,8 @@ build-backend = "setuptools.build_meta"
 name = "zm_ml"
 version = "0.0.1a2"
 dependencies = [
-    # Both
-    'opencv-contrib-python>=4.8.0',
-    "torch>=2.0.1",
-    "torchvision>=0.15.2",
-    "ultralytics>=8.0.1.141",
-    "super_gradients>=3.1.3",
+    # Client is default install
     'cryptography>=41.0.0',
-    'webcolors>=1.13',
-    'scikit-learn>=1.2.2',
-    'PyYAML>=6.0',
-    "pydantic~=2.0.3",
-    "pydantic-settings~=2.0.2",
-    'portalocker>=2.6.0',
-    'uvicorn>=0.19.0',
-    'fastapi>=0.86.0',
-    'passlib>=1.7.4',
-    'Pillow>=9.3.0',
-    'python-jose>=3.3.0',
-    'python-multipart>=0.0.5',
-    'python-dotenv>=0.21.0',
-
     'psutil>=5.9.4',
     'psutil-extra>=0.2.0',
     "requests-toolbelt>=0.10.0",
@@ -47,7 +28,7 @@ authors = [
 readme = "README.md"
 
 requires-python = ">=3.8,<3.10"
-keywords = ["zoneminder", "object detection", "machine learning", "rest api", "facial detection", "facial recognition", "ALPR", "license plate recognition", "face recognition", "deep learning", "opencv", ]
+keywords = ["zoneminder", "object_detection", "machine_learning", "facial_recognition", "ALPR" ]
 
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
@@ -70,7 +51,6 @@ classifiers = [
 [project.optional-dependencies]
 
 client = [
-    'opencv-contrib-python>=4.8.0',
     'cryptography>=41.0.0',
     'psutil>=5.9.4',
     'psutil-extra>=0.2.0',
@@ -86,11 +66,8 @@ client = [
 ]
 
 server = [
-    'opencv-contrib-python>=4.8.0',
     "torch>=2.0.1",
     "torchvision>=0.15.2",
-    "ultralytics>=8.0.1.141",
-    "super_gradients>=3.1.3",
     'cryptography>=41.0.0',
     'webcolors>=1.13',
     'scikit-learn>=1.2.2',
@@ -107,6 +84,11 @@ server = [
     'python-dotenv>=0.21.0'
 ]
 
+# To export yolov8 and yolo-nas models to onnx
+onnx = [
+    "ultralytics>=8.0.1.141",
+    "super_gradients>=3.1.3",
+]
 
 
 [tool.setuptools.packages.find]
