@@ -113,21 +113,27 @@ def init_logs(config: Settings) -> None:
     if cfg.console.enabled is False:
         for h in logger.handlers:
             if isinstance(h, logging.StreamHandler):
-                logger.info(f"{lp} Removing console log output!")
-                logger.removeHandler(h)
+                if h.stream == sys.stdout:
+                    logger.info(f"{lp} Removing console log output!")
+                    logger.removeHandler(h)
 
     if cfg.file.enabled:
         if cfg.file.file_name:
             _filename = cfg.file.file_name
         else:
-            _filename = f"zmmlServer.log"
+            from .Models.DEFAULTS import DEF_SRV_LOGGING_FILE_FILENAME
+
+            _filename = DEF_SRV_LOGGING_FILE_FILENAME
         abs_logfile = (cfg.file.path / _filename).expanduser().resolve()
         try:
             if not abs_logfile.exists():
                 logger.info(f"{lp} Creating log file [{abs_logfile}]")
-                abs_logfile.touch(exist_ok=True, mode=0o644)
+                from .Models.DEFAULTS import DEF_SRV_LOGGING_FILE_CREATE_MODE
+
+                abs_logfile.touch(exist_ok=True, mode=DEF_SRV_LOGGING_FILE_CREATE_MODE)
             else:
-                with abs_logfile.open("a") as f:
+                # Test if read/write permissions are available
+                with abs_logfile.open(mode="a") as f:
                     pass
         except PermissionError:
             logger.warning(
@@ -136,7 +142,7 @@ def init_logs(config: Settings) -> None:
                 f"{sys_uid} [{sys_user}] group: {sys_gid} [{sys_group}]"
             )
         else:
-            # todo: add timed rotating log file handler if configured
+            # todo: add timed rotating log file handler if configured (for systems without logrotate)
             file_handler = logging.FileHandler(abs_logfile.as_posix(), mode="a")
             # file_handler = logging.handlers.TimedRotatingFileHandler(
             #     file_from_config, when="midnight", interval=1, backupCount=7
@@ -472,16 +478,16 @@ class MLAPI:
         )
         self.server = uvicorn.Server(config=config)
         try:
+            import uvloop
+
+            loop = uvloop.new_event_loop()
             self.server.run()
         except KeyboardInterrupt:
             logger.info("Keyboard Interrupt, shutting down")
-            self.server.shutdown()
         except BrokenPipeError:
             logger.info("Broken Pipe, shutting down")
-            self.server.shutdown()
         except Exception as e:
             logger.exception(f"Shutting down because of Exception: {e}")
-            self.server.shutdown()
         finally:
-            logger.info("Shutting down")
-            self.server.shutdown()
+            logger.info("Shutting down cleanly in finally: logic")
+            loop.run_until_complete(self.server.shutdown())

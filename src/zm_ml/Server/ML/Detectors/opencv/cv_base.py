@@ -85,4 +85,3 @@ class CV2Base(FileLock):
                     self.net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
         elif self.config.processor == ModelProcessor.CPU:
             logger.debug(f"{LP} '{self.name}' CPU configured as the processor")
-        self.create_lock()

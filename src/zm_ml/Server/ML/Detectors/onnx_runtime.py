@@ -87,7 +87,6 @@ def xywh2xyxy(x):
 
 class ORTDetector(FileLock):
     def __init__(self, model_config: ORTModelConfig):
-        super().__init__()
         if not model_config:
             raise ValueError(f"{LP} no config passed!")
         self.config = model_config
@@ -108,6 +107,7 @@ class ORTDetector(FileLock):
         self.input_width: int = 0
 
         self.output_names: Optional[List[Optional[AnyStr]]] = None
+        super().__init__()
         # Initialize model
         self.initialize_model(self.config.input)
 
@@ -132,7 +132,21 @@ class ORTDetector(FileLock):
         # Get model info
         self.get_input_details()
         self.get_output_details()
-        self.create_lock()
+        self._warm_up()
+
+    def _warm_up(self):
+        """Warm up model"""
+        logger.debug(f"{LP} Warming up model: {self.name}")
+        # reverse h/w
+
+
+        input_tensor = np.random.uniform(
+            low=0.0,
+            high=1.0,
+            size=(1, self.input_shape[1], self.input_shape[3], self.input_shape[2]),
+
+        ).astype(np.float32)
+        self.inference(input_tensor)
 
     def detect(self, image: np.ndarray):
         input_tensor = self.prepare_input(image)
@@ -146,6 +160,7 @@ class ORTDetector(FileLock):
         confs: List
         labels: List
         b_boxes, confs, labels = self.process_output(outputs)
+
         # labels = [self.config.labels[i] for i in labels]
         result = DetectionResults(
             success=True if labels else False,
@@ -285,14 +300,28 @@ class ORTDetector(FileLock):
             return_empty = True
 
         if return_empty:
-            return np.empty((0, 4)), np.empty((0,)), np.empty((0,))
-
+            return [], [], []
+        logger.debug(F"{LP} BEFORE NMS - {type(boxes) = } - {type(scores) = } - {type(class_ids) = }")
         indices = cv2.dnn.NMSBoxes(
             boxes, scores, self.options.confidence, self.options.nms
         )
-        logger.debug(f"{LP} NMS indices: {type(indices) = } -- {indices =}")
-        return boxes[indices].astype(np.int32).tolist(), scores[indices].astype(np.float32).tolist(), class_ids[
-            indices].astype(np.int32).tolist()
+        if len(indices) == 0:
+            logger.warning(f"{LP} '{self.name}' no indices returned from NMSBoxes, returning top 10 boxes by confidence")
+            boxes = boxes[np.argsort(scores)[::-1]][:10]
+            scores = scores[np.argsort(scores)[::-1]][:10]
+            class_ids = class_ids[np.argsort(scores)[::-1]][:10]
+        else:
+            logger.debug(f"{LP} '{self.name}' NMS indices: {indices =}")
+            boxes = boxes[indices],
+            scores = scores[indices]
+            class_ids = class_ids[indices]
+        if isinstance(boxes, tuple):
+            if len(boxes) == 1:
+                boxes = boxes[0]
+        if isinstance(scores, tuple):
+            if len(scores) == 1:
+                scores = scores[0]
+        return boxes.astype(np.int32).tolist(), scores.astype(np.float32).tolist(), class_ids.astype(np.int32).tolist()
 
     def extract_boxes(self, predictions):
         """Extract boxes from predictions, scale them and convert from xywh to xyxy format"""

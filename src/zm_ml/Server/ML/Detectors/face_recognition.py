@@ -58,6 +58,8 @@ class FaceRecognitionLibDetector(FileLock):
         self.processor_check()
         # get trained face encodings loaded
         self.load_trained_faces()
+        super().__init__()
+
 
 
     def load_trained_faces(self, faces_file: Optional[Path] = None):
@@ -88,6 +90,7 @@ class FaceRecognitionLibDetector(FileLock):
             )
 
     def processor_check(self):
+
         if self.processor == ModelProcessor.GPU:
             try:
                 if dlib.DLIB_USE_CUDA and dlib.cuda.get_num_devices() >= 1:

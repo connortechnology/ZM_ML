@@ -21,6 +21,10 @@ class FileLock:
     lock_name = ""
     lock_dir = ""
 
+    def __init__(self):
+        self.create_lock()
+
+
     def create_lock(self):
         from ..app import locks_enabled, get_global_config
 
@@ -78,7 +82,7 @@ class FileLock:
                     self.is_locked = True
                 else:
                     logger.debug(
-                        f"{LP} {self.name} has no lock to acquire, creating one..."
+                        f"{LP} '{self.name}' has no lock to acquire, creating one..."
                     )
                     self.create_lock()
                     self.acquire_lock()

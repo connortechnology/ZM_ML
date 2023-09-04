@@ -498,7 +498,7 @@ class TRTModelConfig(BaseModelConfig):
         False, description="Zero pad the image to be a square"
     )
 
-    gpu_idx: Optional[int] = None
+    gpu_idx: Optional[int] = 0
     lib_path: Optional[Path] = None
 
 
@@ -807,7 +807,7 @@ class Settings(BaseModel, arbitrary_types_allowed=True):
                     _sub_fw = model.get("sub_framework", "object")
                     _options = model.get("detection_options", {})
                     _type = model.get("model_type", ModelType.OBJECT)
-                    logger.debug(f"Settings:: validate available models => {_framework = } -- {_sub_fw = } -- {_type = } -- {_options = }")
+                    logger.debug(f"Settings:: validate available models => {_framework = } -- {_sub_fw = } -- {_type = } -- {_options = } filename: {model.get('input', 'No input file defined!')}")
                     if _framework == ModelFrameWork.HTTP:
                         if _sub_fw == HTTPSubFrameWork.REKOGNITION:
                             model["model_type"] = ModelType.OBJECT
@@ -899,6 +899,10 @@ class Settings(BaseModel, arbitrary_types_allowed=True):
                     elif _framework == ModelFrameWork.CORAL:
                         config = TPUModelConfig(**model)
                         config.detection_options = TPUModelOptions(**_options)
+                        final_model_config = config
+                    elif _framework == ModelFrameWork.TRT:
+                        config = TRTModelConfig(**model)
+                        config.detection_options = TRTModelOptions(**_options)
                         final_model_config = config
                     elif _framework == ModelFrameWork.TORCH:
                         config = TorchModelConfig(**model)
@@ -1003,6 +1007,7 @@ class APIDetector:
         TorchModelConfig,
         "UltralyticsModelConfig"
         "ORTModelConfig",
+        "TRTModelConfig",
     ]
     _options: Union[
         BaseModelOptions,
@@ -1015,6 +1020,7 @@ class APIDetector:
         TorchModelOptions,
         UltralyticsModelOptions,
         "ORTModelOptions",
+        "TRTModelOptions",
     ]
 
     def __repr__(self):
@@ -1035,6 +1041,7 @@ class APIDetector:
             TorchModelConfig,
             "UltralyticsModelConfig",
             "ORTModelConfig",
+            "TRTModelConfig",
 
         ],
     ):
@@ -1044,8 +1051,8 @@ class APIDetector:
         from ..ML.Detectors.alpr import PlateRecognizer, OpenAlprCmdLine, OpenAlprCloud
         from ..ML.Detectors.virelai import VirelAI
         from ..ML.Detectors.aws_rekognition import AWSRekognition
-        from ..ML.Detectors.torch.base import TorchDetector
-        from ..ML.Detectors.ultralytics.yolo.base import UltralyticsYOLODetector
+        from ..ML.Detectors.torch.torch_base import TorchDetector
+        from ..ML.Detectors.ultralytics.yolo.ultra_base import UltralyticsYOLODetector
         from ..ML.Detectors.onnx_runtime import ORTDetector
 
         self.config = model_config
@@ -1065,6 +1072,7 @@ class APIDetector:
                 TorchDetector,
                 UltralyticsYOLODetector,
                 ORTDetector,
+                "TensorRtDetector",
             ]
         ] = None
         self._load_model()
@@ -1081,6 +1089,7 @@ class APIDetector:
         FaceRecognitionLibModelDetectionOptions,
         "UltralyticsModelOptions",
         "ORTModelOptions",
+        "TRTModelOptions",
     ]:
         return self._options
 
@@ -1096,6 +1105,7 @@ class APIDetector:
             FaceRecognitionLibModelDetectionOptions,
             "UltralyticsModelOptions",
             "ORTModelOptions",
+            "TRTModelOptions",
         ],
     ):
         self._options = options
@@ -1113,6 +1123,7 @@ class APIDetector:
                 VirelAIModelConfig,
                 RekognitionModelConfig,
                 ORTModelConfig,
+                TRTModelConfig,
             ]
         ] = None,
     ):
@@ -1167,6 +1178,10 @@ class APIDetector:
                     from ..ML.Detectors.opencv.onnx import CV2ONNXDetector
 
                     self.model = CV2ONNXDetector(self.config)
+            elif self.config.framework == ModelFrameWork.TRT:
+                from ..ML.Detectors.tensorrt.trt_base import TensorRtDetector
+
+                self.model = TensorRtDetector(self.config)
             elif self.config.framework == ModelFrameWork.ORT:
                 from ..ML.Detectors.onnx_runtime import ORTDetector
 
@@ -1200,12 +1215,12 @@ class APIDetector:
                 self.model = TpuDetector(self.config)
 
             elif self.config.framework == ModelFrameWork.TORCH:
-                from ..ML.Detectors.torch.base import TorchDetector
+                from ..ML.Detectors.torch.torch_base import TorchDetector
 
                 self.model = TorchDetector(self.config)
 
             elif self.config.framework == ModelFrameWork.ULTRALYTICS:
-                from ..ML.Detectors.ultralytics.yolo.base import UltralyticsYOLODetector
+                from ..ML.Detectors.ultralytics.yolo.ultra_base import UltralyticsYOLODetector
 
                 self.model = UltralyticsYOLODetector(self.config)
             else:
@@ -1213,7 +1228,7 @@ class APIDetector:
                     f"CANT CREATE DETECTOR -> Framework NOT IMPLEMENTED!!! {self.config.framework}"
                 )
         except Exception as e:
-            logger.warning(f"Error loading model: {e}", exc_info=True)
+            logger.warning(f"Error loading model ({self.config.name}): {e}", exc_info=True)
 
     def is_processor_available(self) -> bool:
         """Check if the processor is available"""
@@ -1331,12 +1346,18 @@ class APIDetector:
             elif framework == ModelFrameWork.DEEPFACE:
                 logger.warning("WORKING ON DeepFace models!")
                 available = False
+            elif framework == ModelFrameWork.TRT:
+                available = True
         logger.debug(f"{processor} is {'NOT ' if not available else ''}available for {framework} - '{self.config.name}'")
         return available
 
     def detect(self, image: np.ndarray) -> Dict[str, Any]:
         """Detect objects in the image"""
-        assert self.model, "model not loaded"
+        if self.model is None:
+            logger.warning(
+                f"Detector for {self.config.name} is not loaded, cannot detect objects!"
+            )
+            return
         return self.model.detect(image)
 
 
@@ -1362,7 +1383,7 @@ class GlobalConfig(BaseModel, arbitrary_types_allowed=True):
             try:
                 ret_ = APIDetector(model)
             except ImportError as e:
-                logger.warning(e)
+                logger.warning(e, exc_info=True)
             else:
                 self.detectors.append(ret_)
         if not ret_:

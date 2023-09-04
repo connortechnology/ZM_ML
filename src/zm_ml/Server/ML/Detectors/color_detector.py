@@ -25,6 +25,7 @@ LP: str = "color detect:"
 logger = getLogger(SERVER_LOGGER_NAME)
 # TODO: Make it a detector and have it initialized during init
 
+
 class ColorDetector:
     kmeans: KMeans
 

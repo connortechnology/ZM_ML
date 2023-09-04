@@ -49,7 +49,9 @@ class ModelFrameWork(str, Enum):
     FACE_RECOGNITION = "face_recognition"
     REKOGNITION = "rekognition"
     ORT = "ort"
-    DEFAULT = ULTRALYTICS
+    TRT = "trt"
+    DEFAULT = OPENCV
+
 
 
 class UltralyticsSubFrameWork(str, Enum):

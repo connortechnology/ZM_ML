@@ -926,7 +926,7 @@ class ZMClient:
                         async with session.post(
                             url,
                             data=mpwriter,
-                            timeout=aiohttp.ClientTimeout(total=10.0),
+                            timeout=aiohttp.ClientTimeout(total=30.0),
                         ) as r:
                             status = r.status
                             if status == 200:
@@ -1120,7 +1120,7 @@ class ZMClient:
                 "filtered_bounding_boxes": matched_e,
             }
             logger.debug(
-                f"based on strategy of {strategy}, BEST MATCH IS {matched['labels']}"
+                f"based on strategy of {strategy}, BEST MATCH IS {matched['labels']} from frame ID: {matched['frame_id']}"
             )
 
             await self.post_process(matched)

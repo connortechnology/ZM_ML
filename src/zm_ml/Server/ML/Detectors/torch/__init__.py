@@ -1,1 +1,1 @@
-from .base import TorchDetector
+from .torch_base import TorchDetector
