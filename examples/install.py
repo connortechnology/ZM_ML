@@ -1295,7 +1295,8 @@ def do_install(_inst_type: str):
 
         # Add the source dir to the pip install command
         _pip_prefix.append(_src)
-        logger.info(f"This may appear frozen for a few moments, please be patient...")
+        logger.info(f"This may appear frozen for a good amount of time, the venv is being installed and "
+                    f"many packages are being built. Please be patient... 5+ minutes is not uncommon.")
         # create venv, upgrade pip and setup tools and install ZoMi ML into the venv
         _venv = ZoMiEnvBuilder(
             with_pip=True, cmd=_pip_prefix, upgrade_deps=True, prompt="ZoMi_ML"
