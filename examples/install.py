@@ -1511,11 +1511,13 @@ class ZoMiEnvBuilder(venv.EnvBuilder):
         logger.debug(f"venv builder:DBG>>> About to run install command: '{self.install_cmd}'")
 
         try:
-            ran = subprocess.run(
-                self.install_cmd,
-                capture_output=True,
-                text=True,
-            )
+            # ran = subprocess.run(
+            #     self.install_cmd,
+            #     capture_output=True,
+            #     text=True,
+            # )
+            ran = subprocess.Popen(self.install_cmd, stdout=subprocess.PIPE)
+
         except subprocess.CalledProcessError as e:
             logger.error(f"Error installing pip dependencies!")
             logger.error(e)
@@ -1526,10 +1528,14 @@ class ZoMiEnvBuilder(venv.EnvBuilder):
             raise e
         else:
             if ran:
-                if ran.stdout:
-                    logger.info(f"\n{ran.stdout}")
-                if ran.stderr:
-                    logger.error(f"\n{ran.stderr}")
+                # if ran.stdout:
+                #     logger.info(f"\n{ran.stdout}")
+                # if ran.stderr:
+                #     logger.error(f"\n{ran.stderr}")
+                for c in iter(lambda: ran.stdout.read(1), b""):
+                    sys.stdout.buffer.write(c)
+                    c = c.decode("utf-8")
+                    logger.debug(f"venv builder:DBG>>> {c}")
 
 
 if __name__ == "__main__":
