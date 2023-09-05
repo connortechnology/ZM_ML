@@ -75,6 +75,7 @@ client = [
 server = [
     "torch>=2.0.1",
     "torchvision>=0.15.2",
+    "onnxruntime-gpu>=1.15.1",
     'cryptography>=41.0.0',
     'webcolors>=1.13',
     'scikit-learn>=1.2.2',
@@ -93,7 +94,7 @@ server = [
 ]
 
 # To export yolov8 and yolo-nas models to onnx
-onnx = [
+onnx_export = [
     "ultralytics>=8.0.1.141",
     "super_gradients>=3.1.3",
 ]

@@ -1383,7 +1383,7 @@ class Envsubst:
             self.env = env
         # handle simple un-bracketed env vars like $FOO
         a: str = _simple_re.sub(self._repl_simple_env_var, search_string)
-        logger.debug(f"envsubst DBG>>> after simple sub {type(a) = } -- {a =}")
+        logger.debug(f"envsubst DBG>>> after simple sub {type(a) = }")
         # handle bracketed env vars with optional default specification
         b: str = _extended_re.sub(self._repl_extended_env_var, a)
         return b
