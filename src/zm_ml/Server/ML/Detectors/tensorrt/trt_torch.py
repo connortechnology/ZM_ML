@@ -31,23 +31,31 @@ from pathlib import Path
 from typing import Optional, TYPE_CHECKING, Tuple, List, AnyStr, Union
 
 import numpy as np
-import torch
-import cv2
-import tensorrt as trt
-from torchvision.ops import nms
-
 from .....Server.Log import SERVER_LOGGER_NAME
-from .....Shared.Models.Enums import ModelProcessor
+
+logger = logging.getLogger(SERVER_LOGGER_NAME)
+
+try:
+    import torch
+    from torchvision.ops import nms
+except ImportError:
+    torch = None
+
+try:
+    import tensorrt as trt
+except ImportError:
+    trt = None
+
+
 from .....Server.Models.config import TRTModelConfig, TRTModelOptions
 from .....Server.ML.file_locks import FileLock
-from .....Shared.Models.config import DetectionResults, Result
+from .....Shared.Models.config import DetectionResults
 from .....Shared.Models.Enums import ModelProcessor
 
 
 if TYPE_CHECKING:
     from src.zm_ml.Shared.configs import GlobalConfig
 
-logger = logging.getLogger(SERVER_LOGGER_NAME)
 g: Optional[GlobalConfig] = None
 LP: str = "TRT:torch::"
 
@@ -66,6 +74,12 @@ class TensorRtTorchDetector(FileLock):
 
         def __init__(self, weight: Union[str, Path],
                      device: Optional[torch.device]) -> None:
+            if not torch:
+                logger.error(f"{LP} Torch not installed, cannot use Torch detectors")
+                return
+            if not trt:
+                logger.error(f"{LP} TensorRT not installed, cannot use TensorRT detectors")
+                return
             super(self).__init__()
             self.weight = Path(weight) if isinstance(weight, str) else weight
             self.device = device if device is not None else torch.device('cuda:0')

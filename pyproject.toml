@@ -8,21 +8,21 @@ name = "zm_ml"
 version = "0.0.1a3"
 dependencies = [
     # Client is default install
-    'cryptography>=41.0.0',
-    'psutil>=5.9.4',
-    'psutil-extra>=0.2.0',
-    "requests-toolbelt>=0.10.0",
-    "sqlalchemy>=1.4.42",
-    'pymysql>=1.0.2',
-    'shapely>=1.8.5',
-    "pydantic~=2.0.3",
-    "pydantic-settings~=2.0.2",
-    'dateparser>=1.1.3',
-    'paho-mqtt>=1.6.1',
-    'uvloop>=0.16.0',
-    'pygifsicle>=1.0.7',
-    'aiohttp>=3.8.3',
-    'python-dotenv>=0.21.0',
+    'cryptography==41.0.0',
+    'psutil==5.9.4',
+    'psutil-extra==0.2.0',
+    "requests-toolbelt==0.10.0",
+    "sqlalchemy==1.4.42",
+    'pymysql==1.0.2',
+    'shapely==1.8.5',
+    "pydantic==2.0.3",
+    "pydantic-settings==2.0.2",
+    'dateparser==1.1.3',
+    'paho-mqtt==1.6.1',
+    'uvloop==0.16.0',
+    'pygifsicle==1.0.7',
+    'aiohttp==3.8.3',
+    'python-dotenv==0.21.0',
 ]
 
 authors = [
@@ -54,21 +54,21 @@ classifiers = [
 [project.optional-dependencies]
 
 client = [
-    'cryptography>=41.0.0',
-    'psutil>=5.9.4',
-    'psutil-extra>=0.2.0',
-    "requests-toolbelt>=0.10.0",
-    "sqlalchemy>=1.4.42",
-    'pymysql>=1.0.2',
-    'shapely>=1.8.5',
-    "pydantic~=2.0.3",
-    "pydantic-settings~=2.0.2",
-    'dateparser>=1.1.3',
-    'paho-mqtt>=1.6.1',
-    'uvloop>=0.16.0',
-    'pygifsicle>=1.0.7',
-    'aiohttp>=3.8.3',
-    'python-dotenv>=0.21.0',
+    'cryptography==41.0.0',
+    'psutil==5.9.4',
+    'psutil-extra==0.2.0',
+    "requests-toolbelt==0.10.0",
+    "sqlalchemy==1.4.42",
+    'pymysql==1.0.2',
+    'shapely==1.8.5',
+    "pydantic==2.0.3",
+    "pydantic-settings==2.0.2",
+    'dateparser==1.1.3',
+    'paho-mqtt==1.6.1',
+    'uvloop==0.16.0',
+    'pygifsicle==1.0.7',
+    'aiohttp==3.8.3',
+    'python-dotenv==0.21.0',
 
 ]
 

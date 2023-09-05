@@ -1532,13 +1532,36 @@ class ZoMiEnvBuilder(venv.EnvBuilder):
                 #     logger.info(f"\n{ran.stdout}")
                 # if ran.stderr:
                 #     logger.error(f"\n{ran.stderr}")
+                msg = ""
                 for c in iter(lambda: ran.stdout.read(1), b""):
                     sys.stdout.buffer.write(c)
-                    c = c.decode("utf-8")
-                    logger.debug(f"venv builder:DBG>>> {c}")
+                    # UnicodeDecodeError: 'utf-8' codec can't decode byte 0xe2 in position 0: unexpected end of data
+                    # deal with unexpected end of data
+                    try:
+                        c = c.decode("utf-8")
+                    except UnicodeDecodeError:
+                        pass
+                    else:
+                        # add to the msg until we get a newline
+                        if c == "\n":
+                            logger.info(msg)
+                            msg = ""
+                        else:
+                            msg += c
+
 
 
 if __name__ == "__main__":
+    # check python is 3.8 or 3.9 only
+    import sys
+
+    if sys.version_info.major != 3:
+        logger.error("Python 3 is required to run this install script!")
+        sys.exit(1)
+    if sys.version_info.minor not in [8, 9]:
+        logger.error("Python 3.8 or 3.9 is required to run this install script!")
+        sys.exit(1)
+
     # parse args first
     args = parse_cli()
 
