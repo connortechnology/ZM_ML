@@ -30,7 +30,7 @@ authors = [
 ]
 readme = "README.md"
 
-requires-python = ">=3.8,<3.10"
+requires-python = ">=3.8,<3.11"
 keywords = ["zoneminder", "object_detection", "machine_learning", "facial_recognition", "ALPR" ]
 
 classifiers = [
