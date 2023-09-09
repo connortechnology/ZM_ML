@@ -1558,7 +1558,7 @@ if __name__ == "__main__":
     if sys.version_info.major != 3:
         logger.error("Python 3 is required to run this install script!")
         sys.exit(1)
-    if sys.version_info.minor not in [8, 9]:
+    if sys.version_info.minor not in [8, 9, 10]:
         logger.error("Python 3.8 or 3.9 is required to run this install script!")
         sys.exit(1)
 
