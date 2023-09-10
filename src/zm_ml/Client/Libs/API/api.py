@@ -7,6 +7,8 @@ import pickle
 import time
 from typing import Dict, List, Optional, Union, Tuple, TYPE_CHECKING
 import warnings
+from ...Log import CLIENT_LOGGER_NAME
+logger: logging.Logger = logging.getLogger(CLIENT_LOGGER_NAME)
 
 try:
     import aiohttp
@@ -17,7 +19,10 @@ try:
     from urllib3 import disable_warnings
     from urllib3.exceptions import InsecureRequestWarning
 except ImportError as e:
-    warnings.warn(f"ImportError: {e}", ImportWarning)
+    msg = f"ImportError: {e}"
+    logger.critical(msg)
+    warnings.warn(msg, ImportWarning)
+    print(msg)
     aiohttp: Optional[aiohttp] = None
     jwt: Optional[jwt] = None
     SecretStr: Optional[SecretStr] = None
@@ -28,7 +33,8 @@ except ImportError as e:
     disable_warnings: Optional[disable_warnings] = None
     InsecureRequestWarning: Optional[InsecureRequestWarning] = None
 
-from ...Log import CLIENT_LOGGER_NAME
+
+
 from ...Models.config import ZoneMinderSettings, MonitorsSettings
 
 if TYPE_CHECKING:
@@ -44,7 +50,6 @@ if TYPE_CHECKING:
 GRACE: int = 60 * 5  # 5 mins
 lp: str = "api::"
 
-logger: logging.Logger = logging.getLogger(CLIENT_LOGGER_NAME)
 g: Optional[GlobalConfig] = None
 LP: str = "api::"
 
@@ -817,7 +822,7 @@ class ZMAPI:
                 query["pass"] = self.password
 
         show_url: str = (
-            url.replace(self.portal_base_url, self.sanitize_str)
+            url.replace(str(self.portal_base_url), self.sanitize_str)
             if self.sanitize
             else url
         )
@@ -933,7 +938,7 @@ class ZMAPI:
             )
 
         show_url: str = (
-            url.replace(self.portal_base_url, self.sanitize_str)
+            url.replace(str(self.portal_base_url), self.sanitize_str)
             if self.sanitize
             else url
         )
