@@ -133,7 +133,6 @@ class PipeLine:
 
     @total_max_frames.setter
     def total_max_frames(self, value):
-        logger.debug(f"{LP} total_max_frames = {self._max_frames} IS BEING SET TO: {value}")
         self._max_frames = value
 
     @property
