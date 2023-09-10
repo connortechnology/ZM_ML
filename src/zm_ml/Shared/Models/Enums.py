@@ -1,4 +1,31 @@
 from enum import Enum
+from typing import Any
+import logging
+
+from pydantic_core import CoreSchema, core_schema
+
+from pydantic import BaseModel, GetCoreSchemaHandler, GetJsonSchemaHandler
+from pydantic.json_schema import JsonSchemaValue
+
+from ...Server.Log import SERVER_LOGGER_NAME
+
+logger = logging.getLogger(SERVER_LOGGER_NAME)
+
+
+class MyEnumBase(Enum):
+    @classmethod
+    def __get_pydantic_core_schema__(cls, _source_type: Any, _handler: GetCoreSchemaHandler) -> CoreSchema:
+
+        return core_schema.no_info_after_validator_function(
+            lambda x: getattr(cls, x.upper()),
+            core_schema.any_schema(),
+            serialization=core_schema.plain_serializer_function_ser_schema(lambda x: x),
+        )
+
+    @classmethod
+    def __get_pydantic_json_schema__(cls, _core_schema: CoreSchema, _handler: GetJsonSchemaHandler) -> JsonSchemaValue:
+        print(f"DEBUG: {type(cls) = } -- {cls = } -- {cls.__dict__ = }")
+        return {'enum': [m.name for m in cls], 'type': 'string'}
 
 
 class ModelType(str, Enum):
@@ -23,6 +50,12 @@ class OpenCVSubFrameWork(str, Enum):
     ONNX = "onnx"
     DEFAULT = DARKNET
 
+    def __repr__(self):
+        return f"<{self.__class__.__name__}: {self.name}>"
+
+    def __str__(self):
+        return f"{self.name}"
+
 
 class HTTPSubFrameWork(str, Enum):
     NONE = "none"
@@ -36,6 +69,11 @@ class ALPRSubFrameWork(str, Enum):
     PLATE_RECOGNIZER = "plate_recognizer"
     REKOR = "rekor"
     DEFAULT = OPENALPR
+    def __repr__(self):
+        return f"<{self.__class__.__name__}: {self.name}>"
+
+    def __str__(self):
+        return f"{self.name}"
 
 
 class ModelFrameWork(str, Enum):
@@ -53,13 +91,12 @@ class ModelFrameWork(str, Enum):
     DEFAULT = OPENCV
 
 
-
 class UltralyticsSubFrameWork(str, Enum):
     OBJECT = "object"
     SEGMENTATION = "segmentation"
     POSE = "pose"
     CLASSIFICATION = "classification"
-    DEFAULT = OBJECT
+
 
 class ModelProcessor(str, Enum):
     NONE = "none"

@@ -41,6 +41,7 @@ from ...Shared.Models.config import Testing, LoggingSettings, DefaultEnabled
 from ...Shared.Models.validators import (
     str2path,
 )
+
 if TYPE_CHECKING:
     from ..ML.Detectors.ultralytics.Models.config import UltralyticsModelConfig
 
@@ -126,7 +127,6 @@ class ServerSettings(BaseModel):
     jwt: JWTSettings = Field(default_factory=JWTSettings, description="JWT Settings")
 
 
-
 class DetectionResult(BaseModel):
     success: bool = False
     type: ModelType = None
@@ -143,15 +143,18 @@ class BaseModelOptions(BaseModel):
         0.2, ge=0.0, le=1.0, descritpiton="Confidence Threshold"
     )
 
+
 class ORTModelOptions(BaseModelOptions):
     nms: Optional[float] = Field(
         0.4, ge=0.0, le=1.0, description="Non-Maximum Suppression Threshold (IoU)"
     )
 
+
 class TRTModelOptions(BaseModelOptions):
     nms: Optional[float] = Field(
         0.4, ge=0.0, le=1.0, description="Non-Maximum Suppression Threshold (IoU)"
     )
+
 
 class UltralyticsModelOptions(BaseModelOptions):
     nms: Optional[float] = Field(
@@ -159,11 +162,9 @@ class UltralyticsModelOptions(BaseModelOptions):
     )
 
 
-
-
 class CV2YOLOModelOptions(BaseModelOptions):
     nms: Optional[float] = Field(
-    0.4, ge=0.0, le=1.0, description="Non-Maximum Suppression Threshold"
+        0.4, ge=0.0, le=1.0, description="Non-Maximum Suppression Threshold"
     )
 
 
@@ -329,7 +330,6 @@ class PlateRecognizerModelOptions(BaseModelOptions):
         return v
 
 
-
 class TorchModelOptions(BaseModelOptions):
     nms: Optional[float] = Field(
         0.3, ge=0.0, le=1.0, description="Non-Maximum Suppression Threshold"
@@ -363,7 +363,9 @@ class BaseModelConfig(BaseModel):
         ModelFrameWork.DEFAULT, description="model framework"
     )
     type_of: ModelType = Field(
-        ModelType.DEFAULT, description="model type (object, face, alpr)", alias="model_type"
+        ModelType.DEFAULT,
+        description="model type (object, face, alpr)",
+        alias="model_type",
     )
     processor: Optional[ModelProcessor] = Field(
         ModelProcessor.DEFAULT, description="Processor to use for model"
@@ -377,7 +379,7 @@ class BaseModelConfig(BaseModel):
             ALPRSubFrameWork,
             UltralyticsSubFrameWork,
         ]
-    ] = Field(UltralyticsSubFrameWork, description="sub-framework to use for model")
+    ] = Field(OpenCVSubFrameWork, description="sub-framework to use for model")
 
     detection_options: Union[
         BaseModelOptions,
@@ -477,13 +479,16 @@ class ORTModelConfig(BaseModelConfig):
         model_name = self.name
         model_input: Optional[Path] = self.input
         labels = self.labels
-        self.labels = validate_model_labels(labels, info=None, model_name=model_name, labels_file=self.classes)
+        self.labels = validate_model_labels(
+            labels, info=None, model_name=model_name, labels_file=self.classes
+        )
         v = model_input
         assert isinstance(v, (Path, str)), f"Invalid type: {type(v)} for {v}"
         if isinstance(v, str):
             v = Path(v)
 
         return self
+
 
 class TRTModelConfig(BaseModelConfig):
     input: Path = Field(None, description="model file/dir path (Optional)")
@@ -501,7 +506,6 @@ class TRTModelConfig(BaseModelConfig):
     gpu_idx: Optional[int] = 0
     lib_path: Optional[Path] = None
 
-
     labels: List[str] = Field(
         default=None,
         description="model labels parsed into a list of strings",
@@ -514,7 +518,9 @@ class TRTModelConfig(BaseModelConfig):
         model_name = self.name
         model_input: Optional[Path] = self.input
         labels = self.labels
-        self.labels = validate_model_labels(labels, info=None, model_name=model_name, labels_file=self.classes)
+        self.labels = validate_model_labels(
+            labels, info=None, model_name=model_name, labels_file=self.classes
+        )
         v = model_input
         assert isinstance(v, (Path, str)), f"Invalid type: {type(v)} for {v}"
         if isinstance(v, str):
@@ -522,14 +528,18 @@ class TRTModelConfig(BaseModelConfig):
 
         return self
 
+
 class CV2YOLOModelConfig(BaseModelConfig):
     class ONNXType(str, enum.Enum):
         v5 = "yolov5"
         v8 = "yolov8"
         nas = "yolo-nas"
+
     input: Path = Field(None, description="model file/dir path (Optional)")
     classes: Path = Field(default=None, description="model labels file path (Optional)")
-    config: Optional[Path] = Field(default=None, description="model config file path (Optional)")
+    config: Optional[Path] = Field(
+        default=None, description="model config file path (Optional)"
+    )
     height: Optional[int] = Field(
         416, ge=1, description="Model input height (resized for model)"
     )
@@ -542,7 +552,6 @@ class CV2YOLOModelConfig(BaseModelConfig):
     cv2_cuda_fp_16: Optional[bool] = Field(
         False, description="model uses Floating Point 16 Backend (EXPERIMENTAL!)"
     )
-
 
     onnx_type: Optional[ONNXType] = Field(None, description="ONNX Model Type")
 
@@ -559,8 +568,9 @@ class CV2YOLOModelConfig(BaseModelConfig):
         model_input: Optional[Path] = self.input
         model_config: Optional[Path] = self.config or None
         labels = self.labels
-        self.labels = validate_model_labels(labels, info=None, model_name=model_name, labels_file=self.classes)
-
+        self.labels = validate_model_labels(
+            labels, info=None, model_name=model_name, labels_file=self.classes
+        )
 
         for v in (model_input, model_config):
             if not v:
@@ -569,7 +579,9 @@ class CV2YOLOModelConfig(BaseModelConfig):
             if v == model_config:
                 if v is None:
                     if model_input and model_input.suffix == ".weights":
-                        raise ValueError(f"'{v.__class__.name}' is required when 'input' is a DarkNet .weights file")
+                        raise ValueError(
+                            f"'{v.__class__.name}' is required when 'input' is a DarkNet .weights file"
+                        )
                     return v
             elif isinstance(v, str):
                 v = Path(v)
@@ -681,9 +693,7 @@ class TorchModelConfig(BaseModelConfig):
     )
 
     _validate_labels = field_validator("labels")(validate_model_labels)
-    _validate = field_validator("input", "classes", mode="before")(
-        str2path
-    )
+    _validate = field_validator("input", "classes", mode="before")(str2path)
 
 
 class ColorDetectSettings(BaseModel):
@@ -774,7 +784,6 @@ class Settings(BaseModel, arbitrary_types_allowed=True):
         None, description="Available models"
     )
 
-
     def get_lock_settings(self):
         return self.locks
 
@@ -799,7 +808,7 @@ class Settings(BaseModel, arbitrary_types_allowed=True):
                         FaceRecognitionLibModelConfig,
                         ALPRModelConfig,
                         CV2YOLOModelConfig,
-                        UltralyticsModelConfig,
+                        "UltralyticsModelConfig",
                         TorchModelConfig,
                         None,
                     ] = None
@@ -807,7 +816,9 @@ class Settings(BaseModel, arbitrary_types_allowed=True):
                     _sub_fw = model.get("sub_framework", "object")
                     _options = model.get("detection_options", {})
                     _type = model.get("model_type", ModelType.OBJECT)
-                    logger.debug(f"Settings:: validate available models => {_framework = } -- {_sub_fw = } -- {_type = } -- {_options = } filename: {model.get('input', 'No input file defined!')}")
+                    logger.debug(
+                        f"Settings:: validate available models => {_framework = } -- {_sub_fw = } -- {_type = } -- {_options = } filename: {model.get('input', 'No input file defined!')}"
+                    )
                     if _framework == ModelFrameWork.HTTP:
                         if _sub_fw == HTTPSubFrameWork.REKOGNITION:
                             model["model_type"] = ModelType.OBJECT
@@ -865,8 +876,8 @@ class Settings(BaseModel, arbitrary_types_allowed=True):
 
                         elif _sub_fw == UltralyticsSubFrameWork.OBJECT:
                             final_model_config = UltralyticsModelConfig(**model)
-                            final_model_config.detection_options = UltralyticsModelOptions(
-                                **_options
+                            final_model_config.detection_options = (
+                                UltralyticsModelOptions(**_options)
                             )
 
                     elif _framework == ModelFrameWork.ORT:
@@ -915,7 +926,9 @@ class Settings(BaseModel, arbitrary_types_allowed=True):
 
                     # load model here
                     if final_model_config:
-                        logger.debug(f"Settings:: Adding to available models: {final_model_config.name}")
+                        logger.debug(
+                            f"Settings:: Adding to available models: {final_model_config.name}"
+                        )
                         v.append(final_model_config)
                 else:
                     disabled_models.append(model.get("name"))
@@ -1005,7 +1018,7 @@ class APIDetector:
         DeepFaceModelConfig,
         TPUModelConfig,
         TorchModelConfig,
-        "UltralyticsModelConfig"
+        "UltralyticsModelConfig",
         "ORTModelConfig",
         "TRTModelConfig",
     ]
@@ -1042,7 +1055,6 @@ class APIDetector:
             "UltralyticsModelConfig",
             "ORTModelConfig",
             "TRTModelConfig",
-
         ],
     ):
         from ..ML.Detectors.opencv.cv_yolo import CV2YOLODetector
@@ -1220,7 +1232,9 @@ class APIDetector:
                 self.model = TorchDetector(self.config)
 
             elif self.config.framework == ModelFrameWork.ULTRALYTICS:
-                from ..ML.Detectors.ultralytics.yolo.ultra_base import UltralyticsYOLODetector
+                from ..ML.Detectors.ultralytics.yolo.ultra_base import (
+                    UltralyticsYOLODetector,
+                )
 
                 self.model = UltralyticsYOLODetector(self.config)
             else:
@@ -1228,14 +1242,18 @@ class APIDetector:
                     f"CANT CREATE DETECTOR -> Framework NOT IMPLEMENTED!!! {self.config.framework}"
                 )
         except Exception as e:
-            logger.warning(f"Error loading model ({self.config.name}): {e}", exc_info=True)
+            logger.warning(
+                f"Error loading model ({self.config.name}): {e}", exc_info=True
+            )
 
     def is_processor_available(self) -> bool:
         """Check if the processor is available"""
         available = False
         processor = self.config.processor
         framework = self.config.framework
-        logger.debug(f"Checking if {processor} is available to use for {framework} ({self.config.name})")
+        logger.debug(
+            f"Checking if {processor} is available to use for {framework} ({self.config.name})"
+        )
         if processor == ModelProcessor.NONE:
             available = True
         if framework == ModelFrameWork.ALPR or framework == ModelFrameWork.REKOGNITION:
@@ -1269,7 +1287,6 @@ class APIDetector:
             else:
                 logger.warning("TPU processor is only available for Coral models!")
         elif processor == ModelProcessor.GPU:
-
             if framework == ModelFrameWork.OPENCV:
                 try:
                     import cv2.cuda
@@ -1307,9 +1324,7 @@ class APIDetector:
                     if ort.get_device() == "GPU":
                         available = True
                     else:
-                        logger.warning(
-                            f"No GPU devices found for '{self.config.name}'"
-                        )
+                        logger.warning(f"No GPU devices found for '{self.config.name}'")
             elif framework in (ModelFrameWork.ULTRALYTICS, ModelFrameWork.TORCH):
                 try:
                     import torch
@@ -1348,7 +1363,9 @@ class APIDetector:
                 available = False
             elif framework == ModelFrameWork.TRT:
                 available = True
-        logger.debug(f"{processor} is {'NOT ' if not available else ''}available for {framework} - '{self.config.name}'")
+        logger.debug(
+            f"{processor} is {'NOT ' if not available else ''}available for {framework} - '{self.config.name}'"
+        )
         return available
 
     def detect(self, image: np.ndarray) -> Dict[str, Any]:
@@ -1362,9 +1379,20 @@ class APIDetector:
 
 
 class GlobalConfig(BaseModel, arbitrary_types_allowed=True):
-    available_models: List[BaseModelConfig] = Field(
-        default_factory=list, description="Available models, call by ID"
-    )
+    available_models: List[
+        Union[
+            BaseModelConfig,
+            CV2YOLOModelConfig,
+            ALPRModelConfig,
+            FaceRecognitionLibModelConfig,
+            TorchModelConfig,
+            TRTModelConfig,
+            ORTModelConfig,
+            TPUModelConfig,
+            RekognitionModelConfig,
+            VirelAIModelConfig,
+        ]
+    ] = Field(default_factory=list, description="Available models, call by ID")
     config: Settings = Field(
         default=None, description="Global config, loaded from YAML config file"
     )

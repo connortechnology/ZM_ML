@@ -449,9 +449,9 @@ class OpenAlprCmdLine(AlprBase):
         """Wrapper class for OpenALPR command line utility"""
         super().__init__(model_config)
         self.lp = f"OpenALPR:CmdLine:"
-        cmd = self.options.alpr_binary
-        if self.options.alpr_binary_params:
-            self.cmd = f"{cmd} {self.options.alpr_binary_params}"
+        cmd = self.options.binary_path
+        if self.options.binary_params:
+            self.cmd = f"{cmd} {self.options.binary_params}"
         else:
             self.cmd = cmd
         if self.cmd.lower().find("-j") == -1:
@@ -475,11 +475,11 @@ class OpenAlprCmdLine(AlprBase):
         logger.debug(f"{self.lp} executing: '{do_cmd}'")
         try:
             response = subprocess.check_output(do_cmd, shell=True, text=True)
-            # this will cause the json.loads to fail if using gpu (haven't tested openCL)
-            p = "--\(\!\)Loaded CUDA classifier\n"
+            # this will cause the json.loads to fail if using gpu
+            p = "--(!)Loaded CUDA classifier\n"
             if response.find(p) != -1:
                 logger.debug(f"{self.lp} CUDA was used for processing!")
-            response.replace(p, "")
+            response = response.split(p)[1]
             logger.debug(
                 f"perf:{self.lp} took {time.perf_counter() - alpr_cmdline_exc_start} seconds"
             )
@@ -490,7 +490,7 @@ class OpenAlprCmdLine(AlprBase):
             response = b"{}"
         # catch json parsing errors
         except Exception as e:
-            logger.error(f"{self.lp} Error -> {e}")
+            logger.error(f"{self.lp} Error -> {type(e)} :: {e}")
             response = {}
 
         rescale = False
@@ -499,42 +499,85 @@ class OpenAlprCmdLine(AlprBase):
         results = response.get("results")
         # all_matches = response.get("candidates")
 
-        """{"version":2,"data_type":"alpr_results","epoch_time":1631393388251,"img_width":800,"img_height":450,"processing_time_ms":501.42929
-          1,"regions_of_interest":[{"x":0,"y":0,"width":800,"height":450}],
+        """{"version":2,
+        "data_type":"alpr_results",
+        "epoch_time":1631393388251,
+        "img_width":800,
+        "img_height":450,
+        "processing_time_ms":501.429291,
+        "regions_of_interest":[{"x":0,"y":0,"width":800,"height":450}],
 
-          "results":[{"plate":"CFT4539","confidence":90.140419,"matches_template":0,"plate_index":0,"region":"","region_confidence":0,"processing_time_ms"
+          "results":[
+          {"plate":"CFT4539","confidence":90.140419,"matches_template":0,"plate_index":0,"region":"","region_confidence":0,"processing_time_ms"
           :93.152191,"requested_topn":10,"coordinates":[{"x":412,"y":175},{"x":694,"y":180},{"x":694,"y":299},{"x":412,"y":295}],
 
           "candidates":[{"plate":"CFT4539","confidence":90.140419,"matches_template":0},{"plate":"CF
           T4S39","confidence":82.398186,"matches_template":0},{"plate":"CFT439","confidence":79.333336,"matches_template":0},{"plate":"GFT4539","confidence":80.629532,"matches_template":0},{"plate":"CT4539","confidence"
           :80.943665,"matches_template":0},{"plate":"CPT4539","confidence":80.256454,"matches_template":0},{"plate":"CFT459","confidence":77.853737,"matches_template":0},{"plate":"CFT4B39","confidence":77.567482,"matche
-          s_template":0},{"plate":"CF4539","confidence":75.923660,"matches_template":0}]}]}"""
+          s_template":0},{"plate":"CF4539","confidence":75.923660,"matches_template":0}]
+          # end of candidates
+          } # end of plate
+          ] # end of results
+          }"""
         if results:
             for plates in results:
-                label = plates["plate"]
-                conf = float(plates["confidence"]) / 100
-                if conf < self.options.confidence:
-                    logger.debug(
-                        f"{self.lp} discarding plate: {label} ({conf}) is less than the configured min confidence "
-                        f"-> '{self.options.confidence}'"
-                    )
-                    continue
-                # todo all_matches = 'candidates' and other data points from a successful detection via alpr_cmdline
-
                 x1 = round(int(plates["coordinates"][0]["x"]))
                 y1 = round(int(plates["coordinates"][0]["y"]))
                 x2 = round(int(plates["coordinates"][2]["x"]))
                 y2 = round(int(plates["coordinates"][2]["y"]))
-                labels.append(label)
-                bbox.append([x1, y1, x2, y2])
-                confs.append(conf)
+                candidates = plates.get("candidates")
+                if candidates:
+                    for plate in candidates:
+                        label = plate["plate"]
+                        conf = float(plate["confidence"]) / 100
+                        if conf < self.options.confidence:
+                            logger.debug(
+                                f"{self.lp} discarding plate: {label} ({conf}) is less than the configured min confidence "
+                                f"-> '{self.options.confidence}'"
+                            )
+                            continue
+                        labels.append(label)
+                        bbox.append([x1, y1, x2, y2])
+                        confs.append(conf)
+                else:
+                    label = plates["plate"]
+                    conf = float(plates["confidence"]) / 100
+                    if conf < self.options.confidence:
+                        logger.debug(
+                            f"{self.lp} discarding plate: {label} ({conf}) is less than the configured min confidence "
+                            f"-> '{self.options.confidence}'"
+                        )
+                        continue
+                    labels.append(label)
+                    bbox.append([x1, y1, x2, y2])
+                    confs.append(conf)
 
-        return {
-            "success": True if labels else False,
-            "type": self.config.type_of,
-            "processor": self.processor,
-            "model_name": self.name,
-            "label": labels,
-            "confidence": confs,
-            "bounding_box": bbox,
-        }
+        from ....Shared.Models.config import DetectionResults, Result
+
+        result = DetectionResults(
+            success=True if labels else False,
+            type=self.config.type_of,
+            processor=self.processor,
+            name=self.name,
+            results=[
+                Result(
+                    label=labels[i],
+                    confidence=confs[i],
+                    bounding_box=bbox[i],
+                )
+                for i in range(len(labels))
+            ],
+        )
+        return result
+
+
+'''
+curl -X 'POST' \
+  'https://zomi.baudneo.com/ml/detect/group' \
+  -H 'CF-Access-Client-Id: 2beb7e31ce62a280c0f5bf7ef5e08517.access' \
+  -H 'CF-Access-Client-Secret: 45381bc393c0fd806272e44b2922469dcd628bb5d2ab4b47d3677fd44621ad91' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: multipart/form-data' \
+  -F 'hints_model=openalpr gpu' \
+  -F 'image=@/shared/t.jpg;type=image/jpeg'
+'''

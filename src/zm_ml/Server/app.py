@@ -295,7 +295,17 @@ async def docs():
 
 @app.get("/models/available/all", summary="Get a list of all available models")
 async def _available_models():
-    return {"models": get_global_config().available_models}
+    try:
+        logger.debug(f"About to try and grab available models....")
+        x = {"models": get_global_config().available_models}
+    except Exception as e:
+        logger.error(f"ERROR: {e}", exc_info=True)
+        raise e
+    else:
+        logger.debug(f"Got available models: {x}")
+        return x
+
+
 
 
 @app.get(
@@ -368,10 +378,14 @@ async def group_detect(
     if hints_model:
         hints_model = hints_model[0].strip('"').split(",")
         detections = await threaded_detect(hints_model, image)
-
+        logger.debug(f"DBG>>> group detect results: {detections}")
         det: DetectionResults
         for det in detections:
-            det = det.model_dump()
+            if det:
+                from ..Shared.Models.config import DetectionResults
+
+                if isinstance(det, DetectionResults):
+                    det = det.model_dump()
         return detections
     return {"error": "No models specified"}
 
