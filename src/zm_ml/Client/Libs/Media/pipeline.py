@@ -49,22 +49,22 @@ class PipeLine:
                     f"{self.event_tot_frames} -- EndDateTime: {self.event_end_datetime} -- "
                     f"has event ended: {self.event_ended}"
                 )
-                if self.event_ended:
-                    logger.debug(
-                        f"DBG => THIS EVENT HAS AN EndDateTime ({self.event_end_datetime}) checking max_frames "
-                        f"and modifying if needed"
-                    )
-                    new_max = int(self.event_tot_frames / self.fps)
-                    logger.debug(
-                        f"DEBUG>>>{LP} current max: {self.total_max_frames} new_max: {new_max} (event_total_frames"
-                        f"[{self.event_tot_frames}] / fps[{self.fps}])"
-                    )
-                    if new_max > self.total_max_frames:
-                        logger.debug(
-                            f"{LP} max_frames ({self.total_max_frames}) is lower than current calculations, "
-                            f"setting to {new_max}"
-                        )
-                        self.total_max_frames = new_max
+                # if self.event_ended:
+                #     logger.debug(
+                #         f"DBG => THIS EVENT HAS AN EndDateTime ({self.event_end_datetime}) checking max_frames "
+                #         f"and modifying if needed"
+                #     )
+                    # new_max = int(self.event_tot_frames / self.fps)
+                    # logger.debug(
+                    #     f"DEBUG>>>{LP} current max: {self.total_max_frames} new_max: {new_max} (event_total_frames"
+                    #     f"[{self.event_tot_frames}] / fps[{self.fps}])"
+                    # )
+                    # if new_max > self.total_max_frames:
+                    #     logger.debug(
+                    #         f"{LP} max_frames ({self.total_max_frames}) is lower than current calculations, "
+                    #         f"setting to {new_max}"
+                    #     )
+                    #     self.total_max_frames = new_max
         else:
             logger.debug(f"{LP} event has ended, no need to grab event data")
 
