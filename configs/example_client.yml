@@ -517,11 +517,25 @@ detection_settings:
       # - ZMU is a binary that comes with ZM
       zmu: no
 
-      # - ZMS is WIP, it will raise not implemented error
-      # - ZMS is the CGI api that comes with ZM. This may end up being the default method
-      zms: no
+      # - ZMS is the CGI api that comes with ZM. This may end up being the default method.
+      zms:
+        enabled: no
+        # The complete URL to zms cgi script (i.e.: https://zm.example.com/zm/cgi-bin/nph-zms)
+        #url:
+
+        # How many frames per second should be grabbed to run Object Detection on (Default: 1)
+        fps: 1
+        # If you have a camera capturing 1 frame every <x> seconds, use sbf instead of fps
+        # Seconds Between frames, only fps or sbf can be used, not both. sbf takes precedence over fps.
+#        sbf: 1
+
+        # ANY of the delay options can be set as xx or xx.yy (int/float)
+        attempts: 3  # attempts to grab the requested frame
+        delay: 1.2   # delay between failed attempts
+        max_frames: 10  # Only grab a maximum of x frames (Default: Calculated based on event duration and monitor capturing FPS)
 
     # Save debug images to disk (Every frame grabbed from the source)
+    # BE AWARE, if you leave this on and forget, it will eat up disk space
     debug:
       # Shows bounding box of filtered out detections in RED
       enabled: no
