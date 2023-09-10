@@ -133,6 +133,7 @@ class PipeLine:
 
     @total_max_frames.setter
     def total_max_frames(self, value):
+        logger.debug(f"{LP} total_max_frames = {self._max_frames} IS BEING SET TO: {value}")
         self._max_frames = value
 
     @property
@@ -181,10 +182,10 @@ class PipeLine:
 
     async def image_generator(self):
         """Generator to return images from the source"""
-        logger.debug(f"{LP}image_generator: {self.frames_processed = } ---- {self.total_max_frames} ::: {self.frames_processed < self.total_max_frames = }")
+        logger.debug(f"{LP}image_generator: STARTING {self.frames_processed = } ---- {self.total_max_frames = } ::: {self.frames_processed < self.total_max_frames = }")
         while self.frames_processed < self.total_max_frames:
             yield await self.get_image()
-            logger.debug(f"{LP}image_generator: {self.frames_processed = } ---- {self.total_max_frames} ::: {self.frames_processed < self.total_max_frames = }")
+            logger.debug(f"{LP}image_generator: AFTER YIELD {self.frames_processed = } ---- {self.total_max_frames = } ::: {self.frames_processed < self.total_max_frames = }")
 
 
 
@@ -225,7 +226,7 @@ class APIImagePipeLine(PipeLine):
         )
         # We don't know how long an event will be so set an upper limit of at least
         # pre- + post-buffers calculated as seconds because we are pulling <X> FPS
-        self.total_max_frames = min(self.options.max_frames, self.total_min_frames)
+        self.total_max_frames = self.options.max_frames
 
     async def get_image(self) -> Tuple[Optional[Union[bytes, bool]], Optional[str]]:
         if self.frames_attempted >= self.total_max_frames:
