@@ -19,22 +19,33 @@ try:
     import cv2
 except ImportError:
     cv2 = None
+    msg = "OpenCV is not installed. This is required for image processing. " \
+        "Please install OpenCV to enable image processing."
     warnings.warn(
-        "OpenCV is not installed. This is required for image processing. "
-        "Please install OpenCV to enable image processing.",
+        msg,
         ImportWarning,
     )
+    print(msg)
 try:
     import numpy as np
     import yaml
     from pydantic import BaseModel, Field
     from shapely.geometry import Polygon
 except ImportError as e:
+    # Figure out what the fuck is going on, fucking piece of shit goof
+    msg = f"Some dependencies are not installed. Please install them to enable " \
+        f"all features. {e}"
     warnings.warn(
-        f"Some dependencies are not installed. Please install them to enable "
-        f"all features. {e}",
+        msg,
         ImportWarning,
     )
+    print(msg)
+    yaml = None
+    np = None
+    Polygon = None
+    BaseModel = None
+    Field = None
+    raise e
 
 from .Libs.Media.pipeline import APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine, ZMSImagePipeLine
 from .Libs.API import ZMAPI

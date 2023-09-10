@@ -1,4 +1,4 @@
-#!//opt/zm_ml/data/venv/bin/python3
+#!/opt/zm_ml/data/venv/bin/python3
 #!/usr/bin/env python3
 
 
