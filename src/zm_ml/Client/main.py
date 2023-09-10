@@ -19,8 +19,10 @@ try:
     import cv2
 except ImportError:
     cv2 = None
-    msg = "OpenCV is not installed. This is required for image processing. " \
+    msg = (
+        "OpenCV is not installed. This is required for image processing. "
         "Please install OpenCV to enable image processing."
+    )
     warnings.warn(
         msg,
         ImportWarning,
@@ -33,8 +35,10 @@ try:
     from shapely.geometry import Polygon
 except ImportError as e:
     # Figure out what the fuck is going on, fucking piece of shit goof
-    msg = f"Some dependencies are not installed. Please install them to enable " \
+    msg = (
+        f"Some dependencies are not installed. Please install them to enable "
         f"all features. {e}"
+    )
     warnings.warn(
         msg,
         ImportWarning,
@@ -47,7 +51,12 @@ except ImportError as e:
     Field = None
     raise e
 
-from .Libs.Media.pipeline import APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine, ZMSImagePipeLine
+from .Libs.Media.pipeline import (
+    APIImagePipeLine,
+    SHMImagePipeLine,
+    ZMUImagePipeLine,
+    ZMSImagePipeLine,
+)
 from .Libs.API import ZMAPI
 from .Models.utils import CFGHash, get_push_auth
 from .Models.config import (
@@ -511,7 +520,9 @@ class ZMClient:
     routes: List[ServerRoute]
     mid: int
     eid: int
-    image_pipeline: Union[APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine, ZMSImagePipeLine]
+    image_pipeline: Union[
+        APIImagePipeLine, SHMImagePipeLine, ZMUImagePipeLine, ZMSImagePipeLine
+    ]
     _comb: Dict
 
     @staticmethod
@@ -911,7 +922,7 @@ class ZMClient:
             reply: Optional[Dict[str, Any]] = None
 
             route_loop: int = 0
-        # todo: load balance routes?
+            # todo: load balance routes?
             for route in self.routes:
                 route_loop += 1
                 if route.enabled:
@@ -971,17 +982,24 @@ class ZMClient:
                             image, np.ndarray
                         ), "Image is not np.ndarray after converting from bytes"
                         image: np.ndarray
-                        logger.debug(
-                            f"There are {len(results)} UNFILTERED Results for image '{image_name}'"
-                        )
                         filter_start = perf_counter()
                         res_loop = 0
 
+                        # results = [DetectionResults(
+                        # success=True, name='yolo-nas-s trt', type=<ModelType: object detection>,
+                        # processor=<ModelProcessor: GPU>,
+                        # results=[<'refrigerator' (69.46%) @ [669, 32, 1841, 1079]>, <'person' (61.75%) @ [365, 45, 622, 830]>, <'person' (52.01%) @ [0, 945, 539, 1079]>, <'bottle' (38.37%) @ [479, 549, 595, 832]>, <'bottle' (33.38%) @ [269, 689, 312, 771]>], removed=None), DetectionResults(success=False, name='openalpr gpu', type=<ModelType: alpr detection>, processor=<ModelProcessor: NONE>, results=[], removed=None)]
                         result: DetectionResults
                         for result in results:
                             res_loop += 1
+                            logger.debug(
+                                f"{LP} starting to process results from model: {result.name}"
+                            )
 
                             if result.success is True:
+                                logger.debug(
+                                    f"There are {len(result.results)} UNFILTERED Results from model: {result.name} for image '{image_name}'"
+                                )
                                 if result.extra_image_data:
                                     logger.debug(
                                         f"There is extra image data in the result: {result.extra_image_data}"
@@ -1113,7 +1131,7 @@ class ZMClient:
                     f"Strategy is 'first' and there is a filtered match, breaking out of image loop {image_loop}"
                 )
                 break
-        logger.debug(f"{lp} OUT OF WHILE LOOP (image/image_name while loop)")
+        logger.debug(f"{lp} OUT OF IMAGE GENERATOR LOOP")
         logger.debug(
             f"perf:: MID: {g.mid} :: Total detections time {perf_counter() - _start:.5f} seconds"
         )

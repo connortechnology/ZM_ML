@@ -180,9 +180,12 @@ class PipeLine:
         return None, None
 
     async def image_generator(self):
-        """Generator to return images from the API"""
+        """Generator to return images from the source"""
+        logger.debug(f"{LP}image_generator: {self.frames_processed = } ---- {self.total_max_frames} ::: {self.frames_processed < self.total_max_frames = }")
         while self.frames_processed < self.total_max_frames:
             yield await self.get_image()
+            logger.debug(f"{LP}image_generator: {self.frames_processed = } ---- {self.total_max_frames} ::: {self.frames_processed < self.total_max_frames = }")
+
 
 
 class APIImagePipeLine(PipeLine):
