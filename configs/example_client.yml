@@ -17,7 +17,9 @@ substitutions:
 
   ROUTE_NAME: ${ML_INSTALL_CLIENT_ROUTE_NAME}
   ROUTE_HOST: ${ML_INSTALL_CLIENT_ROUTE_HOST}
-  ROUTE_PORT: ${ML_INSTALL_CLIENT_ROUTE_PORT}
+  # Make sure to quote the port number to force it to be a string
+  # leaving the number unquoted will raise a validation error
+  ROUTE_PORT: "${ML_INSTALL_CLIENT_ROUTE_PORT}"
 
   # This file contains substitutions that will be imported into this file (secrets)
   # NOTE: The 'IncludeFile' directive must be contained in the 'substitutions' section
