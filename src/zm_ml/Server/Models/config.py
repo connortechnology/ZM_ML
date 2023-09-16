@@ -1434,3 +1434,10 @@ class ServerEnvVars(BaseSettings, case_sensitive=True):
     conf_file: str = Field(
         None, env="ML_SERVER_CONF_FILE", description="Server YAML config file"
     )
+
+class ZoMiUser(BaseModel):
+    username: str = Field(..., description="ZoMi Username")
+    password: str = Field(..., description="ZoMi Password")
+    token: str = Field(..., description="ZoMi Token")
+    perms: List[str] = Field(..., description="ZoMi Permissions")
+    disabled: bool = Field(False, description="ZoMi User Disabled")
