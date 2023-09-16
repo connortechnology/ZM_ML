@@ -1436,8 +1436,24 @@ class ServerEnvVars(BaseSettings, case_sensitive=True):
     )
 
 class ZoMiUser(BaseModel):
+    # Create a docstring and signature for the class
+    """
+    ZoMi User
+
+    :param username: ZoMi Username
+    :type username: str
+    :param password: ZoMi Password
+    :type password: str
+    :param token: ZoMi Token
+    :type token: str
+    :param perms: ZoMi Permissions
+    :type perms: List[str]
+    :param disabled: ZoMi User Disabled
+    :type disabled: bool
+    """
+
     username: str = Field(..., description="ZoMi Username")
-    password: str = Field(..., description="ZoMi Password")
-    token: str = Field(..., description="ZoMi Token")
-    perms: List[str] = Field(..., description="ZoMi Permissions")
-    disabled: bool = Field(False, description="ZoMi User Disabled")
+    password: Optional[str] = Field(None, description="ZoMi Password")
+    token: Optional[str] = Field(None, description="ZoMi Token")
+    perms: Optional[List[str]] = Field(None, description="ZoMi Permissions")
+    disabled: Optional[bool] = Field(False, description="ZoMi User Disabled")
