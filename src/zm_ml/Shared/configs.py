@@ -59,6 +59,7 @@ class Singleton:
     def __call__(self):
         raise TypeError('Singletons must be accessed through `instance()`.')
 
+
 class GlobalConfig(BaseModel, arbitrary_types_allowed=True, extra="allow"):
     api: Optional[ZMAPI] = None
     db: Optional[ZMDB] = None
