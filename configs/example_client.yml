@@ -1,138 +1,142 @@
 
 ########################################################################
 # ${ML_INSTALL_ prepended variables are replaced during installation   #
+# DO NOT REMOVE THEM!                                                  #
 ########################################################################
 substitutions:
-  # Substitutions can be used like BASH variables
-  # NOT:: THEY MUST BE WRAPPED IN ${} -> ${THIS_WILL_WORK}
-  # Order matters!
+  # - Substitutions can be used like BASH variables
+  # - NOTE: THEY MUST BE WRAPPED IN ${} -> ${THIS_WILL_WORK}
+  # - Order matters!
   DATA_DIR: ${ML_INSTALL_DATA_DIR}
   TMP_DIR: ${ML_INSTALL_TMP_DIR}
   CFG_DIR: ${ML_INSTALL_CFG_DIR}
   LOGGING_DIR: ${ML_INSTALL_LOGGING_DIR}
   MODEL_DIR: ${ML_INSTALL_MODEL_DIR}
   IMAGE_DIR: ${ML_INSTALL_IMAGE_DIR}
-  # zm_ml will make its own venv, this will keep its env separate from system
+  # - ZoMi will make its own venv, this will keep its env separate from system
   VENV_DIR: ${ML_INSTALL_VENV_DIR}
 
   ROUTE_NAME: ${ML_INSTALL_CLIENT_ROUTE_NAME}
   ROUTE_HOST: ${ML_INSTALL_CLIENT_ROUTE_HOST}
-  # Make sure to quote the port number to force it to be a string
-  # leaving the number unquoted will raise a validation error
+  # - Make sure to quote the port number to force it to be a string
+  # - leaving the number unquoted will raise a validation error
   ROUTE_PORT: "${ML_INSTALL_CLIENT_ROUTE_PORT}"
 
-  # This file contains substitutions that will be imported into this file (secrets)
-  # NOTE: The 'IncludeFile' directive must be contained in the 'substitutions' section
+  # - This file contains substitutions that will be imported into this file (secrets)
+  # - NOTE: The 'IncludeFile' directive must be contained in the 'substitutions' section
   IncludeFile: ${ML_INSTALL_CFG_DIR}/secrets.yml
 
   # -------- Example
   EXAMPLE: "World!"
 
-
 THIS IS AN EXAMPLE:
   of substitution variables: "Hello, ${EXAMPLE}"
 
 system:
-  # Override the default config path [/etc/zm]
+  # - Override the default config path [/etc/zm]
   config_path: ${CFG_DIR}
-  # Path where the system will store variable data [/opt/zmml/data]
+  # - Path where the system will store variable data [/opt/zmml/data]
   variable_data_path: ${DATA_DIR}
-  # Path where temp files will be stored, leave empty to auto-detect
+  # - Path where temp files will be stored, leave empty to auto-detect
   tmp_path: ${TMP_DIR}
-  # Path to where any images will be stored
+  #  - Path to where any images will be stored
   image_dir: ${IMAGE_DIR}
-  # Path to where ZoMi ML will install its python environment
+  # - Path to where ZoMi ML will install/source its python environment
   venv_dir: ${VENV_DIR}
 
-  # Maximum parallel threaded processes (set to cores)
+  # - Maximum parallel threaded processes (set to cores)
   thread_workers: 4
 
+
+
 zoneminder:
-  # The web portal URL. (https://zm.myDomain.com/zm , http://localhost/zm, etc.)
+  # - The web portal URL. (https://zm.myDomain.com/zm , http://localhost/zm, etc.)
   portal_url: ${ZM_PORTAL}
   api:
-    # The ZM API URL (https://zm.myDomain.com/zm/api , http://localhost/zm/api, etc.)
+    # - The ZM API URL (https://zm.myDomain.com/zm/api , http://localhost/zm/api, etc.)
     api_url: ${ZM_API}
-    # If you have authentication, set the user and password
+    # - If you have authentication, set the user and password
     user: ${ZM_USER}
     password: ${ZM_PASS}
-    # a value of 'no' will allow self-signed certs
+    # - A value of 'no' will allow self-signed certs
     ssl_verify: no
-    headers:
-      # Add custom headers to all portal and api requests
-      #Name-Of-Header: Value Of Header
+    cloudflare_zta:
+      enabled: no
 
-      # Example: CloudFlare ZeroTrust Access headers
-      CF-Access-Client-Secret: ${ZM_CF_0TRUST_SECRET}
-      CF-Access-Client-Id: ${ZM_CF_0TRUST_HEADER}
+      
+    headers:
+      # - Add custom headers to all portal and api requests
+      # - Name-Of-Header: Value Of Header
+      # - NOTE: The 'Authorization' header is automatically added if you have a user and password set
+      
 
   misc:
-    # Write detection results to the 'Notes' section if the trigger is an event
-    # This will only work if the ZM API user has permission to write to the notes section
+    # - Write detection results to the 'Notes' section if the trigger is an event
+    # - This will only work if the ZM API user has permission to write to the notes section
     write_notes: yes
 
   db:
-    # You only need to configure this in extreme cases.
-    # Default: the system will first look in ENV,
-    # then look in ZM .conf files,
-    # then use the configured values below. Meaning the below values take precedence.
+    # - You only need to configure this in extreme cases.
+    # - Default: the system will first look in ENV,
+    # - then look in ZM .conf files,
+    # - then use the configured values below. Meaning the below values take precedence.
 
-    # DB Host/Port
-#    host: ${ZM_DB_HOST}
-#    port: ${ZM_DB_PORT}
-    # DB Creds
-#    user: ${ZM_DB_USER}
-#    password: ${ZM_DB_PASS}
-    # DB name
-#    name: ${ZM_DB_NAME}
+    # - DB Host/Port
+    #host: ${ZM_DB_HOST}
+    #port: ${ZM_DB_PORT}
+    # - DB Creds
+    #user: ${ZM_DB_USER}
+    #password: ${ZM_DB_PASS}
+    # - DB name
+    #name: ${ZM_DB_NAME}
 
-    # Python database driver to use, mysql+pymysql is the default
+    # - Python database driver to use, mysql+pymysql is the default
     #driver: mysql+pymysql
 
 logging:
-#  root logging level
+  # - Root logging level
   level: ${ML_INSTALL_LOGGING_LEVEL}
 
   sanitize:
-    # Try to sanitize tokens, keys, passwords, usernames, host and ip addresses from logs
+    # - Try to sanitize tokens, keys, passwords, usernames, host and ip addresses from logs
     enabled: yes
     replacement_str: <sanitized>
 
   console:
-    # log to console
+    # - Log to console
     enabled: ${ML_INSTALL_LOGGING_CONSOLE_ENABLED}
-  #    level: debug
+    #level: debug
 
   syslog:
     enabled: ${ML_INSTALL_LOGGING_SYSLOG_ENABLED}
-    #    level: debug
-#    address: /dev/log
+    #level: debug
+    #address: /dev/log
     address: ${ML_INSTALL_LOGGING_SYSLOG_ADDRESS}
 
   file:
-    # log to file
+    # - Log to file
     enabled: ${ML_INSTALL_LOGGING_FILE_ENABLED}
-    #    level: debug
-    # directory where log files will be stored
+    #level: debug
+    # - Directory where log files will be stored
     path: ${LOGGING_DIR}
-    # prefix logname with this string, 'zmml' will become zmml_m1.log for monitor 1
+    # - Prefix logname with this string, 'zmml' will become zmml_m1.log for monitor 1
     filename_prefix: zmmlC
-    # Do not suffix logs with monitor id, log everything to a single file (Leave blank to disable)
-    # If this has a value, filename_prefix is ignored.
+    # - Do not suffix logs with monitor id, log everything to a single file (Leave blank to disable)
+    # - If this has a value, filename_prefix is ignored.
     file_name:
-    # override log file permissions
-    # user:
-    # group:
+    # - Override log file permissions
+    #user:
+    #group:
 
 mlapi:
   routes:
     - name: ${ROUTE_NAME}
-      enabled: yes  # Default is yes
+      enabled: yes  # Default is yes, can be omitted
       weight: 0  # Lower takes precedence
-      host: ${ROUTE_HOST}  # Internal IP or hostname (add https:// if TLS encrypted)
+      host: ${ROUTE_HOST}  # IP or hostname (add https:// if TLS encrypted)
       port: ${ROUTE_PORT}
       timeout: 60  # Default: 90
-      # JWT Auth is WIP!
+      # - JWT Auth is WIP!
       #username: admin
       #password: admin
 
@@ -146,19 +150,19 @@ mlapi:
 animations:
   mp4: no
   gif: no
-  # Make a 'sped-up' version of the gif (makes the gif show more of an event)
+  # - Make a 'sped-up' version of the gif (makes the gif show more of an event)
   fast_gif: yes
-  # If you are on a low memory system, write frame buffer to disk instead of holding it in memory
-  # Slower but takes less memory.
+  # - If you are on a low memory system, write frame buffer to disk instead of holding it in memory
+  # - Slower but takes less memory.
   low_memory: no
-  # If an animation file already exists, overwrite it
+  # - If an animation file already exists, overwrite it
   overwrite: no
-  # Maximum width of the animation (Scaled properly)
-  ## NOTE: The animation can only be so big if you want it to be displayed in a push notification!
+  # - Maximum width of the animation (Scaled properly)
+  ## - NOTE: The animation can only be so big if you want it to be displayed in a push notification!
   width: 640
 
-  # If the API is being used for an event,
-  # set attempts andd elays between attempts at grabbing frames.
+  # - If the API is being used for an event,
+  # - set attempts and delays between attempts at grabbing frames.
   max_attempts: 3
   attempt_delay: 3
 
@@ -168,222 +172,221 @@ notifications:
   #  NOTIFICATIONS ARE WIP
   ########################
   mqtt:
-    #-- Use a MQTT client to publish messages to a broker
+    # - Use a MQTT client to publish messages to a broker
     enabled: no
 
-    #-- Allow you to set a custom MQTT topic name, formats for topics are: name/sub-name/sub-sub-name
-    #-- notice no leading or trailing '/'
-    #-- Default topic: zm_ml
-    #-- Be aware that the image and results are published under hard coded sub topics,
-    #-- this only apples to the root topic
+    # - Allow you to set a custom MQTT topic name, formats for topics are: name/sub-name/sub-sub-name
+    # - notice no leading or trailing '/'
+    # - Default topic: zm_ml
+    # - Be aware that the image and results are published under hard coded sub topics,
+    # - this only apples to the root topic
 
     root_topic: zm_ml
 
 
-    #-- Send image to "<root_topic>/mid/<monitor ID>/image/<format>" where topic is the mqtt topic and format is either bytes or base64
-    #-- Home Assistant can ingest images from MQTT
+    # - Send image to "<root_topic>/mid/<monitor ID>/image/<format>" where topic is the mqtt topic and format is either bytes or base64
+    # - Home Assistant can ingest images from MQTT
     image:
       enabled: no
-      #-- Format of image to send, options are: bytes, base64
-      #-- base64 is more efficient HASS can use both formats for MQTT Camera
+      # - Format of image to send, options are: bytes, base64
+      # - base64 is more efficient HASS can use both formats for MQTT Camera
       format: base64
       retain: yes # Retain the image message
 
 
-    #-- if using TLS remember about host verification (tls_secure: no = no host verification but still encrypted)
+    # - If using TLS remember about host verification (tls_secure: no = no host verification but still encrypted)
     broker: ${MQTT_BROKER}
 
-    #-- Only use this if not using standard tcp ports, it defaults to 1883 if no TLS and 8883 if TLS, this setting will override
+    # - Only use this if not using standard tcp ports, it defaults to 1883 if no TLS and 8883 if TLS, this setting will override
     #port:  1234
 
-    #-- MQTT Credentials if enabled in broker
+    # - MQTT Credentials if enabled in broker
     user: ${MQTT_USERNAME}
     pass: ${MQTT_PASSWORD}
 
-    #-- MQTT over TLS
-    #-- Location to MQTT broker CA certificate. Uncomment this line will enable MQTT over TLS.
-    #-- Also used to set mTLS CA
+    # - MQTT over TLS
+    # - Location to MQTT broker CA certificate. Uncomment this line will enable MQTT over TLS.
+    # - Also used to set mTLS CA
 #    tls_ca: /path_to/mqtt_certs/ca.crt
 
-    #-- secure TLS - Enable peer verifier/verify hostname in COMMON NAME (CN:  field)
-    #-- if using ip address in CN field or self-signed certs then this needs to be 'no'
-    #-- [Default: yes]
+    # - secure TLS - Enable peer verifier/verify hostname in COMMON NAME (CN:  field)
+    # - if using ip address in CN field or self-signed certs then this needs to be 'no'
+    # - [Default: yes]
     tls_secure: yes
 
 
-    #-- Here is a good guide on setting up a CA and signing server/client certificates for MQTT, even if you're using mqtt over your LAN only,
-    #-- it is always good to enable encryption and learn about it -> http://www.steves-internet-guide.com/creating-and-using-client-certificates-with-mqtt-and-mosquitto/
-    #-- I DO NOT RECOMMEND using Home Assistant MQTT broker add-on as it's a nightmare to get TLS working. (I am still unable to get the MQTT integration to connect to my broker using TLS)
-    #-- I run an MQTT mosquitto broker on my ZM host and hass connects to that over unencrypted connection.
-    #-- To enable 2-ways TLS, add client certificate and private key, Meaning you had a CA sign your broker's server key/cert
-    #-- and also had the CA sign the client key/cert that you are using here
-    #-- Location to client certificate and private key
+    # - Here is a good guide on setting up a CA and signing server/client certificates for MQTT, even if you're using mqtt over your LAN only,
+    # - it is always good to enable encryption and learn about it -> http://www.steves-internet-guide.com/creating-and-using-client-certificates-with-mqtt-and-mosquitto/
+    # - I DO NOT RECOMMEND using Home Assistant MQTT broker add-on as it's a nightmare to get TLS working. (I am still unable to get the MQTT integration to connect to my broker using TLS)
+    # - I run an MQTT mosquitto broker on my ZM host and hass connects to that over unencrypted connection.
+    # - To enable 2-ways TLS, add client certificate and private key, Meaning you had a CA sign your broker's server key/cert
+    # - and also had the CA sign the client key/cert that you are using here
+    # - Location to client certificate and private key
 #    tls_cert :  /path_to/mqtt_certs/client-zm.crt
 #    tls_key :  /path_to/mqtt_certs/client-zm.key
 
 
   zmninja:
-    # Attempt to send a push notification to zmNinja clients (WIP as zmninja is been moved to ZoneMinder app signatures)
+    # - Attempt to send a push notification to zmNinja clients (WIP as zmninja is been moved to ZoneMinder app signatures)
     enabled: no
 
     fcm:
-    # Default YES - switch to no until ZM team recompiles zmninja with new creds
+    # - Default YES - switch to no until ZM team recompiles zmninja with new creds
       v1:
         enabled: no
-        # When push messages are sent, your ES sends a message to my cloud function
-        # that sends the message to Google's FCM servers. This is the key that authorizes
-        # your ES to send messages to my cloud function. By default, it will contain a key
-        # that authorizes with my server. If you switch to your own server, change this value
-        # You will also need to switch the server URL to your own server, use fcm:v1:url for that
+        # - When push messages are sent, your ES sends a message to my cloud function
+        # - that sends the message to Google's FCM servers. This is the key that authorizes
+        # - your ES to send messages to my cloud function. By default, it will contain a key
+        # - that authorizes with my server. If you switch to your own server, change this value
+        # - You will also need to switch the server URL to your own server, use fcm:v1:url for that
         key:
         url:
-      # Location of tokens.txt that the websocket server tracks from zmNinja
+      # - Location of tokens.txt that the websocket server tracks from zmNinja
       token_file: '${DATA_DIR}/push/tokens.txt'
-      # if yes, will replace notifications with the latest one
+      # - If yes, will replace notifications with the latest one
       replace_messages: no
-      # Date format to use when sending notification over push (FCM)
-      # For example, a 24 hr format would be
+      # - Date format to use when sending notification over push (FCM)
+      # - For example, a 24 hr format would be
       #date_format: %H:%M, %d-%b
       date_fmt: "%I:%M %p, %d-%b"
 
-      # Set priority for android push.
-      # You can set it to high or normal.
-      # There is weird foo going on here. If you set it to high,
-      # and don't interact with push, users report after a while they
-      # get delayed by Google. I haven't quite figured out what is the precise
-      # value to put here to make sure it always reaches you. Also make sure
-      # you read the zmES faq on delayed push [Default: high]
+      # - Set priority for android push.
+      # - You can set it to high or normal.
+      # - There is weird foo going on here. If you set it to high,
+      # - and don't interact with push, users report after a while they
+      # - get delayed by Google. I haven't quite figured out what is the precise
+      # - value to put here to make sure it always reaches you. Also make sure
+      # - you read the zmES faq on delayed push [Default: high]
       android_priority: high
 
-      # Make this yes if you are having push notification issues and want me to
-      # take a look at what is going on my server side. Default is no
-      # WARNING: If you enable this, I'll get to see your push notification details
-      # including your full token and possibly your ZM user and password that you provide
-      # as part of the picture URL. I try and automatically replace it, but no guarantees if
-      # the regex fails in certain conditions. SO KEEP THIS OFF unless you've chatted with me
-      # and you know we have exchanged notes. You should turn this off once debugging is over
+      # - Make this yes if you are having push notification issues and want me to
+      # - take a look at what is going on my server side. Default is no
+      # - WARNING: If you enable this, I'll get to see your push notification details
+      # - including your full token and possibly your ZM user and password that you provide
+      # - as part of the picture URL. I try and automatically replace it, but no guarantees if
+      # - the regex fails in certain conditions. SO KEEP THIS OFF unless you've chatted with me
+      # - and you know we have exchanged notes. You should turn this off once debugging is over
       log_raw_message: no
 
-      # If you want me to help you debug what is going wrong in FCM, it helps
-      # if you add a unique ID here so that I know what to look for
-      # it can be anything. Default is NONE
+      # - If you want me to help you debug what is going wrong in FCM, it helps
+      # - if you add a unique ID here so that I know what to look for
+      # - it can be anything. Default is NONE
       log_message_id: I_LOVE_LAMBSHANKS
 
-      # If you see messages not being delivered in doze mode for android
-      # Even AFTER you disable battery optimization for the app, try making this 0
-      # otherwise leave it unspecified. The value here is in seconds
-      # it specifies how long the message will be valid before it is discarded
-      # Some reports say if you set this to 0, android will try and deliver it immediately
-      # while others say it won't. YMMV.
+      # - If you see messages not being delivered in doze mode for android
+      # - Even AFTER you disable battery optimization for the app, try making this 0
+      # - otherwise leave it unspecified. The value here is in seconds
+      # - it specifies how long the message will be valid before it is discarded
+      # - Some reports say if you set this to 0, android will try and deliver it immediately
+      # - while others say it won't. YMMV.
       android_ttl: 0
 
-  # Gotify is a self-hosted push notification server with an Android app (no iOS)
+  # - Gotify is a self-hosted push notification server with an Android app (no iOS)
   gotify:
-    # Attempt to send a push notification to Gotify clients
+    # - Attempt to send a push notification to Gotify clients
     enabled: no
-    # If you are not receiving images in gotify notifications, set this to yes to set image to a publicly available URL
-    # This will tell you if your gotify android clients are not able to access your ZM server from outside the LAN
+    # - If you are not receiving images in gotify notifications, set this to yes to set image to a publicly available URL
+    # - This will tell you if your gotify android clients are not able to access your ZM server from outside the LAN
     test_image: no
 
-    # Gotify server URL
+    # - Gotify server URL
     host: ${GOTI_HOST}
-    # Gotify App token
+    # - Gotify App token
     token: ${GOTI_TOKEN}
-    # Override the ZM Portal URL for gotify image grabbing (useful behind a reverse proxy)
-    # say ZoneMinder web portal is http:///10.0.1.25 due to being on internal network but
-    # Gotify needs https://zm.example.com/zm to grab the images from a public URL.
+    # - Override the ZM Portal URL for gotify image grabbing (useful behind a reverse proxy)
+    # - say ZoneMinder web portal is http:///10.0.1.25 due to being on internal network but
+    # - Gotify needs https://zm.example.com/zm to grab the images from a public URL.
     portal: ${GOTI_PORTAL}
-    # REMEMBER that Gotify grabs the image from a URL it can access instead of having it sent directly to it like pushover does.
+    # - REMEMBER that Gotify grabs the image from a URL it can access instead of having it sent directly to it like pushover does.
 
-    # Show a clickable link to view the event in a browser (only once inside the Gotify App).
-    # this is handy if the notification goes out to a device without zmNinja installed.
-    # They can just click the link and view the event in a regular browser.
+    # - Show a clickable link to view the event in a browser (only once inside the Gotify App).
+    # - this is handy if the notification goes out to a device without zmNinja installed.
+    # - They can just click the link and view the event in a regular browser.
     # - NOTE: Your ZM server may need to be accessible externally for this to work correctly.
 
     # !! WARNING: If you use this, you are POTENTIALLY sending your ZM user and password (or JWT access token) to the Gotify server/clients,
-    # if no SSL is used IT WILL BE CLEAR TEXT! So USE SSL!
+    # - if no SSL is used IT WILL BE CLEAR TEXT! So USE SSL!
 
-    # [Default: no]
+    # - [Default: no]
     clickable_link: yes
 
-    # The ZM API user for the clickable URL link in the pushover notification. I HIGHLY recommend HTTPS on your ZM host,
-    # making a user with VIEW privileges of stream and events only and using that for push_user and pas
+    # - The ZM API user for the clickable URL link in the pushover notification. I HIGHLY recommend HTTPS on your ZM host,
+    # - making a user with VIEW privileges of stream and events only and using that for push_user and pas
     # - EXAMPLE: make a user named 'PushView' with VIEW privs only for STREAM and EVENT
-    # [Default: None]
+    # - [Default: None]
     link_user: ${LINKURL_USER}
     link_pass: ${LINKURL_PASS}
 
-    # Control the 'View event in browser' video URL params ->
-    # zm.example.com/zm/cgi-bin/nph-zms? ----- continued next line ------
-    # mode={_mode}&scale={_scale}&maxfps={_max_fps}&buffer={_buffer}&replay={_replay}
+    # - Control the 'View event in browser' video URL params ->
+    # - zm.example.com/zm/cgi-bin/nph-zms? ----- continued next line ------
+    # - mode={_mode}&scale={_scale}&maxfps={_max_fps}&buffer={_buffer}&replay={_replay}
     url_opts:
-      # [Default: jpeg]
+      # - [Default: jpeg]
       mode: jpeg
-      # [Default: 50]
+      # - [Default: 50]
       scale: 50
-      # [Default: 15]
+      # - [Default: 15]
       max_fps: 15
-      # [Default: 1000]
+      # - [Default: 1000]
       buffer: 1000
-      # [Default: single]
+      # - [Default: single]
       replay: single
 
+  # - Pushover is a paid push notification service with an Android and iOS app
   pushover:
-    # Pushover is a paid push notification service with an Android and iOS app
     enabled: no
-    # This Pushover app will send a jpeg notification
+    # - This Pushover app will send a jpeg notification
     token: ${PUSHOVER_TOKEN}
     key: ${PUSHOVER_KEY}
 
-    # PushOver has a monthly limit, 'cooldown' means at least X seconds must have passed since the last push for that monitor
-    # i.e: seconds: 30 means only send a pushover notification if it has been at least 30 seconds since the
-    # last SUCCESSFUL pushover notification for that MONITOR
+    # - PushOver has a monthly limit, 'cooldown' means at least X seconds must have passed since the last push for that monitor
+    # - i.e: seconds: 30 means only send a pushover notification if it has been at least 30 seconds since the
+    # - last SUCCESSFUL pushover notification for that MONITOR
     cooldown:
-    # [Default: no]
+    # - [Default: no]
       enabled: no
-      # [Default: 30]
+      # - [Default: 30]
       seconds: 30
-    # send the message to a specififc device (leave blank to send to all devices)
-    # [Default: <Nothing>]
+    # - send the message to a specififc device (leave blank to send to all devices)
+    # - [Default: <Nothing>]
     device:
-
 
 
     animation:
       enabled: no
-      # If a gif is being created, send it as a separate pushover animation (Pushover only works with GIF)
+      # - If a gif is being created, send it as a separate pushover animation (Pushover only works with GIF)
       token:
       key:
 
-    # Pushover custom notification sounds!
+    # - Pushover custom notification sounds!
     # *** NOTE: has to be setup in your pushover account first.
     # *** Meaning you have to upload mp3s and label the sound files with the same name as the sound you want to use.
     sounds:
-      # You can override these sounds on a per monitor basis, see the per monitor examples for how to achieve
-      # 'person detected in the front yard' sound for the front yard notification when a person is in the detected objects
+      # - You can override these sounds on a per monitor basis, see the per monitor examples for how to achieve
+      # - 'person detected in the front yard' sound for the front yard notification when a person is in the detected objects
       default: motion_detected
-      # per object overrides are formatted as such
+      # - Per object overrides are formatted as such
       person: person_detected
-      #    dog: dog_detected
-      # custom groups can be specified as such
-      #    vehicles: vehicle_detected
-      #    animals: animal_detected
+      #dog: dog_detected
+      # - Custom groups can be specified as such
+      #vehicles: vehicle_detected
+      #animals: animal_detected
 
-    # Show a clickable link to view the event in a browser (only once inside the Pushover App).
-    # this is handy if the notification goes out to a device without zmNinja installed.
-    # They can just click the link and view the event in a regular browser.
+    # - Show a clickable link to view the event in a browser (only once inside the Pushover App).
+    # - this is handy if the notification goes out to a device without zmNinja installed.
+    # - They can just click the link and view the event in a regular browser.
     # - NOTE: Your ZM server may need to be accessible externally for this to work correctly.
 
     # !! WARNING: If you use this, you are sending your ZM user and password to the Gotify server/clients,
-    # if no SSL is used IT WILL BE CLEAR TEXT! So USE SSL!
+    # - if no SSL is used IT WILL BE CLEAR TEXT! So USE SSL!
 
-    # [Default: no]
+    # - [Default: no]
     clickable_link: yes
 
-    # The ZM API user for the clickable URL link in the pushover notification. I HIGHLY recommend HTTPS on your ZM host,
-    # making a user with VIEW privileges of stream and events only and using that for link_user and link_pass
-    # example: make a user named 'notifications' with VIEW privileges only for STREAM and EVENT
-    # [Default: None]
+    # - The ZM API user for the clickable URL link in the pushover notification. I HIGHLY recommend HTTPS on your ZM host,
+    # - making a user with VIEW privileges of stream and events only and using that for link_user and link_pass
+    # - example: make a user named 'notifications' with VIEW privileges only for STREAM and EVENT
+    # - [Default: None]
     link_user: ${LINKURL_USER}
     link_pass: ${LINKURL_PASS}
 
@@ -392,15 +395,15 @@ notifications:
     # - zm.example.com/zm/cgi-bin/nph-zms? ----- continued next line ------
     # - mode={mode}&scale={scale}&maxfps={max_fps}&buffer={buffer}&replay={replay}
     url_opts:
-      # [Default: jpeg]
+      # - [Default: jpeg]
       mode: jpeg
-      # [Default: 50]
+      # - [Default: 50]
       scale: 50
-      # [Default: 15]
+      # - [Default: 15]
       max_fps: 15
-      # [Default: 1000]
+      # - [Default: 1000]
       buffer: 1000
-      # [Default: single]
+      # - [Default: single]
       replay: single
 
   shell_script:
@@ -425,9 +428,8 @@ notifications:
       - results  # [ {label: person, conf: 0.68, bbox: (x, y, x2, y2)},  ]
       # - x,y = top left corner x2, y2 = bottom left corner
 
-
+# - These are 'groups' of labels that can be used in most options that accept a class or label
 label_groups:
-  # These are 'groups' of labels that can be used in most options that accept a class or label
   animals:
     - dog
     - cat
@@ -440,7 +442,7 @@ label_groups:
     - bus
     - motorbike
     - boat
-  # For face detection/recognition
+  # - For face detection/recognition
   friends:
     - Bart
     - Maggie
@@ -449,7 +451,7 @@ label_groups:
     - Nelson
     - Sideshow Bob
     - Mr. Burns
-  # For ALPR
+  # - For ALPR
   my_plates:
     - 1ABC123
     - 2DEF456
@@ -461,20 +463,20 @@ label_groups:
 
 detection_settings:
   models:
-    # Models to run on all monitors
-    # NOTE: You can override these settings per monitor
+    # - Models to run on all monitors
+    # - NOTE: You can override these settings per monitor
     yolov4 tiny:
     yolov7 tiny:
 
-  # Detect color of most dominant object by cropping its bounding box and finding top_n dominant colors
+  # - Detect color of most dominant object by cropping its bounding box and finding top_n dominant colors
   detect_color:
-    # GLOBAL:: This will detect color for all monitors, can be overridden per monitor and per zone.
+    # - GLOBAL:: This will detect color for all monitors, can be overridden per monitor and per zone.
     enabled: yes
-    # Top X colors to detect (Default: 3)
+    # - Top X colors to detect (Default: 3)
     top_n: 3
-    # only detect the color of these labels (label_groups supported)
+    # - Only detect the color of these labels (label_groups supported)
     labels:
-      # If no labels are defined, 'all' labels will be implied
+      # - If no labels are defined, 'all' labels will be implied
       - vehicles
 
   # - Import zones that have been defined in ZM Web GUI
@@ -486,7 +488,7 @@ detection_settings:
   match_origin_zone: no
 
   images:
-    # How to grab images from ZM
+    # - How to grab images from ZM
     pull_method:
       # - Precedence: 1. zms 2. shm 3. api 4. zmu
 
@@ -514,6 +516,10 @@ detection_settings:
         # - This will check if the snapshot frame ID has changed every 3 frames and if so, grab the new snapshot frame
         check_snapshots: yes
 
+        # Check if the snapshot FID has changed every <x> frames. Set to 1 to check every frame.
+        # Snapshot FID = to the frame ID that has the highest alarm score in the event (thus far)
+        snapshot_frame_skip: 3
+
 
       # - ZMU IS WIP, it will raise not implemented error
       # - ZMU is a binary that comes with ZM
@@ -522,46 +528,48 @@ detection_settings:
       # - ZMS is the CGI api that comes with ZM. This may end up being the default method.
       zms:
         enabled: no
-        # The complete URL to zms cgi script (i.e.: https://zm.example.com/zm/cgi-bin/nph-zms)
+        # - The complete URL to zms cgi script (i.e.: https://zm.example.com/zm/cgi-bin/nph-zms)
         #url:
 
         # How many frames per second should be grabbed to run Object Detection on (Default: 1)
         fps: 1
-        # If you have a camera capturing 1 frame every <x> seconds, use sbf instead of fps
-        # Seconds Between frames, only fps or sbf can be used, not both. sbf takes precedence over fps.
-#        sbf: 1
+        # - If you have a camera capturing 1 frame every <x> seconds, use sbf instead of fps
+        # - Seconds Between frames, only fps or sbf can be used, not both. sbf takes precedence over fps.
+        #sbf: 1
 
-        # ANY of the delay options can be set as xx or xx.yy (int/float)
+        # - ANY of the delay options can be set as xx or xx.yy (int/float)
         attempts: 3  # attempts to grab the requested frame
         delay: 1.2   # delay between failed attempts
         max_frames: 10  # Only grab a maximum of x frames (Default: Calculated based on event duration and monitor capturing FPS)
 
-    # Save debug images to disk (Every frame grabbed from the source)
-    # BE AWARE, if you leave this on and forget, it will eat up disk space
+    # - Save debug images to disk (Every frame grabbed from the source)
+    # - BE AWARE, if you leave this on and forget, it will eat up disk space
     debug:
-      # Shows bounding box of filtered out detections in RED
+      # - Shows bounding box of filtered out detections in RED
       enabled: no
-      # Where to save the debug images Default: <images_dir>/debug
+      # - Where to save the debug images Default: <images_dir>/debug
       path: ${IMAGE_DIR}/debug
 
+    # - What to draw onto the matching image
     annotation:
-      # NOTE: Bounding box and object label are always drawn on the matching frame
+      # - NOTE: Bounding box and object label are always drawn on the matching frame
 
-      # Draw zone polygons on image
+      # - Draw zone polygons on image
       zones:
         enabled: no
         # - Print the name of the zone to identify it (this is best try depending on zone size)
-        # - OVERLAY is NOT IMPLEMENTED YET
-        overlay: no
+        show_name: no
         # - Color of the zone polygon
         color: (255, 255, 255)
         # - Thickness of the zone polygon line
         thickness: 2
+
       # - Show which model detected the object
       model:
         enabled: yes
         # - Show which processor the model used
         processor: yes
+
       # - Show the confidence level of the detection
       confidence: yes
 
@@ -579,40 +587,52 @@ matching:
   # - The strategy is in relation to the 'event' its processing and is only defined on a global level.
   # -- first: break out of the detection loop on the very first filtered detection
   # -- most: Find the best match after processing the event
-  strategy: most
+  strategy: first
 
-  # If using more than 2 Object type Models (yolov4, tiny-yolov7), try to confirm matches by checking
-  #  if the object is in roughly the same place across Models.
+  # - If using more than 2 Object type Models (yolov4, tiny-yolov7), try to confirm matches by checking
+  # -  if the object is in roughly the same place across Models.
   # -> NOT IMPLEMENTED <--
   object_confirm: yes
 
-  # Remove matches that seem to be 'in the same place'.
-  # Comparison is between the previous detections best
-  # match and ongoing detected objects.
+  # - Remove matches that seem to be 'in the same place'.
+  # - Comparison is between the previous detections best
+  # - match and ongoing detected objects.
   static_objects:
     enabled: no
-    # The max difference in the center of the objects bounding box between previous and current detection
-    # expressed as a percentage (0.0 - 1.0 OR 13.6%)
+    # - The max difference in the center of the objects bounding box between previous and current detection
+    # - expressed as a percentage (0.0 - 1.0 OR 13.6%)
     max_diff: 8%
+
+    # - If labels is not configured, it will apply to all labels (which is probably not wanted)
     labels:
-      # The label of the object to check for (label_groups supported)
+      # - The label of the object to check for (label_groups supported)
       - vehicles
 
-  # This is globally applied to all monitors but can be overridden on a per-monitor basis
+  # - This is globally applied to all monitors but can be overridden on a per-monitor basis (in monitors: section)
+  # - Filtering is done on the results returned by ZoMi API (if any).
   filters:
+    # - There are 3 types of model filters: object, face, alpr
+    # - The type_of the model is set in the server config file
     object:
-      min_conf: 0.42069
+      min_conf: 0.42
       pattern: "(DEFAULT PATTERN|car|truck|bus|person|dog|cat)"
       total_max_area: 100%
       total_min_area: 1px
+
     face:
       pattern: ".*"
+
     alpr:
+      # Regex is allowed so you can really dial down and possibly help with missed digits
       pattern: ".*"
+      # only look for certain plates
+      # pattern: "(ABC123|2fast4u)"
+      # PLATE: abc123 but what if it only detects ab123? or abd123?
+      # pattern: "(ab[a-z]?123)"
       min_conf: 0.456
 
 monitors:
-# Override settings based on which monitor an event was triggered by
+# - Override settings based on which monitor an event was triggered by
   999999999901:  # Monitor ID
     # - Override global models for this monitor
     models:
@@ -621,21 +641,21 @@ monitors:
       yolov4:
         enabled: yes  # Default and implied. Can be omitted.
       yolov4 tiny:
-#      yolov4-p6:
+      #yolov4-p6:
       yolov7 tiny:
-#      yolov7:
+      #yolov7:
       yolov7x:
         enabled: no
 
-    # - override global static objects
+    # - Override global static objects
     static_objects:
       enabled: no
-      # - difference in area between current and previous detection
+      # - Difference in area between current and previous detection
       difference: 69%
       labels:
         - car
-#      ignore_labels:
-#        - bird
+      #ignore_labels:
+      #  - bird
 
     # - Monitor label filter overrides
     filters:
@@ -645,19 +665,20 @@ monitors:
         labels:
           person:
             min_conf: 0.5
-              # - The minimum and maximum area of the detection box in pixels or percentage of the zone.
-              # - (how much of the zone is covered by the detection box)
-#                  min_area: 10px
-#                  max_area: 10%
+            # - The minimum and maximum area of the detection box in pixels or percentage of the zone.
+            # - (how much of the zone is covered by the detection box)
+            #min_area: 10px
+            #max_area: 10%
             # - The minimum and maximum area of the detection box in pixels or percentage of the full image.
             # - (how much of the image is covered by the detection box)
-#                  total_min_area: 10px
-#                  total_max_area: 10%
+            #total_min_area: 10px
+            #total_max_area: 10%
+
       face:
         # - You can specify trained face names here, only pattern supported currently
         pattern: ".*"
-        # pattern: "(James|Addison)"
-        # Confidence will always be 0% or 100%, match or no match
+        #pattern: "(James|Addison)"
+        # - Confidence will always be 0% or 100%, match or no match
       alpr:
         # - Only pattern and min_conf supported
         pattern: ".*"
@@ -673,8 +694,8 @@ monitors:
 
           # - FOR NON-IMPORTED ZONE.
           # - Polygon points, go and map a zone in ZM and copy the points here if this is not an imported zone.
-          # Remember that these are zones defined strictly for ML. If you imported your ZM zones,
-          # you can omit the points. The points will be imported from ZM.
+          # - Remember that these are zones defined strictly for ML. If you imported your ZM zones,
+          # - you can omit the points. The points will be imported from ZM.
           points: 0,2146 3818,2146 3820,1058 2604,426 2526,534 198,466 124,632 8,648
           # - FOR NON-IMPORTED ZONE.
           # - Used to scale polygon points if the monitor resolution has changed.
@@ -690,14 +711,14 @@ monitors:
             labels:
               - vehicles
 
-          # After successful filtering, the remaining objects will be checked for top_n dominant colors
+          # - After successful filtering, the remaining objects will be checked for top_n dominant colors
           detect_color:  # WIP aka not working yet
             enabled: no
-            # Top X colors to detect (Default: 3)
+            # - Top X colors to detect (Default: 3)
             top_n: 3
-            # only detect the color of these labels (label_groups supported)
+            # - Only detect the color of these labels (label_groups supported)
             labels:
-              # If no labels are defined (all is implied)
+              # - If no labels are defined (all is implied)
               - vehicles
           filters:
             object:
@@ -708,16 +729,16 @@ monitors:
                   min_conf: 0.5
                     # - The minimum and maximum area of the detection box in pixels or percentage of the zone.
                     # - (how much of the zone is covered by the detection box)
-#                  min_area: 10px
-#                  max_area: 10%
+                  #min_area: 10px
+                  #max_area: 10%
                   # - The minimum and maximum area of the detection box in pixels or percentage of the full image.
                   # - (how much of the image is covered by the detection box)
-#                  total_min_area: 10px
-#                  total_max_area: 10%
+                  #total_min_area: 10px
+                  #total_max_area: 10%
             face:
               # - You can specify trained face names here, only pattern supported currently
               pattern: ".*"
-              # pattern: "(James|Addison)"
+              #pattern: "(James|Addison)"
             alpr:
               # - Only pattern and min_conf supported
               pattern: ".*"
@@ -725,11 +746,11 @@ monitors:
 
   999999999902:
     models:
-      # Models to run. Name must match the name of the model obtained from its configuration or the API request
+      # - Models to run. Name must match the name of the model obtained from its configuration or the API request
       yolov4:
-#      yolov4-p6:
+      yolov4-p6:
       yolov7 tiny:
-#      yolov7:
+      yolov7:
       yolov7x:
       static_objects:
         enabled: yes
@@ -737,19 +758,19 @@ monitors:
         difference: 69%
         labels:
           - car
-#        ignore_labels:
-#          - bird
+        #ignore_labels:
+          #- bird
 
     zones:
       parking area:
         enabled: yes
-        # Polygon points. Use ZM zone editor to draw the polygon and copy the points here
+        # - Polygon points. Use ZM zone editor to draw the polygon and copy the points here
         points: 0,722 1592,94 1920,380 1920,1073 0,1080
         resolution: 1080p
-        # These filters are in relation to the zone. They will override the global and monitor filters
+        # - These filters are in relation to the zone. They will override the global and monitor filters
         filters:
           object:
-            # You can define your own regex filter here. 'ZONE_LEVEL_2' is just for emphasis and documentation
+            # - You can define your own regex filter here. 'ZONE_LEVEL_2' is just for emphasis and documentation
             pattern: "(ZONE_LEVEL_2|person|dog|cat|car|truck|bus|bicycle)"
             
             # - Per label filtering (label_groups supported)
@@ -764,11 +785,11 @@ monitors:
                 # - The minimum and maximum area of the detection box in pixels or percentage of the full image.
                 # - (how much of the image is covered by the detection box)
                 total_min_area: 10px
-#                total_max_area: 10%
+                #total_max_area: 10%
           face:
             # - You can specify trained face names here, only pattern supported currently
             pattern: "(TEST_MON2_FACE|.*)"
-            # pattern: "(James|Addison)"
+            #pattern: "(James|Addison)"
           alpr:
             # - Only pattern and min_conf supported
             pattern: "(TEST_MON2_ALPR|.*)"
