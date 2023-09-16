@@ -19,6 +19,7 @@ from pydantic import (
     IPvAnyAddress,
     PositiveInt,
     SecretStr,
+    IPvAnyNetwork,
 )
 from pydantic_settings import BaseSettings
 
@@ -86,15 +87,18 @@ class LockSettings(DefaultEnabled):
         return v
 
     def get(self, device: str) -> LockSetting:
-        device = device.casefold()
-        if device == "gpu":
-            return self.gpu
-        elif device == "cpu":
-            return self.cpu
-        elif device == "tpu":
-            return self.tpu
+        if device:
+            device = device.casefold()
+            if device == "gpu":
+                return self.gpu
+            elif device == "cpu":
+                return self.cpu
+            elif device == "tpu":
+                return self.tpu
+            else:
+                raise ValueError(f"Invalid device type: {device}")
         else:
-            raise ValueError(f"Invalid device type: {device}")
+            raise ValueError("Device type must be specified")
 
     @field_validator("dir", mode="before")
     @classmethod
@@ -379,7 +383,7 @@ class BaseModelConfig(BaseModel):
             ALPRSubFrameWork,
             UltralyticsSubFrameWork,
         ]
-    ] = Field(OpenCVSubFrameWork, description="sub-framework to use for model")
+    ] = Field(None, description="sub-framework to use for model")
 
     detection_options: Union[
         BaseModelOptions,
@@ -677,7 +681,6 @@ class TorchModelConfig(BaseModelConfig):
 
     input: Optional[Path] = None
     classes: Optional[Path] = None
-
     num_classes: Optional[int] = None
 
     gpu_idx: Optional[int] = None
@@ -769,9 +772,15 @@ class SystemSettings(BaseModel):
     thread_workers: Optional[int] = Field(DEF_SRV_SYS_THREAD_WORKERS)
 
 
+class UvicornSettings(BaseModel):
+    forwarded_allow_ips: Optional[List[Union[IPvAnyAddress, IPvAnyNetwork]]] = Field(default_factory=list)
+    grab_cloudflare_ips: Optional[bool] = Field(False)
+
+
 class Settings(BaseModel, arbitrary_types_allowed=True):
     testing: Testing = Field(default_factory=Testing)
     substitutions: Dict[str, str] = Field(default_factory=dict)
+    uvicorn: UvicornSettings = Field(default_factory=UvicornSettings)
     system: SystemSettings = Field(default_factory=SystemSettings)
     server: ServerSettings = Field(default_factory=ServerSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
