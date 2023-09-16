@@ -1552,14 +1552,14 @@ class ZoMiEnvBuilder(venv.EnvBuilder):
 
 
 if __name__ == "__main__":
-    # check python is 3.8 or 3.9 only
+    # check python is 3.8+ only
     import sys
 
-    if sys.version_info.major != 3:
-        logger.error("Python 3 is required to run this install script!")
+    if sys.version_info.major < 3:
+        logger.error("Python 3+ is required to run this install script!")
         sys.exit(1)
-    if sys.version_info.minor not in [8, 9, 10]:
-        logger.error("Python 3.8 or 3.9 is required to run this install script!")
+    if sys.version_info.minor not in [8, 9, 10, 11, 12, 13, 14 ,15]:
+        logger.error("Python 3.8+ is required to run this install script!")
         sys.exit(1)
 
     # parse args first
