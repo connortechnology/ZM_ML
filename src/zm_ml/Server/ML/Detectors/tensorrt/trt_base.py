@@ -508,6 +508,7 @@ class TensorRtDetector(FileLock):
         scores: np.ndarray = np.array([], dtype=np.float32)
         labels: np.ndarray = np.array([], dtype=np.int32)
         if output:
+            # Fixme: allow for custom class length (80 is for COCO)
             output_shape = [o.shape for o in output]
             legacy_shape = [(1, 8400, 4), (1, 8400, 80)]
             new_flat_shape = [(1, 8400, 80), (1, 8400, 4)]
