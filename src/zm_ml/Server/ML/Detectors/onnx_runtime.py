@@ -232,11 +232,13 @@ class ORTDetector(FileLock):
             num_outputs = len(output)
             if num_outputs == 1:
                 if isinstance(output[0], np.ndarray):
-                    if output[0].shape == (1, 84, 8400):
+                    # prettrained: (1, 84, 8400)
+                    # dfo with 2 classes and 1 background: (1, 6, 8400)
+                    if output[0].shape[0] == 1 and output[0].shape[2] == 8400:
                         # v8
                         # (1, 84, 8400) -> (8400, 84)
                         predictions = np.squeeze(output[0]).T
-                        logger.debug(f"{LP} yolov8 output shape = (1, 84, 8400) detected!")
+                        logger.debug(f"{LP} yolov8 output shape = (1, <X>, 8400) detected!")
                         # Filter out object confidence scores below threshold
                         scores = np.max(predictions[:, 4:], axis=1)
                         # predictions = predictions[scores > self.options.confidence, :]
