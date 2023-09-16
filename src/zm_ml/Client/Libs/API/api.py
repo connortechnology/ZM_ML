@@ -12,7 +12,7 @@ logger: logging.Logger = logging.getLogger(CLIENT_LOGGER_NAME)
 
 try:
     import aiohttp
-    import jwt
+    from jose import jwt
     from pydantic import SecretStr
     from requests import Response, Session
     from requests.exceptions import HTTPError, JSONDecodeError
@@ -40,7 +40,6 @@ from ...Models.config import ZoneMinderSettings, MonitorsSettings
 if TYPE_CHECKING:
     from ....Shared.configs import GlobalConfig
     import aiohttp
-    import jwt
     from pydantic import SecretStr
     from requests import Response, Session
     from requests.exceptions import HTTPError, JSONDecodeError
@@ -244,10 +243,8 @@ class ZMAPI:
             logger.warning(f"{lp} no access token to evaluate, calling login()")
             _login = True
         else:
-            claims = jwt.decode(
+            claims = jwt.get_unverified_claims(
                 self.access_token,
-                algorithms=["HS256"],
-                options={"verify_signature": False},
             )
             iss = claims.get("iss")
             if iss and iss != "ZoneMinder":
@@ -323,9 +320,7 @@ class ZMAPI:
         if not grace_period:
             grace_period = GRACE
             if not _login:
-                claims = jwt.decode(
-                    tkn, algorithms=["HS256"], options={"verify_signature": False}
-                )
+                claims = jwt.get_unverified_claims(tkn)
                 iss = claims.get("iss")
                 if iss and iss != "ZoneMinder":
                     logger.error(
