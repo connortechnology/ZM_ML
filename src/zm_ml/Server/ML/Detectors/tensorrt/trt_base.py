@@ -47,7 +47,7 @@ except ModuleNotFoundError:
 try:
     from cuda import cudart
 except ModuleNotFoundError:
-    cuda = None
+    cudart = None
     logger.error("CUDA not found, cannot use TensorRT detectors")
 
 try:
@@ -67,6 +67,7 @@ if TYPE_CHECKING:
     from src.zm_ml.Shared.configs import GlobalConfig
 
 g: Optional[GlobalConfig] = None
+TRT_PLUGINS_LOCK = None
 
 if trt is not None:
 
@@ -213,18 +214,23 @@ class TensorRtDetector(FileLock):
         self.__warm_up()
 
     def __init_engine(self) -> None:
+        global TRT_PLUGINS_LOCK
+
         logger.debug(
             f"{LP} initializing TensorRT engine: '{self.name}' ({self.id}) -- filename: {self.config.input.name}"
         )
-        # Load plugins
-        trt.init_libnvinfer_plugins(self.trt_logger, namespace="")
+        # Load plugins only 1 time
+        if TRT_PLUGINS_LOCK is None:
+            TRT_PLUGINS_LOCK = True
+            logger.debug(f"{LP} initializing TensorRT plugins, should only happen once")
+            trt.init_libnvinfer_plugins(self.trt_logger, namespace="")
         try:
             # De Serialize Engine
             with trt.Runtime(self.trt_logger) as runtime:
                 self.runtime_engine = runtime.deserialize_cuda_engine(
                     self.config.input.read_bytes()
                 )
-            context = self.runtime_engine.create_execution_context()
+            ctx = self.runtime_engine.create_execution_context()
         except Exception as ex:
             logger.error(f"{LP} {ex}", exc_info=True)
             raise ex
@@ -243,7 +249,8 @@ class TensorRtDetector(FileLock):
                 names.append(self.runtime_engine.get_binding_name(i))
             self.num_inputs = num_inputs
             self.num_outputs = num_outputs
-            self.context = context
+            # set the context
+            self.context = ctx
             self.input_names = names[:num_inputs]
             self.output_names = names[num_inputs:]
             logger.debug(
