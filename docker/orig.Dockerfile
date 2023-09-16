@@ -4,7 +4,7 @@ ARG ZMML_VERSION=dockerize
 ARG OPENCV_METHOD=branch
 ARG OPENCV_VERSION=4.x
 ARG DLIB_METHOD=release
-ARG DLIB_VERSION=19.22
+ARG DLIB_VERSION=19.24.2
 ARG ALPR_METHOD=branch
 ARG ALPR_VERSION=master
 # I think a minimum of 5.3 Compute Cabability required - these are GeForce cards
@@ -13,9 +13,10 @@ ARG ALPR_VERSION=master
 # 7.0 = TITAN V
 # 7.5 = 1650 thru to 2080ti including TITAN RTX
 # 8.6 = 3050 thru to 3090
+# 9.0 = 40 series
 #ARG CUDA_ARCH_BIN=6.1,7.5
 # CUDA 11 supports CC up to 8.0
-ARG CUDA_ARCH_BIN=6.0,6.1,7.0,7.5,8.0
+ARG CUDA_ARCH_BIN=6.0,6.1,7.0,7.5,8.0,8.6,8.9,9.0
 # Cuda 12 added 8.6 8.9 9.0
 ARG CUDA_12=8.6,8.9,9.0
 ARG MLAPI_PORT=5000
@@ -72,7 +73,7 @@ RUN set -x \
 #####################################################################
 
 ######## CUDA 12+ ONLY WORKS WITH 4.7.0+ but opencv code is broken / cuDNN 8 ########
-FROM nvidia/cuda:11.0.3-cudnn8-devel-ubuntu20.04 as build-env
+FROM nvidia/cuda:12.1.0-cudnn8-devel-ubuntu20.04 as build-env
 SHELL ["/bin/bash", "-c"]
 ARG OPENCV_VERSION
 ARG OPENCV_METHOD
@@ -348,7 +349,7 @@ RUN set -x \
 #
 ################################################################################
 
-FROM nvidia/cuda:11.0.3-cudnn8-runtime-ubuntu20.04 as final_image
+FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu20.04 as final_image
 # Install OpenCV, DLib, face recognition and openALPR from build-env
 # TODO: break each build into its own stage and image for easier up/down grading
 COPY --from=build-env /tmp/opencv_export /opt/opencv
@@ -367,10 +368,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG DLIB_VERSION
 ARG ZMML_VERSION
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/apt/lists,sharing=locked \
-    --mount=type=cache,target=/root/.cache/pip,sharing=locked \
-    set -x \
+RUN set -x \
   && mv /usr/local/lib/python3.9/site-packages/dlib* /usr/local/lib/python3.9/dist-packages/ \
   && mv /usr/local/lib/python3.9/dist-packages/bin/* /usr/local/bin \
   && rm -rf /usr/local/lib/python3.9/site-packages/bin \
@@ -443,13 +441,13 @@ RUN set -x \
     && sed -i 's|/tmp/dlib_export|/usr/local|' /usr/local/lib/pkgconfig/dlib-1.pc \
     && python3.9 -m wheel convert /usr/local/lib/python3.9/dist-packages/dlib-19.*.egg \
     # gross little hack to get the wheel to install
-    && mv "./dlib-${DLIB_VERSION}.0-py39-cp39-linux_x86_64.whl" "./dlib-${DLIB_VERSION}.0-cp39-none-any.whl" \
-    && python3.9 -m pip install "./dlib-${DLIB_VERSION}.0-cp39-none-any.whl" \
+    && mv "./dlib-${DLIB_VERSION}-py39-cp39-linux_x86_64.whl" "./dlib-${DLIB_VERSION}-cp39-none-any.whl" \
+    && python3.9 -m pip install "./dlib-${DLIB_VERSION}-cp39-none-any.whl" \
     && python3.9 -m pip install git+https://github.com/ageitgey/face_recognition_models distro requests \
-    && rm -rf /usr/local/lib/python3.9/dist-packages/dlib-"${DLIB_VERSION}".0-py3.9-linux-x86_64.egg dlib-"${DLIB_VERSION}".0-cp39-none-any.whl
+    && rm -rf /usr/local/lib/python3.9/dist-packages/dlib-"${DLIB_VERSION}"-py3.9-linux-x86_64.egg dlib-"${DLIB_VERSION}"-cp39-none-any.whl
 
 # ZM ML Server Install
-ARG CB6=22
+ARG CB69785=1122334455
 ARG ZMML_VERSION=master
 #COPY . /opt/zm_ml/src
 RUN set -x \
