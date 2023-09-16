@@ -67,7 +67,6 @@ class TorchDetector(FileLock):
 
         g = get_global_config()
 
-        super().__init__()
         self.model: Optional[Union[RetinaNet, FasterRCNN, FCOS, SSD]] = None
 
         if not model_config:
@@ -78,6 +77,8 @@ class TorchDetector(FileLock):
         self.name = self.config.name
         self.id = self.config.id
         self.device = self._get_device()
+        # call this after getting the processor/device
+        super().__init__()
         self.ok = False
         self.cache_dir = g.config.system.models_dir / "torch/cache"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -90,6 +91,7 @@ class TorchDetector(FileLock):
         else:
             import os
 
+            conf, nms = self.options.confidence, self.options.nms
             if self.config.pretrained and self.config.pretrained.enabled is True:
                 logger.debug(f"{LP} 'pretrained' model requested, using pretrained weights...")
                 _pth = os.environ.get("TORCH_HOME", None)
@@ -97,8 +99,6 @@ class TorchDetector(FileLock):
                     logger.warning(f"{LP} 'TORCH_HOME' is already set, working around it...")
                 os.environ["TORCH_HOME"] = self.cache_dir.as_posix()
                 _pt = self.config.pretrained.name
-                conf, nms = self.options.confidence, self.options.nms
-
                 if _pt:
                     if _pt in ("default", "balanced"):
                         self.name = f"torch: RetinaNet RN50 v2"
@@ -139,6 +139,7 @@ class TorchDetector(FileLock):
                     os.environ["TORCH_HOME"] = _pth
             else:
                 logger.warning(f"{LP} pretrained was not defined, user trained models are: Not Implemented yet....")
+
 
 
     def _convert_image(self, image: np.ndarray) -> torch.Tensor:
