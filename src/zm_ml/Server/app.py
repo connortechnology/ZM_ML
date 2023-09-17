@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import logging
+import random
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from platform import python_version
-from typing import Union, Dict, List, Optional, Any, TYPE_CHECKING, Annotated
+from typing import Union, Dict, List, Optional, Any, TYPE_CHECKING, Annotated, Tuple
 
-# from fastapi.openapi.models import Response
 from fastapi.responses import FileResponse, Response
 
 try:
@@ -323,37 +323,59 @@ async def read_items(token: Annotated[str, Depends(OAUTH2_SCHEME)]):
     response_class=Response,
 )
 async def get_annotated_image(
-    model_hints: List[str] = Body(..., example="yolov4"),
+    hints_for_model: List[str] = Body(..., example="yolov4"),
     image: UploadFile = File(...)
 ):
-    model_hints = model_hints[0].strip('"').split(",")
+    logger.info(f"get_annotated_image: {hints_for_model = }")
+    if hints_for_model:
+        from ..Shared.Models.config import DetectionResults, Result
 
-    detections, image = await threaded_detect(model_hints, image, return_image=True)
-    for detection in detections:
-        if detection:
-            from ..Shared.Models.config import DetectionResults, Result
+        hints_for_model = hints_for_model[0].strip('"').split(",")
+        detections: List[DetectionResults]
+        detections, image = await threaded_detect(hints_for_model, image, return_image=True)
+        i = 0
+        SLATE_COLORS: List[Tuple[int, int, int]] = [
+            (39, 174, 96),
+            (142, 68, 173),
+            (0, 129, 254),
+            (254, 60, 113),
+            (243, 134, 48),
+            (91, 177, 47),
+        ]
+        num_dets = len(detections)
+        for detection in detections:
+            i += 1
+            logger.debug(f"DBG>>> ANNOTATE:detection: {detection} ({i}/{num_dets})")
+            if detection and isinstance(detection, DetectionResults):
+                rand_color = SLATE_COLORS.pop(random.randrange(len(SLATE_COLORS)))
+                logger.debug(f"DBG>>> ANNOTATE:detection: is a DetectionResults object, num results: {len(detection.results)}")
 
-            det: Result
-            for det in detection.results:
-                x1, y1, x2, y2 = det.bounding_box
-                cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(
-                    image,
-                    f"{det.label} ({det.confidence:.2f})",
-                    (x1, y1 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.9,
-                    (36, 255, 12),
-                    2,
-                )
+                det: Result
+                for det in detection.results:
+                    x1, y1, x2, y2 = det.bounding_box
+                    cv2.rectangle(image, (x1, y1), (x2, y2), rand_color, 2)
+                    cv2.putText(
+                        image,
+                        f"{det.label} ({det.confidence:.2f})[{detection.name}]",
+                        (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.9,
+                        rand_color,
+                        2,
+                    )
+                # encode the image as a jpeg
 
-            # encode the image as a jpeg
-            is_success, image_buffer = cv2.imencode(".jpg", image)
-            if not is_success:
-                raise RuntimeError("Failed to encode image")
-            image_bytes = image_buffer.tobytes()
-            # media_type here sets the media type of the actual response sent to the client.
-            return Response(content=image_bytes, media_type="image/jpeg")
+            elif detection and not isinstance(detection, DetectionResults):
+                raise RuntimeError(f"DetectionResults object expected, got {type(detection)}")
+            else:
+                logger.warning(f"DetectionResults object is {type(detection)}")
+        is_success, image_buffer = cv2.imencode(".jpg", image)
+        if not is_success:
+            raise RuntimeError("Failed to encode image")
+        image_bytes = image_buffer.tobytes()
+        # media_type here sets the media type of the actual response sent to the client.
+        return Response(content=image_bytes, media_type="image/jpeg")
+
 
 
 @app.get("/models/available/all", summary="Get a list of all available models")
