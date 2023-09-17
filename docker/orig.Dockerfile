@@ -353,26 +353,30 @@ FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu20.04 as final_image
 # Install OpenCV, DLib, face recognition and openALPR from build-env
 # TODO: break each build into its own stage and image for easier up/down grading
 COPY --from=build-env /tmp/opencv_export /opt/opencv
-COPY --from=build-env /tmp/opencv_python_bindings/cv2 /usr/local/lib/python3.9/dist-packages/cv2
 COPY --from=build-env /tmp/dlib_export /usr/local
-COPY --from=build-env /tmp/dlib_python /usr/local
-COPY --from=build-env /tmp/face_recognition/face_recognition /usr/local/lib/python3.9/dist-packages/face_recognition
+#COPY --from=build-env /tmp/dlib_python /usr/local
+#COPY --from=build-env /tmp/opencv_python_bindings/cv2 /usr/local/lib/python3.9/dist-packages/cv2
+#COPY --from=build-env /tmp/face_recognition/face_recognition /usr/local/lib/python3.9/dist-packages/face_recognition
+#COPY --from=build-env /tmp/deps /usr/local/lib/python3.9/dist-packages
+
 COPY --from=build-env /tmp/face_recognition/bin/* /usr/local/bin/
 COPY --from=build-env /tmp/alpr_export /usr
 COPY --from=build-env /tmp/etc /etc
 COPY --from=build-env /tmp/apt_pkg /tmp/apt_pkg
 COPY --from=build-env /tpu_test /tpu_test
-COPY --from=build-env /tmp/deps /usr/local/lib/python3.9/dist-packages
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG DLIB_VERSION
 ARG ZMML_VERSION
 
 RUN set -x \
-  && mv /usr/local/lib/python3.9/site-packages/dlib* /usr/local/lib/python3.9/dist-packages/ \
-  && mv /usr/local/lib/python3.9/dist-packages/bin/* /usr/local/bin \
-  && rm -rf /usr/local/lib/python3.9/site-packages/bin \
+#  && mv /usr/local/lib/python3.9/site-packages/dlib* /usr/local/lib/python3.9/dist-packages/ \
+#  && mv /usr/local/lib/python3.9/dist-packages/bin/* /usr/local/bin \
+#  && rm -rf /usr/local/lib/python3.9/site-packages/bin \
   && mv /tpu_test/tpu_test /tpu_test/alpr_test /usr/local/bin \
+  \
+  \
+  \
   && apt-get update \
   && apt-get install -y --no-install-recommends \
     tree git wget curl gettext-base \
@@ -407,7 +411,7 @@ RUN set -x \
   && wget -qO- https://bootstrap.pypa.io/get-pip.py | python3.9 \
   && python3.9 -m pip install --upgrade pip \
   && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1 \
-  && python3 -m pip install pillow requests psutil tqdm numpy cpython \
+  && python3.9 -m pip install pillow requests psutil tqdm numpy cpython distro \
   && cd /tmp/apt_pkg \
   && dpkg -i python3-pycoral.deb python3-tflite-runtime.deb libedgetpu1-std.deb gasket-dkms.deb \
   && apt-mark manual python3-pycoral python3-tflite-runtime libedgetpu1-std gasket-dkms dkms libusb-1.0-0 \
@@ -433,18 +437,12 @@ RUN set -x \
     && usermod -aG nogroup www-data \
     && usermod -aG plugdev www-data
 
-# Fix cv2 python config and copy over openalpr config
+# Copy over openalpr config and fix dlib pkgconfig
 RUN set -x \
-    && sed -i "s|/tmp/opencv_python_bindings/|/usr/local/lib/python3.9/dist-packages/|g" /usr/local/lib/python3.9/dist-packages/cv2/config-3.9.py \
-    && sed -i "s|/tmp/opencv_export|/opt/opencv|" /usr/local/lib/python3.9/dist-packages/cv2/config.py \
     && cp /etc/openalpr/openalpr.conf.gpu /etc/openalpr/openalpr.conf \
     && sed -i 's|/tmp/dlib_export|/usr/local|' /usr/local/lib/pkgconfig/dlib-1.pc \
-    && python3.9 -m wheel convert /usr/local/lib/python3.9/dist-packages/dlib-19.*.egg \
-    # gross little hack to get the wheel to install
-    && mv "./dlib-${DLIB_VERSION}-py39-cp39-linux_x86_64.whl" "./dlib-${DLIB_VERSION}-cp39-none-any.whl" \
-    && python3.9 -m pip install "./dlib-${DLIB_VERSION}-cp39-none-any.whl" \
-    && python3.9 -m pip install git+https://github.com/ageitgey/face_recognition_models distro requests \
-    && rm -rf /usr/local/lib/python3.9/dist-packages/dlib-"${DLIB_VERSION}"-py3.9-linux-x86_64.egg dlib-"${DLIB_VERSION}"-cp39-none-any.whl
+    && python3 -m pip install requests distro psutil tqdm
+
 
 # ZM ML Server Install
 ARG CB69785=1122334455
@@ -465,6 +463,27 @@ RUN set -x \
           --no-models \
           --user www-data \
           --group www-data
+
+COPY --from=build-env /tmp/opencv_python_bindings/cv2 /zm_ml/data/venv/lib/lib/python3.9/site-packages/cv2
+COPY --from=build-env /tmp/face_recognition/face_recognition /zm_ml/data/venv/lib/lib/python3.9/site-packages/face_recognition
+COPY --from=build-env /tmp/deps /zm_ml/data/venv/lib/lib/python3.9/site-packages
+COPY --from=build-env /tmp/dlib_python/lib/python3.9/site-packages/ /tmp/dlib
+
+SHELL ["/bin/bash", "-c"]
+
+RUN set -x \
+    && source /zm_ml/data/venv/bin/activate \
+    && sed -i "s|/tmp/opencv_python_bindings/|/zm_ml/data/venv/lib/python3.9/dist-packages/|g" /zm_ml/data/venv/lib/python3.9/site-packages/cv2/config-3.9.py \
+    && sed -i "s|/tmp/opencv_export|/opt/opencv|" /zm_ml/data/venv/lib/python3.9/site-packages/cv2/config.py \
+    && mv /tmp/dlib/lib/python*/site-packages/bin/* /usr/local/bin \
+    && rm -rf /tmp/dlib/lib/python*/site-packages/bin/* \
+    && python3.9 -m wheel convert /tmp/dlib/lib/python3.9/site-packages/dlib-19.*.egg \
+    # gross little hack to get the wheel to install
+    && mv "./dlib-${DLIB_VERSION}-py39-cp39-linux_x86_64.whl" "./dlib-${DLIB_VERSION}-cp39-none-any.whl" \
+    && python3.9 -m pip install "./dlib-${DLIB_VERSION}-cp39-none-any.whl" \
+    && python3.9 -m pip install git+https://github.com/ageitgey/face_recognition_models \
+    && rm -rf /zm_ml/data/venv/lib/python3.9/dist-packages/dlib-"${DLIB_VERSION}"-py3.9-linux-x86_64.egg dlib-"${DLIB_VERSION}"-cp39-none-any.whl \
+
 
 ## Log dir and perms
 RUN set -x \
@@ -487,6 +506,9 @@ RUN set -x \
 COPY --from=s6downloader /s6downloader /
 # Copy rootfs
 COPY --from=rootfs-converter /rootfs /
+# check for pycoral and tflite-runtime in venv
+RUN set -x \
+    && tree /usr/local/lib/python3.9
 
 # System Variables
 ENV \
