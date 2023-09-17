@@ -374,9 +374,6 @@ RUN set -x \
 #  && mv /usr/local/lib/python3.9/dist-packages/bin/* /usr/local/bin \
 #  && rm -rf /usr/local/lib/python3.9/site-packages/bin \
   && mv /tpu_test/tpu_test /tpu_test/alpr_test /usr/local/bin \
-  \
-  \
-  \
   && apt-get update \
   && apt-get install -y --no-install-recommends \
     tree git wget curl gettext-base \
@@ -409,16 +406,13 @@ RUN set -x \
   && add-apt-repository ppa:deadsnakes/ppa \
   && apt-get install -y --no-install-recommends python3.9 python3.9-dev python3.9-distutils python3.9-venv \
   && wget -qO- https://bootstrap.pypa.io/get-pip.py | python3.9 \
-  && python3.9 -m pip install --upgrade pip \
+  && python3.9 -m pip install --no-cache-dir --upgrade pip \
   && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1 \
-  && python3.9 -m pip install pillow requests psutil tqdm numpy cpython distro \
-  && cd /tmp/apt_pkg \
-  && dpkg -i python3-pycoral.deb python3-tflite-runtime.deb libedgetpu1-std.deb gasket-dkms.deb \
-  && apt-mark manual python3-pycoral python3-tflite-runtime libedgetpu1-std gasket-dkms dkms libusb-1.0-0 \
-  \
+  && apt-mark manual dkms libusb-1.0-0 \
   && apt-get remove -y software-properties-common build-essential linux-headers-generic \
   && apt-get autoremove -y \
-  && rm -rf /tmp/apt_pkg
+  && rm -rf /var/cache/apt/archives /var/lib/apt/lists/*
+
 
 # Set Locale to en_US.UTF-8
 RUN set -x \
@@ -437,11 +431,6 @@ RUN set -x \
     && usermod -aG nogroup www-data \
     && usermod -aG plugdev www-data
 
-# Copy over openalpr config and fix dlib pkgconfig
-RUN set -x \
-    && cp /etc/openalpr/openalpr.conf.gpu /etc/openalpr/openalpr.conf \
-    && sed -i 's|/tmp/dlib_export|/usr/local|' /usr/local/lib/pkgconfig/dlib-1.pc \
-    && python3 -m pip install requests distro psutil tqdm
 
 
 # ZM ML Server Install
@@ -449,6 +438,7 @@ ARG CB69785=1122334455
 ARG ZMML_VERSION=master
 #COPY . /opt/zm_ml/src
 RUN set -x \
+      && python3.9 -m pip install --no-cache-dir pillow requests psutil tqdm numpy cpython distro \
       && mkdir -p /opt/zm_ml/src \
       && cd /opt/zm_ml/src \
       && git clone https://github.com/baudneo/ZM_ML.git /opt/zm_ml/src \
@@ -464,25 +454,28 @@ RUN set -x \
           --user www-data \
           --group www-data
 
-COPY --from=build-env /tmp/opencv_python_bindings/cv2 /zm_ml/data/venv/lib/lib/python3.9/site-packages/cv2
-COPY --from=build-env /tmp/face_recognition/face_recognition /zm_ml/data/venv/lib/lib/python3.9/site-packages/face_recognition
-COPY --from=build-env /tmp/deps /zm_ml/data/venv/lib/lib/python3.9/site-packages
-COPY --from=build-env /tmp/dlib_python/lib/python3.9/site-packages/ /tmp/dlib
+COPY --from=build-env /tmp/opencv_python_bindings/cv2 /zm_ml/data/venv/lib/python3.9/site-packages/cv2
+COPY --from=build-env /tmp/face_recognition/face_recognition /zm_ml/data/venv/lib/python3.9/site-packages/face_recognition
+COPY --from=build-env /tmp/deps /zm_ml/data/venv/lib/python3.9/site-packages
+COPY --from=build-env /tmp/dlib_python/lib/python3.9/site-packages /tmp/dlib
 
 SHELL ["/bin/bash", "-c"]
 
 RUN set -x \
     && source /zm_ml/data/venv/bin/activate \
-    && sed -i "s|/tmp/opencv_python_bindings/|/zm_ml/data/venv/lib/python3.9/dist-packages/|g" /zm_ml/data/venv/lib/python3.9/site-packages/cv2/config-3.9.py \
-    && sed -i "s|/tmp/opencv_export|/opt/opencv|" /zm_ml/data/venv/lib/python3.9/site-packages/cv2/config.py \
-    && mv /tmp/dlib/lib/python*/site-packages/bin/* /usr/local/bin \
-    && rm -rf /tmp/dlib/lib/python*/site-packages/bin/* \
-    && python3.9 -m wheel convert /tmp/dlib/lib/python3.9/site-packages/dlib-19.*.egg \
+    && cp /etc/openalpr/openalpr.conf.gpu /etc/openalpr/openalpr.conf \
+    && sed -i 's|/tmp/dlib_export|/usr/local|' /usr/local/lib/pkgconfig/dlib-1.pc \
+    && mv /zm_ml/data/venv/lib/python3*/site-packages/bin/* /usr/local/bin \
+    && rm -rf /zm_ml/data/venv/lib/python3*/site-packages/bin/* \
+    && python3.9 -m wheel convert /tmp/dlib/dlib-19.*.egg \
     # gross little hack to get the wheel to install
     && mv "./dlib-${DLIB_VERSION}-py39-cp39-linux_x86_64.whl" "./dlib-${DLIB_VERSION}-cp39-none-any.whl" \
-    && python3.9 -m pip install "./dlib-${DLIB_VERSION}-cp39-none-any.whl" \
-    && python3.9 -m pip install git+https://github.com/ageitgey/face_recognition_models \
-    && rm -rf /zm_ml/data/venv/lib/python3.9/dist-packages/dlib-"${DLIB_VERSION}"-py3.9-linux-x86_64.egg dlib-"${DLIB_VERSION}"-cp39-none-any.whl \
+    && python3.9 -m pip install --no-cache-dir "./dlib-${DLIB_VERSION}-cp39-none-any.whl" \
+    && python3.9 -m pip install --no-cache-dir git+https://github.com/ageitgey/face_recognition_models \
+    && cd /tmp/apt_pkg \
+    && dpkg -i python3-pycoral.deb python3-tflite-runtime.deb libedgetpu1-std.deb gasket-dkms.deb \
+    && apt-mark manual python3-pycoral python3-tflite-runtime libedgetpu1-std gasket-dkms \
+    && rm -rf ./dlib-"${DLIB_VERSION}"-cp39-none-any.whl
 
 
 ## Log dir and perms
@@ -506,9 +499,26 @@ RUN set -x \
 COPY --from=s6downloader /s6downloader /
 # Copy rootfs
 COPY --from=rootfs-converter /rootfs /
+
 # check for pycoral and tflite-runtime in venv
 RUN set -x \
-    && tree /usr/local/lib/python3.9
+    # fix cv2 config
+    && sed -i "s|/tmp/opencv_python_bindings/|/zm_ml/data/venv/lib/python3.9/site-packages/|g" /zm_ml/data/venv/lib/python3.9/site-packages/cv2/config-3.9.py \
+    && sed -i "s|/tmp/opencv_export|/opt/opencv|" /zm_ml/data/venv/lib/python3.9/site-packages/cv2/config.py \
+#    && python3 -c 'import pycoral;print(pycoral.__file__);' \
+#    && python3 -c 'import tflite_runtime;print(tflite_runtime.__file__);' \
+    # link pycoral and tflite-runtime to venv
+    && ln -s /usr/lib/python3/dist-packages/pycoral /zm_ml/data/venv/lib/python3.9/site-packages/pycoral \
+    && ln -s /usr/lib/python3/dist-packages/tflite_runtime /zm_ml/data/venv/lib/python3.9/site-packages/tflite_runtime \
+    && echo "Checking for pycoral and tflite-runtime in venv" \
+    && /zm_ml/data/venv/bin/python3 -c 'import cv2;print(f"Open CV Version: {cv2.__version__}");' \
+    && /zm_ml/data/venv/bin/python3 -c 'import pycoral;print(f"pycoral version: {pycoral.__version__}");' \
+    && /zm_ml/data/venv/bin/python3 -c 'import tflite_runtime;print(f"tflite_runtime version: {tflite_runtime.__version__}");' \
+    && /zm_ml/data/venv/bin/python3 -c 'import dlib;print(f"dlib version: {dlib.__version__}");' \
+    # cant import face recognition as it runs a DLIB cuda check. We havent passed through a GPU for building so, it fails!
+#    && /zm_ml/data/venv/bin/python3 -c 'import face_recognition;print(f"face_recognition version: {face_recognition.__version__}");' \
+    && rm -rf /tmp/*
+
 
 # System Variables
 ENV \
