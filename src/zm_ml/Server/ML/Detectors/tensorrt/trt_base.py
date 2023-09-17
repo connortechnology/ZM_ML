@@ -520,12 +520,14 @@ class TensorRtDetector(FileLock):
             # Deci AI super-gradients new model.export() has FLAT (n, 7) and BATCHED outputs
             if num_outputs == 1:
                 if isinstance(output[0], np.ndarray):
+                    # prettrained: (1, 84, 8400)
+                    # dfo with 2 classes and 1 background: (1, 6, 8400)
                     if output[0].shape == (1, 84, 8400):
                         # v8
                         # (1, 84, 8400) -> (8400, 84)
                         predictions = np.squeeze(output[0]).T
                         logger.debug(
-                            f"{LP} yolov8 output shape = (1, 84, 8400) detected!"
+                            f"{LP} yolov8 output shape = (1, <X>, 8400) detected!"
                         )
                         # logger.debug(f"{LP} predictions.shape = {predictions.shape} --- {predictions =}")
                         # Filter out object confidence scores below threshold
