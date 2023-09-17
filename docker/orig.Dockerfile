@@ -369,7 +369,13 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG DLIB_VERSION
 ARG ZMML_VERSION
 
+ENV PYTHONDONTWRITEBYTECODE=1
+
 RUN set -x \
+   && echo "[install]" >> /etc/pip.conf \
+   && echo "compile = no" >> /etc/pip.conf \
+   && echo "[global]" >> /etc/pip.conf \
+   && echo "no-cache-dir = True" >> /etc/pip.conf \
 #  && mv /usr/local/lib/python3.9/site-packages/dlib* /usr/local/lib/python3.9/dist-packages/ \
 #  && mv /usr/local/lib/python3.9/dist-packages/bin/* /usr/local/bin \
 #  && rm -rf /usr/local/lib/python3.9/site-packages/bin \
@@ -400,6 +406,7 @@ RUN set -x \
     libavformat-dev \
     libswscale-dev \
     libusb-1.0-0 \
+    ncdu \
   && sh -c 'echo "/opt/opencv/lib" >> /etc/ld.so.conf.d/opencv.conf' \
 #  && sh -c 'echo "/usr/local/lib/dlib" >> /etc/ld.so.conf.d/dlib.conf' \
   && ldconfig \
@@ -408,7 +415,7 @@ RUN set -x \
   && wget -qO- https://bootstrap.pypa.io/get-pip.py | python3.9 \
   && python3.9 -m pip install --no-cache-dir --upgrade pip \
   && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1 \
-  && apt-mark manual dkms libusb-1.0-0 \
+  && apt-mark manual dkms libusb-1.0-0 ncdu \
   && apt-get remove -y software-properties-common build-essential linux-headers-generic \
   && apt-get autoremove -y \
   && rm -rf /var/cache/apt/archives /var/lib/apt/lists/*
@@ -434,7 +441,7 @@ RUN set -x \
 
 
 # ZM ML Server Install
-ARG CB69785=1122334455
+ARG CBB123=1
 ARG ZMML_VERSION=master
 #COPY . /opt/zm_ml/src
 RUN set -x \
@@ -515,9 +522,25 @@ RUN set -x \
     && /zm_ml/data/venv/bin/python3 -c 'import pycoral;print(f"pycoral version: {pycoral.__version__}");' \
     && /zm_ml/data/venv/bin/python3 -c 'import tflite_runtime;print(f"tflite_runtime version: {tflite_runtime.__version__}");' \
     && /zm_ml/data/venv/bin/python3 -c 'import dlib;print(f"dlib version: {dlib.__version__}");' \
+    # zm_ml
+    && /zm_ml/data/venv/bin/python3 -c 'import zm_ml;print(f"zm_ml version: {zm_ml.__version__}");' \
     # cant import face recognition as it runs a DLIB cuda check. We havent passed through a GPU for building so, it fails!
 #    && /zm_ml/data/venv/bin/python3 -c 'import face_recognition;print(f"face_recognition version: {face_recognition.__version__}");' \
+    && head /zm_ml/data/bin/mlapi.py \
+    && ls -al /zm_ml/data/bin \
     && rm -rf /tmp/*
+
+RUN set -x \
+    # get the directories of the largest disk space consumers from '/'
+    && du -h -d 1 / | sort -hr | head -n 10 \
+    # get the directories of the largest disk space consumers from '/zm_ml/data/venv'
+    && du -h -d 1 /zm_ml/data/venv/lib/python3.9/site-packages/ | sort -hr | head -n 10 \
+    && echo "/zm_ml/data/venv/bin/python3 /tpu_test/classify_image.py \
+--model /tpu_test/mobilenet_v2_1.0_224_inat_bird_quant_edgetpu.tflite \
+--labels /tpu_test/inat_bird_labels.txt \
+--input /tpu_test/parrot.jpg" > /tpu_test/tpu_test
+
+
 
 
 # System Variables
