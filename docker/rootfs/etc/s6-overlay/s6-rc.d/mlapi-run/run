@@ -46,4 +46,4 @@ MLAPI_FLAGS=(--config "${ML_SERVER_CONF_FILE}")
 
 echo "[${program_name}] Starting ZM_ML Server (ML API) with FLAGS: ${MLAPI_FLAGS[*]}"
 
-s6-setuidgid www-data /zm_ml/data/venv/bin/python3 /zm_ml/data/bin/mlapi.py "${MLAPI_FLAGS[@]}"
+s6-setuidgid www-data zmmlapi "${MLAPI_FLAGS[@]}"

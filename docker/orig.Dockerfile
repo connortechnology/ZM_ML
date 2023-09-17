@@ -441,7 +441,7 @@ RUN set -x \
 
 
 # ZM ML Server Install
-ARG CBB123=1
+ARG CBB123=3
 ARG ZMML_VERSION=master
 #COPY . /opt/zm_ml/src
 RUN set -x \
@@ -531,16 +531,11 @@ RUN set -x \
     && rm -rf /tmp/*
 
 RUN set -x \
-    # get the directories of the largest disk space consumers from '/'
-    && du -h -d 1 / | sort -hr | head -n 10 \
-    # get the directories of the largest disk space consumers from '/zm_ml/data/venv'
-    && du -h -d 1 /zm_ml/data/venv/lib/python3.9/site-packages/ | sort -hr | head -n 10 \
     && echo "/zm_ml/data/venv/bin/python3 /tpu_test/classify_image.py \
 --model /tpu_test/mobilenet_v2_1.0_224_inat_bird_quant_edgetpu.tflite \
 --labels /tpu_test/inat_bird_labels.txt \
---input /tpu_test/parrot.jpg" > /tpu_test/tpu_test
-
-
+--input /tpu_test/parrot.jpg" > /tpu_test/tpu_test \
+    &&  cat /zm_ml/data/venv/lib/python3.9/site-packages/zm_ml/Server/auth.py
 
 
 # System Variables
