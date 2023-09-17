@@ -1,15 +1,15 @@
+import logging
 from datetime import datetime, timedelta
 from typing import Annotated, Union
-import logging
 
-from fastapi import Depends, FastAPI, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
 
-from .Models.config import ZoMiUser
 from .Log import SERVER_LOGGER_NAME
+from .Models.config import ZoMiUser
 
 logger = logging.getLogger(SERVER_LOGGER_NAME)
 
@@ -75,7 +75,7 @@ def authenticate_user(fake_db, username: str, password: str):
     return user
 
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None):
+def create_access_token(data: dict, expires_delta: Union[timedelta, None] = None):
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
