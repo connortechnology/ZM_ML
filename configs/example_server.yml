@@ -24,6 +24,8 @@ THIS IS AN EXAMPLE:
 
 # - Set some uvicorn config options
 uvicorn:
+  debug: no
+
   # - If you run a proxy (nginx, cloudflare, cloudflared, etc.) in front of uvicorn
   # - This is in YAML list format, so if you have multiple IPs, add them as such
   forwarded_allow_ips:
@@ -51,7 +53,7 @@ server:
   # - Set interface IP to listen on, 0.0.0.0 will listen on all IPv4 interfaces
   address: ${ML_INSTALL_SERVER_ADDRESS}
   port: ${ML_INSTALL_SERVER_PORT}
-  jwt:
+  auth:
     # - The secret key that will be used to sign JWT tokens. (WIP!!!)
     # ** MAKE SURE YOU CHANGE THE DEFAULT VALUE when this is implemented **
     # - If you change the key after signing tokens, those existing tokens will be invalid

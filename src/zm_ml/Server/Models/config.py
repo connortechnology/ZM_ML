@@ -5,7 +5,7 @@ import tempfile
 import time
 import uuid
 from pathlib import Path
-from typing import Union, Dict, List, Optional, Any, TYPE_CHECKING
+from typing import Union, Dict, List, Optional, Any, TYPE_CHECKING, overload
 
 import numpy as np
 import yaml
@@ -21,7 +21,7 @@ from pydantic import (
     SecretStr,
     IPvAnyNetwork,
 )
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .validators import validate_model_labels
 from ..Log import SERVER_LOGGER_NAME
@@ -41,6 +41,7 @@ from ...Shared.Models.Enums import (
 from ...Shared.Models.config import Testing, LoggingSettings, DefaultEnabled
 from ...Shared.Models.validators import (
     str2path,
+    validate_file,
 )
 
 if TYPE_CHECKING:
@@ -113,9 +114,12 @@ class LockSettings(DefaultEnabled):
 
 
 class ServerSettings(BaseModel):
-    class JWTSettings(BaseModel):
+    class AuthSettings(DefaultEnabled):
+        db_file: Path = Field(..., description="TinyDB user DB file")
         sign_key: SecretStr = Field("CHANGE ME!!!!", description="JWT Sign Key")
         algorithm: str = Field("HS256", description="JWT Algorithm")
+
+        _validate_file = field_validator("db_file", mode="before")(validate_file)
 
     address: Union[IPvAnyAddress] = Field(
         "0.0.0.0", description="Server listen address"
@@ -128,7 +132,7 @@ class ServerSettings(BaseModel):
     debug: bool = Field(
         default=False, description="Uvicorn debug mode - For development only"
     )
-    jwt: JWTSettings = Field(default_factory=JWTSettings, description="JWT Settings")
+    auth: AuthSettings = Field(default_factory=AuthSettings, description="JWT Settings")
 
 
 class DetectionResult(BaseModel):
@@ -773,7 +777,9 @@ class SystemSettings(BaseModel):
 
 
 class UvicornSettings(BaseModel):
-    forwarded_allow_ips: Optional[List[Union[IPvAnyAddress, IPvAnyNetwork]]] = Field(default_factory=list)
+    forwarded_allow_ips: Optional[List[Union[IPvAnyAddress, IPvAnyNetwork]]] = Field(
+        default_factory=list
+    )
     grab_cloudflare_ips: Optional[bool] = Field(False)
 
 
@@ -1254,6 +1260,7 @@ class APIDetector:
             logger.warning(
                 f"Error loading model ({self.config.name}): {e}", exc_info=True
             )
+            raise e
 
     def is_processor_available(self) -> bool:
         """Check if the processor is available"""
@@ -1410,17 +1417,20 @@ class GlobalConfig(BaseModel, arbitrary_types_allowed=True):
     )
 
     def get_detector(self, model: BaseModelConfig) -> Optional[APIDetector]:
-        """Get a detector by ID"""
+        """Get a detector by ID (UUID4)"""
         ret_: Optional[APIDetector] = None
         for detector in self.detectors:
             if detector.config.id == model.id:
                 ret_ = detector
+                break
         if not ret_:
             logger.debug(f"Attempting to create new detector for '{model.name}'")
             try:
                 ret_ = APIDetector(model)
             except ImportError as e:
                 logger.warning(e, exc_info=True)
+            except Exception as e:
+                logger.error(e, exc_info=True)
             else:
                 self.detectors.append(ret_)
         if not ret_:
@@ -1428,17 +1438,26 @@ class GlobalConfig(BaseModel, arbitrary_types_allowed=True):
         return ret_
 
 
-class ServerEnvVars(BaseSettings, case_sensitive=True):
-    """Server Environment Variables"""
+class ServerEnvVars(BaseSettings):
+    """Server Environment Variables using pydantic v2 BaseSettings
 
-    conf_file: str = Field(
-        None, env="ML_SERVER_CONF_FILE", description="Server YAML config file"
+     NOTE: the name of the attribute must match the name of the environment variable,
+    you can set an env-prefix in the model config
+
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="ML_SERVER_", case_sensitive=True, extra="allow"
     )
 
+    # With the env_prefix set, the env var name will be: ML_SERVER_CONF_FILE
+    conf_file: str = Field(None, description="Server YAML config file")
+
+
+@overload
 class ZoMiUser(BaseModel):
-    # Create a docstring and signature for the class
     """
-    ZoMi User
+        ZoMi User
 
     :param username: ZoMi Username
     :type username: str

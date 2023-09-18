@@ -1,18 +1,26 @@
 import logging
 from datetime import datetime, timedelta
-from typing import Annotated, Union
+from typing import Annotated, Union, Optional, Any, Dict
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
+import tinydb
 
 from .Log import SERVER_LOGGER_NAME
 from .Models.config import ZoMiUser
 
 logger = logging.getLogger(SERVER_LOGGER_NAME)
-
+__all__ = [
+    "OAUTH2_SCHEME",
+    "SECRET_KEY",
+    "ALGORITHM",
+    "ACCESS_TOKEN_EXPIRE_MINUTES",
+    "pwd_context",
+    "User",
+]
 OAUTH2_SCHEME = OAuth2PasswordBearer(tokenUrl="login")
 SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
 ALGORITHM = "HS256"
@@ -23,8 +31,8 @@ User = ZoMiUser
 fake_users_db = {
     "johndoe": {
         "username": "johndoe",
-        "password": "admin",
-        "hashed_password": "$2b$12$XceLz2D.rP/xTrbx2AOsQe0WJH4zt8cWrqxIAVOxgpTB01lodA5.q",
+        # "password": "admin",
+        "password": "$2b$12$XceLz2D.rP/xTrbx2AOsQe0WJH4zt8cWrqxIAVOxgpTB01lodA5.q",
         "disabled": False,
     }
 }
@@ -39,33 +47,30 @@ class TokenData(BaseModel):
     username: Union[str, None] = None
 
 
-
-class UserInDB(User):
-    hashed_password: str
-
-
-def verify_password(plain_password, hashed_password):
+def verify_password(
+    plain_password: Union[str, bytes], hashed_password: Union[str, bytes]
+) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def get_password_hash(password):
+def get_password_hash(password: Union[str, bytes]) -> str:
     return pwd_context.hash(password)
 
 
-def get_user(db, username: str):
+def get_user(db: Dict[str, Any], username: str) -> Optional[ZoMiUser]:
     if username in db:
         logger.debug(f"in get_user():: User {username} found in db")
         user_dict = db[username]
-        return UserInDB(**user_dict)
+        return ZoMiUser(**user_dict)
     else:
         logger.debug(f"in get_user():: User {username} not found in db")
         return None
 
 
-def authenticate_user(fake_db, username: str, password: str):
+def authenticate_user(db_entry, username: str, password: str):
     logger.debug(f"in auth_user():: Authenticating user {username}")
 
-    user = get_user(fake_db, username)
+    user = get_user(db_entry, username)
     if not user:
         logger.warning(f"in auth_user():: User {username} not found")
         return False
@@ -112,5 +117,3 @@ async def get_current_active_user(
     if current_user.disabled:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
-
-
