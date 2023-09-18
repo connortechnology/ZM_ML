@@ -41,8 +41,8 @@ from ..Models.DEFAULTS import *
 logger = logging.getLogger(CLIENT_LOGGER_NAME)
 
 
-class ZMDBSettings(BaseSettings, extra="allow"):
-    model_config = SettingsConfigDict(env_prefix="ML_CLIENT_DB_")
+class ZMDBSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="ML_CLIENT_DB_", extra="allow")
     host: Union[IPvAnyAddress, AnyUrl, None] = Field(None)
     port: Optional[int] = Field(None)
     user: Optional[str] = Field(None)
@@ -538,15 +538,15 @@ class ConfigFileModel(BaseModel):
 class ClientEnvVars(BaseSettings):
     zm_conf_dir: Path = Field(
         Path("/etc/zm"),
-        description="Path to ZoneMinder config files",
+        description="Path to ZoneMinder config files, Default: /etc/zm",
     )
     ml_conf_dir: Optional[Path] = Field(
         None,
-        description="Path to ZoneMinder ML config file directory (client/server/secrets .yml)",
+        description="Path to ZoMi ML config file directory (client/server/secrets .yml)",
     )
     client_conf_file: Optional[Path] = Field(
         None,
-        description="Path to ZM-ML CLIENT config file",
+        description="Absolute path to ZoMi ML CLIENT config file",
         alias="ML_CLIENT_CONF_FILE",
     )
 
