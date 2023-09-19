@@ -51,7 +51,7 @@ if TYPE_CHECKING:
         APIDetector,
     )
 
-__version__ = "0.0.1a3"
+__version__ = "0.0.1a4"
 __version_type__ = "dev"
 logger = logging.getLogger(SERVER_LOGGER_NAME)
 logger.setLevel(logging.DEBUG)

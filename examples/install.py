@@ -179,7 +179,7 @@ console.setFormatter(log_formatter)
 logger.addHandler(console)
 
 # Misc.
-__version__ = "0.0.1a3"
+__version__ = "0.0.1a4"
 __dependancies__ = "psutil", "requests", "tqdm", "distro"
 __doc__ = """Install ZM-ML Server / Client"""
 
