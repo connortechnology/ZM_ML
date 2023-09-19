@@ -3,17 +3,17 @@
 # ${ML_INSTALL_ prepended variables are replaced when using install.sh #
 ########################################################################
 substitutions:
-  # Substitutions can be used like BASH variables
-  # THEY MUST BE WRAPPED IN ${} - ${THIS_WILL_WORK} $THIS_WONT
-  # Order matters!
+  # - Substitutions can be used like BASH variables
+  # - THEY MUST BE WRAPPED IN ${} - ${THIS_WILL_WORK} $THIS_WONT
+  # - Order matters!
   DATA_DIR: ${ML_INSTALL_DATA_DIR}
   TMP_DIR: ${ML_INSTALL_TMP_DIR}
   CFG_DIR: ${ML_INSTALL_CFG_DIR}
   LOGGING_DIR: ${ML_INSTALL_LOGGING_DIR}
   MODEL_DIR: ${ML_INSTALL_MODEL_DIR}
 
-  # This file contains substitutions that will be imported into this file (secrets)
-  # NOTE: The 'IncludeFile' directive must be contained in the 'substitutions' section
+  # - This file contains substitutions that will be imported into this file (secrets)
+  # ** NOTE: The 'IncludeFile' directive must be contained in the 'substitutions' section
   IncludeFile: ${ML_INSTALL_CFG_DIR}/secrets.yml
 
   # --------- Example
@@ -80,78 +80,78 @@ logging:
   # - Root logging level
   level: ${ML_INSTALL_LOGGING_LEVEL}
 
-  sanitize:
   # - Try to sanitize tokens, keys, passwords, usernames, host and ip addresses from logs
+  sanitize:
     enabled: yes
     replacement_str: <sanitized>
-  console:
   # - Log to console aka stdout
+  console:
     enabled: ${ML_INSTALL_LOGGING_CONSOLE_ENABLED}
-    # Per module logging level
-#    level: debug
+    # - Per module logging level
+    #level: debug
   syslog:
     enabled: ${ML_INSTALL_LOGGING_SYSLOG_ENABLED}
-    #    level: debug
-#    address: /dev/log
+    #level: debug
+    #address: /dev/log
     address: ${ML_INSTALL_LOGGING_SYSLOG_ADDRESS}
-  # log to file
+  # - Log to file
   file:
     enabled: ${ML_INSTALL_LOGGING_FILE_ENABLED}
-#    level: debug
-    # directory where log files will be stored
+    #level: debug
+    # - Directory where log files will be stored
     path: ${LOGGING_DIR}
-    # File name for the log file
+    # - File name for the log file
     file_name: zmmlServer.log
-    # override log file owner and group
+    # - Override log file owner and group
     # user:
     # group:
 
 locks:
-  # Disable/enable file locking (Default: yes)
+  # - Disable/enable file locking (Default: yes)
   #enabled: no
-  # Where to store lock files (Default: ${DATA_DIR}/locks)
+  # - Where to store lock files (Default: ${DATA_DIR}/locks)
   dir: ${DATA_DIR}/locks
   gpu:
-    # Max number of parallel processes (Default: 1)
+    # - Max number of parallel processes (Default: 1)
     max: 3
-    # Timeout for acquiring lock (Default: 30)
+    # - Timeout for acquiring lock (Default: 30)
     timeout: 35
   cpu:
     max: 2
     timeout: 24
   tpu:
-    # Unexpected results may occur when max > 1
+    # - Unexpected results may occur when max > 1
     max: 1
     timeout: 13
 
-# -- Define what models the server will offer, name is case-insensitive and preserves spaces.
+# - Define what models the server will offer, name is case-insensitive and preserves spaces.
 models:
-  # -- The model name is how you will call it in the API request
+  # - The model name is how you will call it in the API request
 
   # OpenCV Model Example
   - name: YOLOv4  # Name will be lower cased, spaces are preserved; 'yolov4'
     enabled: no
-    # Framework to use: opencv, trt, ort, torch, coral, http, face_recognition, alpr
+    # - Framework to use: opencv, trt, ort, torch, coral, http, face_recognition, alpr
     framework: opencv
-    # -- sub_framework is the various backends the framework can make use of
-    # -- opencv can use darknet, onnx (Although ort framework is faster)
+    # - sub_framework is the various backends the framework can make use of
+    # - opencv can use darknet, onnx (Although ort framework is faster)
     sub_framework: darknet
-    # -- cpu/gpu
+    # - cpu/gpu
     # NOTE: gpu requires OpenCV to be compiled with CUDA/cuDNN support!!!
     processor: cpu
 
-    # -- Model file is required for models that require input.
-    # -- Config file is optional, only .weights input requires a config file.
+    # - Model file is required for models that require input.
+    # - Config file is optional, only .weights input requires a config file.
     input: "${MODEL_DIR}/yolo/yolov4_new.weights"  # Optional. This is the model file itself.
     config: "${MODEL_DIR}/yolo/yolov4_new.cfg"  # Optional (.weights requires .cfg, .onnx and .tflite does not).
     #classes: "${MODEL_DIR}/coco.names"  # Optional. Default is COCO 2017 classes.
 
-    # -- Image will be resized to these dimensions before being passed to the model.
-    # -- what was the model trained on? 416x416? 512x512? 1024x1024?
+    # - Image will be resized to these dimensions before being passed to the model.
+    # - what was the model trained on? 416x416? 512x512? 1024x1024?
     height: 512  # Optional. Defaults to 416.
     width: 512  # Optional. Defaults to 416.
-    # -- Square the image by zero-padding the shorter side to match the longer side before resize
-    # -- 1920x1080 -> 1920x1920 with a black bg where the new pixels are
+    # - Square the image by zero-padding the shorter side to match the longer side before resize
+    # - 1920x1080 -> 1920x1920 with a black bg where the new pixels are
     square: no  # Optional. Defaults to False.
 
     detection_options:
@@ -163,24 +163,24 @@ models:
     description: testing pretrained torch model
     enabled: no
     framework: torch
-    # Use pretrained model with weights or configure input to your own model and classes
-    # NOTE: if pretrained is defined, input, classes and num_classes are ignored
-    # accurate|fast|default|high_performance|low_performance
+    # - Use pretrained model with weights or configure input to your own model and classes
+    # - NOTE: if pretrained is defined, input, classes and num_classes are ignored
+    # - accurate|fast|default|high_performance|low_performance
     pretrained:
       enabled: yes
       name: default
 
-#    input: /path/to/model.pt
-#    classes: /path/to/classes/file.txt
-    # number of classes including background
-#    num_classes: 80
+    #input: /path/to/model.pt
+    #classes: /path/to/classes/file.txt
+    # - Number of classes including background
+    #num_classes: 80
 
     type_of: object
     processor: gpu
-    # If using multiple GPUs, set the index of the GPU to use, Ignored if processor is not gpu
-    # To print out number of available GPUs: python3 -c "import torch; print(torch.cuda.device_count())"
-    # To get the name of each device: python3 -c "import torch; print(' '.join([torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]))"
-    # NOTE: The index is zero based, so the first GPU is 0, second is 1, etc.
+    # - If using multiple GPUs, set the index of the GPU to use, Ignored if processor is not gpu
+    # - To print out number of available GPUs: python3 -c "import torch; print(torch.cuda.device_count())"
+    # - To get the name of each device: python3 -c "import torch; print(' '.join([torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]))"
+    # ** NOTE: The index is zero based, so the first GPU is 0, second is 1, etc.
     gpu_idx: 0
 
     detection_options:
@@ -194,17 +194,17 @@ models:
 
     framework: coral
     type_of: object
-    # -- Change to TPU!
+    # - Change to TPU!
     processor: tpu
 
     input: "${MODEL_DIR}/coral_tpu/tf2_ssd_mobilenet_v2_coco17_ptq_edgetpu.tflite"
-    # -- All of the included TPU object detection models require the 90 label COCO dataset
-    # -- See https://coral.ai/models/object-detection/
+    # - All of the included TPU object detection models require the 90 label COCO dataset
+    # - See https://coral.ai/models/object-detection/
     classes: "${MODEL_DIR}/coral_tpu/coco-labels-paper.txt"
 
     detection_options:
-      # -- Non Max Suppressive threshold, lower will filter more overlapping bounding boxes out.
-      # -- Currently, only TPU model NMS can be enabled/disabled
+      # - Non Max Suppressive threshold, lower will filter more overlapping bounding boxes out.
+      # - Currently, only TPU model NMS can be enabled/disabled
       nms:
         enabled: yes
         threshold: .35
@@ -216,7 +216,7 @@ models:
     enabled: no
     description: "TensorRT optimized YOLO-NAS-S pretrained model"
     input: "/shared/models/yolo/yolo_nas_s.trt"
-    #    gpu_idx: 0
+    #gpu_idx: 0
     framework: trt
 
     type_of: object
@@ -232,7 +232,7 @@ models:
   - name: yolov8s onnx
     description: "Ultralytics YOLO v8s pretrained ONNX model on onnxruntime"
     enabled: no
-    # Use onnxruntime backend: ort
+    # - Use onnxruntime backend: ort
     framework: ort
 
     type_of: object
@@ -241,7 +241,7 @@ models:
     input: "/shared/models/yolo/yolov8s.onnx"
     #classes: path/to/classes.file
 
-    # MAKE SURE to set the proper model input size or it will throw errors!
+    # ** NOTE: MAKE SURE to set the proper model input size or it will throw errors!
     height: 640
     width: 640
 
@@ -268,78 +268,77 @@ models:
     type_of: face
     framework: face_recognition
 
-    # -- These options only apply to when the model is
-    # -- used for training faces to be recognized
+    # - These options only apply to when the model is
+    # - used for training faces to be recognized
     training_options:
-      # 'cnn' is more accurate but slower on CPUs. 'hog' is faster but less accurate
-      # NOTE: if you use cnn here you MUST use cnn for detection
+      # - 'cnn' is more accurate but slower on CPUs. 'hog' is faster but less accurate
+      # ** NOTE: if you use cnn here you MUST use cnn for detection
       model: cnn
-      # How many times to upsample the image looking for faces.
-      # Higher numbers find smaller faces but take longer.
+      # - How many times to upsample the image looking for faces.
+      # - Higher numbers find smaller faces but take longer.
       upsample_times: 1
-      # How many times to re-sample the face when calculating encoding.
-      # Higher is more accurate, but slower (i.e. 100 is 100x slower)
+      # - How many times to re-sample the face when calculating encoding.
+      # - Higher is more accurate, but slower (i.e. 100 is 100x slower)
       num_jitters: 1
-      # Max width of image to feed the model (scaling applied)
+      # - Max width of image to feed the model (scaling applied)
       max_size: 600
-      # Source dir where known faces are stored.
+      # - Source dir where known faces are stored.
       dir: "${DATA_DIR}/known_faces"
 
-    # -- An unknown face is a detected face that does not match any known faces
-    # -- Can possibly use the unknown face to train a new face
+    # - An unknown face is a detected face that does not match any known faces
+    # - Can possibly use the unknown face to train a new face
     unknown_faces:
       enabled: yes
-      # The label to give an unknown face
+      # - The label to give an unknown face
       label_as: "Unknown"
-      # When cropping an unknown face from the frame, how many pixels to add to each side
+      # - When cropping an unknown face from the frame, how many pixels to add to each side
       leeway_pixels: 10
-      # Where to save unknown faces
+      # - Where to save unknown faces
       dir: "${DATA_DIR}/unknown_faces"
 
     detection_options:
-      # 'cnn' is more accurate but slower on CPUs. 'hog' is faster but less accurate
+      # - 'cnn' is more accurate but slower on CPUs. 'hog' is faster but less accurate
       model: cnn
 
-      # confidence threshold for face DETECTION
+      # - Confidence threshold for face DETECTION
       confidence: 0.5
 
-      # How sure the model needs to be to classify a face as a known face
+      # - How sure the model needs to be to classify a face as a known face
       recognition_threshold: 0.6
 
-      # How many times to upsample the image looking for faces.
-      # Higher numbers find smaller faces but take longer.
+      # - How many times to upsample the image looking for faces.
+      # - Higher numbers find smaller faces but take longer.
       upsample_times: 1
 
-      # How many times to re-sample the face when calculating encoding.
-      # Higher is more accurate, but slower (i.e. 100 is 100x slower)
+      # - How many times to re-sample the face when calculating encoding.
+      # - Higher is more accurate, but slower (i.e. 100 is 100x slower)
       num_jitters: 1
 
-      # Max width of image to feed the model (scaling applied)
+      # - Max width of image to feed the model (scaling applied)
       max_size: 600
 
-  # OpenALPR Model Example
+  # - OpenALPR Model Example
   - name: "openalpr cpu"
-    ## NOTE: OpenALPR is fairly powerful for being older.
-    ## You need to understand how to skew and warp images to make a plate readable by OCR.
-    ## You can also customize openalpr config files and only run them on certain cameras.
+    # ** NOTE: OpenALPR is fairly powerful for being older.
+    # - You need to understand how to skew and warp images to make a plate readable by OCR.
+    # - You can also customize openalpr config files and only run them on certain cameras.
     description: "openalpr local SDK (binary) model with a config file for CPU"
     enabled: no
-
 
     type_of: alpr
     framework: alpr
     processor: none
-    # ALPR sub-framework to use: openalpr, platerecognizer
+    # - ALPR sub-framework to use: openalpr, platerecognizer
     sub_framework: openalpr
 
     detection_options:
       binary_path: alpr
-      # The default config file uses CPU, no need to make a custom config file
+      # - The default config file uses CPU, no need to make a custom config file
       binary_params:
       confidence: 0.5
       max_size: 600
 
-  # OpenALPR Model Example (Shows how to use a custom openalpr config file)
+  # - OpenALPR Model Example (Shows how to use a custom openalpr config file)
   - name: "openalpr gpu"
     description: "openalpr local SDK (binary) with a config file to use CUDA GPU"
     enabled: no
@@ -347,22 +346,22 @@ models:
     type_of: alpr
     framework: alpr
     sub_framework: openalpr
-    # openalpr config file controls processor, you can put none,cpu,gpu or tpu here.
+    # - openalpr config file controls processor, you can put none,cpu,gpu or tpu here.
     processor: none
 
     detection_options:
-      # path to alpr binary (default: alpr)
+      # - Path to alpr binary (default: alpr)
       binary_path: alpr
-      # Make a config file that uses the gpu instead of cpu
+      # - Make a config file that uses the gpu instead of cpu
       binary_params: "--config /etc/alpr/openalpr-gpu.conf"
       confidence: 0.5
       max_size: 600
 
-  # Plate Recognizer Example
+  # - Plate Recognizer Example
   - name: 'Platerec'
     enabled: no
     type_of: alpr
-    # Even though it is ALPR, it is using HTTP for detection
+    # - Even though it is ALPR, it is using HTTP for detection
     framework: http
     sub_framework: plate_recognizer
 
@@ -370,8 +369,8 @@ models:
     #api_url: "https://api.platerecognizer.com/v1/plate-reader/"
     api_key: ${PLATEREC_API_KEY}
     detection_options:
-      # Only look in certain countrys or regions in a country.
-      # See platerecognizer docs for more info
+      # - Only look in certain countrys or regions in a country.
+      # - See platerecognizer docs for more info
       #regions: ['ca', 'us']
 
       stats: no
@@ -382,7 +381,7 @@ models:
 
       max_size: 1600
 
-      # For advanced users, you can pass in any of the options from the API docs
+      # - For advanced users, you can pass in any of the options from the API docs
       #payload:
         #regions: ['us']
         #camera_id: 12
