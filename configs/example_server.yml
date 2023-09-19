@@ -24,9 +24,11 @@ THIS IS AN EXAMPLE:
 
 # - Set some uvicorn config options
 uvicorn:
-  debug: no
+  # - Allow proxy headers to be used for determining the client's IP address
+  # - This is useful for when you are running behind a proxy
+  proxy_headers: no
 
-  # - If you run a proxy (nginx, cloudflare, cloudflared, etc.) in front of uvicorn
+  # - If you allow proxy headers define what ips are allowed to set them
   # - This is in YAML list format, so if you have multiple IPs, add them as such
   forwarded_allow_ips:
     - "127.0.0.1/32"
@@ -54,13 +56,24 @@ server:
   address: ${ML_INSTALL_SERVER_ADDRESS}
   port: ${ML_INSTALL_SERVER_PORT}
   auth:
-    # - The secret key that will be used to sign JWT tokens. (WIP!!!)
-    # ** MAKE SURE YOU CHANGE THE DEFAULT VALUE when this is implemented **
+    # - Enable/Disable authentication
+    # - If disabled, anyone can access the API but, they must still login and receive a token.
+    # - It will accept any username/password combo while disabled.
+    enabled: no
+
+    # - REQUIRED: Where to store the user database
+    db_file: ${DATA_DIR}/udata.db
+
+    # - The secret key that will be used to sign JWT tokens.
+    # ** MAKE SURE YOU CHANGE THE DEFAULT VALUE **
     # - If you change the key after signing tokens, those existing tokens will be invalid
     sign_key: ${JWT_SIGN_PHRASE}
     #  - The algorithm to use for signing JWT tokens. The default is HS256.
     # ** BE AWARE if you change this after signing tokens, tokens signed with old algo will be invalid
     algorithm: HS256
+
+    # - How long an access token is valid for in minutes
+    expire_after: 60
 
 logging:
   # - Logging levels are: debug, info, warning, error, critical
@@ -112,50 +125,16 @@ locks:
     timeout: 13
 
 # -- Define what models the server will offer, name is case-insensitive and preserves spaces.
-# -- CHANGED! Default framework is now ultralytics (torch), not opencv. OpenCV is still supported.
 models:
   # -- The model name is how you will call it in the API request
-  - name: yolov8
-    # Optional, for user reference.
-    description: "Ultralytics YOLO v8 pretrained model"
-    # Optional. Defaults to True.
-    enabled: yes
-    # opencv, torch, ultralytics, coral, face_recognition, alpr, http
-    # Default: ultralytics
-    framework: ultralytics
-    # Optional. Defaults to cpu - cpu/gpu
-    processor: cpu
-    # If processor is set to 'gpu', you can set the index of the GPU to use
-    gpu_idx: 0
-    # Optional. Default: object - object, segmentation, pose, classification
-    sub_framework: object
 
-    # Use pretrained model instead of your own
-    pretrained:
-      enabled: yes
-      # see: YOLOv5: https://docs.ultralytics.com/models/yolov5/
-      # YOLOv8: https://docs.ultralytics.com/models/yolov8/
-      # YOLO-NAS: https://docs.ultralytics.com/models/yolo-nas/
-      name: yolov8s
-
-    # user trained model support is being worked on
-    # input: /path/to/model.pt
-    # classes: /path/to/classes/file.txt
-
-    # -- Options that are specific to the framework and/or sub_framework
-    detection_options:
-      # -- The model will only return detections with a confidence score higher than this
-      # -- The client can filter by confidence further, but this is a good starting point to reduce noise.
-      confidence: 0.2  # Optional. Defaults to 0.2.
-      # -- Non Max Suppression threshold. Higher values will remove more overlapping boxes
-      nms: 0.4  # Optional. Defaults to 0.4.
-
-
+  # OpenCV Model Example
   - name: YOLOv4  # Name will be lower cased, spaces are preserved; 'yolov4'
     enabled: no
+    # Framework to use: opencv, trt, ort, torch, coral, http, face_recognition, alpr
     framework: opencv
     # -- sub_framework is the various backends the framework can make use of
-    # -- darknet is the default for opencv, but you can also use onnx
+    # -- opencv can use darknet, onnx (Although ort framework is faster)
     sub_framework: darknet
     # -- cpu/gpu
     # NOTE: gpu requires OpenCV to be compiled with CUDA/cuDNN support!!!
@@ -166,6 +145,7 @@ models:
     input: "${MODEL_DIR}/yolo/yolov4_new.weights"  # Optional. This is the model file itself.
     config: "${MODEL_DIR}/yolo/yolov4_new.cfg"  # Optional (.weights requires .cfg, .onnx and .tflite does not).
     #classes: "${MODEL_DIR}/coco.names"  # Optional. Default is COCO 2017 classes.
+
     # -- Image will be resized to these dimensions before being passed to the model.
     # -- what was the model trained on? 416x416? 512x512? 1024x1024?
     height: 512  # Optional. Defaults to 416.
@@ -178,6 +158,7 @@ models:
       confidence: 0.2
       nms: 0.4
 
+  # PyTorch Example
   - name: torch test
     description: testing pretrained torch model
     enabled: no
@@ -194,7 +175,6 @@ models:
     # number of classes including background
 #    num_classes: 80
 
-#    sub_framework:
     type_of: object
     processor: gpu
     # If using multiple GPUs, set the index of the GPU to use, Ignored if processor is not gpu
@@ -207,25 +187,12 @@ models:
       confidence: 0.2
       nms: 0.65
 
-  - name: YOLOv4 Tiny  # Name is converted to lowercase, spaces are preserved; 'yolov4 tiny'
-    enabled: true
-    framework: opencv
-    sub_framework: darknet
-    type_of: object
-    description: "yolov4 Tiny pretrained DarkNet model"
-    processor: cpu
-    input: "${MODEL_DIR}/yolo/yolov4-tiny.weights"
-    config: "${MODEL_DIR}/yolo/yolov4-tiny.cfg"
-    detection_options:
-      nms: 0.3
-      confidence: 0.2
-
+  # TPU Model Example
   - name: tpu
     description: "SSD MobileNet V2 TensorFlow2 trained"
     enabled: no
 
     framework: coral
-    sub_framework: none
     type_of: object
     # -- Change to TPU!
     processor: tpu
@@ -241,8 +208,48 @@ models:
       nms:
         enabled: yes
         threshold: .35
-      confidence: 0.2
+      confidence:
+        0.2
 
+  # TensorRT Model Example (Must install TensorRT)
+  - name: yolo-nas-s trt
+    enabled: no
+    description: "TensorRT optimized YOLO-NAS-S pretrained model"
+    input: "/shared/models/yolo/yolo_nas_s.trt"
+    #    gpu_idx: 0
+    framework: trt
+
+    type_of: object
+
+    height: 640
+    width: 640
+
+    detection_options:
+      confidence: 0.31
+      nms: 0.31
+
+  # ONNX Runtime Example
+  - name: yolov8s onnx
+    description: "Ultralytics YOLO v8s pretrained ONNX model on onnxruntime"
+    enabled: no
+    # Use onnxruntime backend: ort
+    framework: ort
+
+    type_of: object
+
+    processor: gpu
+    input: "/shared/models/yolo/yolov8s.onnx"
+    #classes: path/to/classes.file
+
+    # MAKE SURE to set the proper model input size or it will throw errors!
+    height: 640
+    width: 640
+
+    detection_options:
+      confidence: 0.33
+      nms: 0.44
+
+  # AWS Rekognition Example
   - name: aws
     description: "AWS Rekognition remote HTTP detection (PAID per request!)"
     enabled: no
@@ -254,74 +261,7 @@ models:
     detection_options:
       confidence: 0.4455
 
-  - name: virel
-    description: "virel.ai remote HTTP detection (FREE atm but will be PAID)"
-    enabled: no
-    framework: http
-    sub_framework: virel
-    type_of: object
-    processor: none
-
-    detection_options:
-      confidence: 0.456
-
-  - name: YOLOv4-P6  # yolov4-p6
-    enabled: false
-    framework: opencv
-    sub_framework: darknet
-    processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
-    input: "${MODEL_DIR}/yolo/yolov4-p6.weights"
-    config: "${MODEL_DIR}/yolo/yolov4-p6.cfg"
-    description: "Scaled YOLO v4-P6 pretrained DarkNet 1280x1280"
-    height: 1280
-    width: 1280
-
-    detection_options:
-      confidence: 0.65
-
-
-  - name: yolov7 tiny
-    enabled: yes
-    framework: opencv
-    sub_framework: darknet
-    description: "yolov7 tiny pretrained DarkNet model - good for low powered cpu"
-    input: "${MODEL_DIR}/yolo/yolov7-tiny.weights"
-    config: "${MODEL_DIR}/yolo/yolov7-tiny.cfg"
-
-    detection_options:
-      confidence: 0.4
-
-  - name: yolov7
-    processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
-    enabled: no
-    framework: opencv
-    sub_framework: darknet
-    description: "YOLO v7 pretrained DarkNet model"
-    input: "${MODEL_DIR}/yolo/yolov7.weights"
-    config: "${MODEL_DIR}/yolo/yolov7.cfg"
-    square: yes
-    height: 640
-    width: 640
-
-    detection_options:
-      confidence: 0.5
-
-
-  - name: yolov7x
-    processor: cpu  # Optional. Defaults to cpu - cpu/gpu/tpu.
-    enabled: no
-    framework: opencv
-    sub_framework: darknet
-    description: "YOLO v7-X pretrained DarkNet model"
-    input: "${MODEL_DIR}/yolo/yolov7x.weights"
-    config: "${MODEL_DIR}/yolo/yolov7x.cfg"
-    square: yes
-    height: 640
-    width: 640
-
-    detection_options:
-      confidence: 0.5
-
+  # face-recognition Example
   - name: dlib face
     enabled: no
     description: "dlib face detection/recognition model"
@@ -377,8 +317,7 @@ models:
       # Max width of image to feed the model (scaling applied)
       max_size: 600
 
-
-
+  # OpenALPR Model Example
   - name: "openalpr cpu"
     ## NOTE: OpenALPR is fairly powerful for being older.
     ## You need to understand how to skew and warp images to make a plate readable by OCR.
@@ -390,6 +329,7 @@ models:
     type_of: alpr
     framework: alpr
     processor: none
+    # ALPR sub-framework to use: openalpr, platerecognizer
     sub_framework: openalpr
 
     detection_options:
@@ -399,6 +339,7 @@ models:
       confidence: 0.5
       max_size: 600
 
+  # OpenALPR Model Example (Shows how to use a custom openalpr config file)
   - name: "openalpr gpu"
     description: "openalpr local SDK (binary) with a config file to use CUDA GPU"
     enabled: no
@@ -417,9 +358,11 @@ models:
       confidence: 0.5
       max_size: 600
 
-  - name: 'Platerec'  # The model name is normalized by lower casing, spaces are preserved; 'platerec'
+  # Plate Recognizer Example
+  - name: 'Platerec'
     enabled: no
     type_of: alpr
+    # Even though it is ALPR, it is using HTTP for detection
     framework: http
     sub_framework: plate_recognizer
 

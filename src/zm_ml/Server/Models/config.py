@@ -5,7 +5,7 @@ import tempfile
 import time
 import uuid
 from pathlib import Path
-from typing import Union, Dict, List, Optional, Any, TYPE_CHECKING, overload
+from typing import Union, Dict, List, Optional, Any, TYPE_CHECKING
 
 import numpy as np
 import yaml
@@ -13,7 +13,6 @@ from pydantic import (
     BaseModel,
     Field,
     FieldValidationInfo,
-    ValidationInfo,
     field_validator,
     model_validator,
     IPvAnyAddress,
@@ -46,6 +45,7 @@ from ...Shared.Models.validators import (
 
 if TYPE_CHECKING:
     from ..ML.Detectors.ultralytics.Models.config import UltralyticsModelConfig
+    from ..auth import UserDB
 
 logger = logging.getLogger(SERVER_LOGGER_NAME)
 
@@ -116,10 +116,10 @@ class LockSettings(DefaultEnabled):
 class ServerSettings(BaseModel):
     class AuthSettings(DefaultEnabled):
         db_file: Path = Field(..., description="TinyDB user DB file")
+        expire_after: int = Field(60, ge=1, description="JWT Expiration time in minutes")
         sign_key: SecretStr = Field("CHANGE ME!!!!", description="JWT Sign Key")
         algorithm: str = Field("HS256", description="JWT Algorithm")
 
-        _validate_file = field_validator("db_file", mode="before")(validate_file)
 
     address: Union[IPvAnyAddress] = Field(
         "0.0.0.0", description="Server listen address"
@@ -777,6 +777,8 @@ class SystemSettings(BaseModel):
 
 
 class UvicornSettings(BaseModel):
+    debug: Optional[bool] = Field(False, description="Uvicorn debug mode")
+    proxy_headers: Optional[bool] = False
     forwarded_allow_ips: Optional[List[Union[IPvAnyAddress, IPvAnyNetwork]]] = Field(
         default_factory=list
     )
@@ -1415,6 +1417,8 @@ class GlobalConfig(BaseModel, arbitrary_types_allowed=True):
     detectors: List[APIDetector] = Field(
         default_factory=list, description="Loaded Detectors"
     )
+    user_db: None = Field(None, description="User Database (TinyDB)")
+
 
     def get_detector(self, model: BaseModelConfig) -> Optional[APIDetector]:
         """Get a detector by ID (UUID4)"""
@@ -1452,27 +1456,3 @@ class ServerEnvVars(BaseSettings):
 
     # With the env_prefix set, the env var name will be: ML_SERVER_CONF_FILE
     conf_file: str = Field(None, description="Server YAML config file")
-
-
-@overload
-class ZoMiUser(BaseModel):
-    """
-        ZoMi User
-
-    :param username: ZoMi Username
-    :type username: str
-    :param password: ZoMi Password
-    :type password: str
-    :param token: ZoMi Token
-    :type token: str
-    :param perms: ZoMi Permissions
-    :type perms: List[str]
-    :param disabled: ZoMi User Disabled
-    :type disabled: bool
-    """
-
-    username: str = Field(..., description="ZoMi Username")
-    password: Optional[str] = Field(None, description="ZoMi Password")
-    token: Optional[str] = Field(None, description="ZoMi Token")
-    perms: Optional[List[str]] = Field(None, description="ZoMi Permissions")
-    disabled: Optional[bool] = Field(False, description="ZoMi User Disabled")
