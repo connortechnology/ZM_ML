@@ -189,7 +189,7 @@ class TPUModelOptions(BaseModelOptions, extra="allow"):
 class FaceRecognitionLibModelDetectionOptions(BaseModelOptions):
     # face_recognition lib config Options
     model: Optional[FaceRecognitionLibModelTypes] = Field(
-        FaceRecognitionLibModelTypes.DEFAULT,
+        FaceRecognitionLibModelTypes.CNN,
         examples=["hog", "cnn"],
         description="Face Detection Model to use. 'cnn' is more accurate but slower on CPUs. "
         "'hog' is faster but less accurate",
@@ -223,7 +223,7 @@ class FaceRecognitionLibModelDetectionOptions(BaseModelOptions):
 
 class FaceRecognitionLibModelTrainingOptions(BaseModelOptions):
     model: Optional[FaceRecognitionLibModelTypes] = Field(
-        FaceRecognitionLibModelTypes.DEFAULT,
+        FaceRecognitionLibModelTypes.CNN,
         examples=["hog", "cnn"],
         description="Face Detection Model to use. 'cnn' is more accurate but slower on CPUs. "
         "'hog' is faster but less accurate",
@@ -368,15 +368,15 @@ class BaseModelConfig(BaseModel):
     enabled: bool = Field(True, description="model enabled")
     description: str = Field(None, description="model description")
     framework: ModelFrameWork = Field(
-        ModelFrameWork.DEFAULT, description="model framework"
+        default=ModelFrameWork.OPENCV, description="model framework"
     )
     type_of: ModelType = Field(
-        ModelType.DEFAULT,
+        ModelType.OBJECT,
         description="model type (object, face, alpr)",
         alias="model_type",
     )
     processor: Optional[ModelProcessor] = Field(
-        ModelProcessor.DEFAULT, description="Processor to use for model"
+        ModelProcessor.CPU, description="Processor to use for model"
     )
 
     # todo: add validator that detects framework and sets a default sub framework if it is None.
@@ -387,7 +387,7 @@ class BaseModelConfig(BaseModel):
             ALPRSubFrameWork,
             UltralyticsSubFrameWork,
         ]
-    ] = Field(None, description="sub-framework to use for model")
+    ] = Field(OpenCVSubFrameWork.DARKNET, description="sub-framework to use for model")
 
     detection_options: Union[
         BaseModelOptions,
@@ -636,7 +636,7 @@ class FaceRecognitionLibModelConfig(BaseModelConfig):
 
 class ALPRModelConfig(BaseModelConfig):
     api_type: ALPRAPIType = Field(ALPRAPIType.LOCAL, description="ALPR Service Type")
-    service: ALPRService = Field(ALPRService.DEFAULT, description="ALPR Service to use")
+    service: ALPRService = Field(ALPRService.OPENALPR, description="ALPR Service to use")
     api_key: str = Field(None, description="ALPR API Key (Cloud/Local)")
     api_url: str = Field(None, description="ALPR API URL (Cloud/Local)")
 
@@ -821,6 +821,9 @@ class Settings(BaseModel, arbitrary_types_allowed=True):
                 if model.get("enabled", True) is True:
                     _model: Union[
                         RekognitionModelConfig,
+                        TRTModelConfig,
+                        ORTModelConfig,
+                        TPUModelConfig,
                         VirelAIModelConfig,
                         FaceRecognitionLibModelConfig,
                         ALPRModelConfig,
@@ -829,8 +832,8 @@ class Settings(BaseModel, arbitrary_types_allowed=True):
                         TorchModelConfig,
                         None,
                     ] = None
-                    _framework = model.get("framework", "ultralytics")
-                    _sub_fw = model.get("sub_framework", "object")
+                    _framework = model.get("framework", ModelFrameWork.OPENCV)
+                    _sub_fw = model.get("sub_framework", OpenCVSubFrameWork.DARKNET)
                     _options = model.get("detection_options", {})
                     _type = model.get("model_type", ModelType.OBJECT)
                     logger.debug(
@@ -1062,16 +1065,16 @@ class APIDetector:
     def __init__(
         self,
         model_config: Union[
-            BaseModelConfig,
-            CV2YOLOModelConfig,
-            ALPRModelConfig,
-            FaceRecognitionLibModelConfig,
-            DeepFaceModelConfig,
-            TPUModelConfig,
-            TorchModelConfig,
-            "UltralyticsModelConfig",
-            "ORTModelConfig",
-            "TRTModelConfig",
+                BaseModelConfig,
+                CV2YOLOModelConfig,
+                ALPRModelConfig,
+                FaceRecognitionLibModelConfig,
+                DeepFaceModelConfig,
+                TPUModelConfig,
+                TorchModelConfig,
+                "UltralyticsModelConfig",
+                "ORTModelConfig",
+                "TRTModelConfig",
         ],
     ):
         from ..ML.Detectors.opencv.cv_yolo import CV2YOLODetector
@@ -1083,6 +1086,7 @@ class APIDetector:
         from ..ML.Detectors.torch.torch_base import TorchDetector
         from ..ML.Detectors.ultralytics.yolo.ultra_base import UltralyticsYOLODetector
         from ..ML.Detectors.onnx_runtime import ORTDetector
+
 
         self.config = model_config
         self.id = self.config.id
@@ -1116,7 +1120,9 @@ class APIDetector:
         PlateRecognizerModelOptions,
         ALPRModelOptions,
         FaceRecognitionLibModelDetectionOptions,
-        "UltralyticsModelOptions",
+        CV2YOLOModelOptions,
+        TorchModelOptions,
+        UltralyticsModelOptions,
         "ORTModelOptions",
         "TRTModelOptions",
     ]:
@@ -1132,7 +1138,9 @@ class APIDetector:
             PlateRecognizerModelOptions,
             ALPRModelOptions,
             FaceRecognitionLibModelDetectionOptions,
-            "UltralyticsModelOptions",
+            CV2YOLOModelOptions,
+            TorchModelOptions,
+            UltralyticsModelOptions,
             "ORTModelOptions",
             "TRTModelOptions",
         ],
@@ -1149,10 +1157,10 @@ class APIDetector:
                 FaceRecognitionLibModelConfig,
                 DeepFaceModelConfig,
                 TPUModelConfig,
-                VirelAIModelConfig,
-                RekognitionModelConfig,
-                ORTModelConfig,
-                TRTModelConfig,
+                TorchModelConfig,
+                "UltralyticsModelConfig",
+                "ORTModelConfig",
+                "TRTModelConfig",
             ]
         ] = None,
     ):

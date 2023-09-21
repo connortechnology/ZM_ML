@@ -10,7 +10,6 @@ class ModelType(str, Enum):
     OBJECT = "object"
     FACE = "face"
     ALPR = "alpr"
-    DEFAULT = OBJECT
 
     def __repr__(self):
         return f"<{self.__class__.__name__}: {str(self.name).lower()} detection>"
@@ -26,7 +25,6 @@ class OpenCVSubFrameWork(str, Enum):
     TORCH = "torch"
     VINO = "vino"
     ONNX = "onnx"
-    DEFAULT = DARKNET
 
     def __repr__(self):
         return f"<{self.__class__.__name__}: {self.name}>"
@@ -39,14 +37,13 @@ class HTTPSubFrameWork(str, Enum):
     NONE = "none"
     VIREL = "virel"
     REKOGNITION = "rekognition"
-    DEFAULT = VIREL
 
 
 class ALPRSubFrameWork(str, Enum):
     OPENALPR = "openalpr"
     PLATE_RECOGNIZER = "plate_recognizer"
     REKOR = "rekor"
-    DEFAULT = OPENALPR
+
     def __repr__(self):
         return f"<{self.__class__.__name__}: {self.name}>"
 
@@ -66,7 +63,6 @@ class ModelFrameWork(str, Enum):
     REKOGNITION = "rekognition"
     ORT = "ort"
     TRT = "trt"
-    DEFAULT = OPENCV
 
 
 class UltralyticsSubFrameWork(str, Enum):
@@ -81,7 +77,6 @@ class ModelProcessor(str, Enum):
     CPU = "cpu"
     GPU = "gpu"
     TPU = "tpu"
-    DEFAULT = CPU
 
     def __repr__(self):
         return f"<{self.__class__.__name__}: {self.name}>"
@@ -93,17 +88,14 @@ class ModelProcessor(str, Enum):
 class FaceRecognitionLibModelTypes(str, Enum):
     CNN = "cnn"
     HOG = "hog"
-    DEFAULT = CNN
 
 
 class ALPRAPIType(str, Enum):
     LOCAL = "local"
     CLOUD = "cloud"
-    DEFAULT = LOCAL
 
 
 class ALPRService(str, Enum):
     OPENALPR = "openalpr"
     PLATE_RECOGNIZER = "plate_recognizer"
     SCOUT = OPENALPR
-    DEFAULT = OPENALPR
