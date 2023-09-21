@@ -389,6 +389,7 @@ def parse_cli():
     global args, models
 
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--no-cache-dir", action="store_true", dest="no_cache", help="Do not use cache directory for pip install")
     parser.add_argument(
         "--zm-portal",
         dest="zm_portal",
@@ -1197,7 +1198,7 @@ def do_install(_inst_type: str):
         "-m",
         "pip",
         "install",
-        "--no-cache-dir",
+        "--no-cache-dir" if args.no_cache else "",
         # "--root-user-action=ignore",
         # "--report",
         # "./pip_install_report.json",
