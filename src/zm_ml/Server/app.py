@@ -9,7 +9,6 @@ from pathlib import Path
 from platform import python_version
 from typing import Union, Dict, List, Optional, Any, TYPE_CHECKING, Annotated, Tuple
 
-
 try:
     import cv2
 except ImportError:
@@ -31,7 +30,6 @@ from fastapi import (
     UploadFile,
     File,
     Body,
-    Path as FastPath,
     Depends,
 )
 from fastapi.responses import RedirectResponse, Response
@@ -71,7 +69,7 @@ logger.info(
     f"Pydantic: {pydantic.VERSION}]"
 )
 
-app = FastAPI(debug=True)
+app = FastAPI(debug=True, title="ZoMi MLAPI", version=__version__)
 g: Optional[GlobalConfig] = None
 LP: str = "mlapi:"
 
@@ -308,10 +306,64 @@ async def docs():
     return RedirectResponse(url="/docs")
 
 
-@app.get("/test_auth/", summary="Test authentication")
-async def _test_auth(token: Annotated[str, Depends(verify_token)]):
-    return {"token": token}
 
+
+
+
+
+
+@app.get("/models/available/all", summary="Get a list of all available models")
+async def available_models_all():
+    try:
+        logger.debug(f"About to try and grab available models....")
+        x = {"models": get_global_config().available_models}
+    except Exception as e:
+        logger.error(f"ERROR: {e}", exc_info=True)
+        raise e
+    else:
+        logger.debug(f"Got available models: {x}")
+        return x
+
+
+@app.get(
+    "/models/available/type/{model_type}",
+    summary="Get a list of available models based on the type",
+)
+async def available_models_type(model_type: ModelType):
+    available_models = get_global_config().available_models
+    return {
+        "models": [
+            model.dict() for model in available_models if model.type_of == model_type
+        ]
+    }
+
+
+@app.get(
+    "/models/available/proc/{processor}",
+    summary="Get a list of available models based on the processor",
+)
+async def available_models_proc(processor: ModelProcessor):
+    logger.info(f"available_models_proc: {processor}")
+    available_models = get_global_config().available_models
+    return {
+        "models": [
+            model.dict() for model in available_models if model.processor == processor
+        ]
+    }
+
+
+@app.get(
+    "/models/available/framework/{framework}",
+    summary="Get a list of available models based on the framework",
+)
+async def available_models_framework(framework: ModelFrameWork):
+    logger.info(f"available_models_proc: {framework}")
+    available_models = get_global_config().available_models
+    return {
+        "models": [
+            model.dict() for model in available_models if model.framework == framework
+        ]
+    }
 
 @app.post(
     "/detect/annotate",
@@ -325,16 +377,16 @@ async def _test_auth(token: Annotated[str, Depends(verify_token)]):
     summary="Return an annotated jpeg image with bounding boxes and labels",
 )
 async def get_annotated_image(
-    hints_for_model: List[str] = Body(..., example="yolov4"),
+    hints_: List[str] = Body(..., example="yolov4", description="comma seperated model names/UUIDs"),
     image: UploadFile = File(...)
 ):
-    logger.info(f"get_annotated_image: {hints_for_model = }")
-    if hints_for_model:
+    logger.info(f"get_annotated_image: {hints_ = }")
+    if hints_:
         from ..Shared.Models.config import DetectionResults, Result
 
-        hints_for_model = hints_for_model[0].strip('"').split(",")
+        hints_ = hints_[0].strip('"').split(",")
         detections: List[DetectionResults]
-        detections, image = await threaded_detect(hints_for_model, image, return_image=True)
+        detections, image = await threaded_detect(hints_, image, return_image=True)
         i = 0
         SLATE_COLORS: List[Tuple[int, int, int]] = [
             (39, 174, 96),
@@ -381,60 +433,18 @@ async def get_annotated_image(
         import json
         return Response(content=image_bytes, media_type="image/jpeg", headers={"Results": json.dumps([x.model_dump() for x in detections])}, background=None)
 
+@app.post("/detect/batch", summary="Run detection on a batch of images")
+async def batch_detection(
+        hints_: List[str] = Body(
+            ...,
+            description="comma seperated model names/UUIDs",
+            example="yolov4,97acd7d4-270c-4667-9d56-910e1510e8e8,yolov7 tiny",
+        ),
+    images: List[UploadFile] = File(..., description="Images to run the ML model on"),
+):
+    logger.debug(f"batch_detection: {hints_ = } -- num images: {len(images)}")
 
-@app.get("/models/available/all", summary="Get a list of all available models")
-async def _available_models():
-    try:
-        logger.debug(f"About to try and grab available models....")
-        x = {"models": get_global_config().available_models}
-    except Exception as e:
-        logger.error(f"ERROR: {e}", exc_info=True)
-        raise e
-    else:
-        logger.debug(f"Got available models: {x}")
-        return x
-
-
-@app.get(
-    "/models/available/type/{model_type}",
-    summary="Get a list of available models based on the type",
-)
-async def available_models_type(model_type: ModelType):
-    available_models = get_global_config().available_models
-    return {
-        "models": [
-            model.dict() for model in available_models if model.type_of == model_type
-        ]
-    }
-
-
-@app.get(
-    "/models/available/proc/{processor}",
-    summary="Get a list of available models based on the processor",
-)
-async def available_models_proc(processor: ModelProcessor):
-    logger.info(f"available_models_proc: {processor}")
-    available_models = get_global_config().available_models
-    return {
-        "models": [
-            model.dict() for model in available_models if model.processor == processor
-        ]
-    }
-
-
-@app.get(
-    "/models/available/framework/{framework}",
-    summary="Get a list of available models based on the framework",
-)
-async def available_models_proc(framework: ModelFrameWork):
-    logger.info(f"available_models_proc: {framework}")
-    available_models = get_global_config().available_models
-    return {
-        "models": [
-            model.dict() for model in available_models if model.framework == framework
-        ]
-    }
-
+    return {"Not Implemented": "Not Implemented"}
 
 @app.post(
     "/detect/group",
@@ -448,7 +458,7 @@ async def group_detect(
     ),
     image: UploadFile = File(...),
 ):
-    logger.info(f"group_detect: {hints_model = }")
+    logger.info(f"group_detect hints: {hints_model = } -- {image.file = }")
     if hints_model:
         hints_model = hints_model[0].strip('"').split(",")
         detections = await threaded_detect(hints_model, image)
@@ -465,16 +475,18 @@ async def group_detect(
 
 
 @app.post(
-    "/detect/single/{model_hint}",
-    summary="Run detection using the specified model on a single image",
-    # response_model=DetectionResult,
+    "/detect/single/",
+    summary="Run detection on a single image",
 )
 async def single_detection(
-    model_hint: str = FastPath(..., description="model name or id", example="yolov4"),
+        hints_: List[str] = Body(
+            ...,
+            description="comma seperated model names/UUIDs",
+            example="yolov4,97acd7d4-270c-4667-9d56-910e1510e8e8,yolov7 tiny",
+        ),
     image: UploadFile = File(..., description="Image to run the ML model on"),
 ):
-    logger.info(f"single_detection: ENDPOINT {model_hint}")
-    return await detect(model_hint, image)
+    logger.info(f"single IMAGE detection hints: {hints_}")
 
 
 class MLAPI:
@@ -603,6 +615,10 @@ class MLAPI:
 
 
 # AUTH STUFF
+@app.get("/test_auth/", summary="Test authentication")
+async def _test_auth(token: Annotated[str, Depends(verify_token)]):
+    return {"token": token}
+
 @app.post("/login", response_model=Token, summary="Login to get an authentication token")
 async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
