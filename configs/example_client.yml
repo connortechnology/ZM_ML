@@ -129,16 +129,14 @@ logging:
     #group:
 
 mlapi:
-  routes:
-    - name: ${ROUTE_NAME}
-      enabled: yes  # Default is yes, can be omitted
-      weight: 0  # Lower takes precedence
-      host: ${ROUTE_HOST}  # IP or hostname (add https:// if TLS encrypted)
-      port: ${ROUTE_PORT}
-      timeout: 60  # Default: 90
-      # - JWT Auth is WIP!
-      #username: admin
-      #password: admin
+  name: ${ROUTE_NAME}
+  weight: 0  # Lower takes precedence
+  host: ${ROUTE_HOST}  # IP or hostname (add https:// if TLS encrypted)
+  port: ${ROUTE_PORT}
+  timeout: 60  # Default: 90
+  # The user and password are used to authenticate with the ML API
+  username: ${MLAPI_USER}
+  password: ${MLAPI_PASS}
 
 ########################
 # ANIMATIONS ARE WIP

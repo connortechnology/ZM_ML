@@ -451,12 +451,14 @@ async def batch_detection(
     summary="Detect objects in an image using a set of threaded models referenced by name",
 )
 async def group_detect(
+    token = Depends(verify_token),
     hints_model: List[str] = Body(
         ...,
         description="comma seperated model names/UUIDs",
         example="yolov4,97acd7d4-270c-4667-9d56-910e1510e8e8,yolov7 tiny",
     ),
     image: UploadFile = File(...),
+
 ):
     logger.info(f"group_detect hints: {hints_model = } -- {image.file = }")
     if hints_model:

@@ -597,19 +597,12 @@ class ZMClient:
             thread_name_prefix="init", max_workers=g.config.system.thread_workers
         ) as executor:
             _hash = executor.submit(lambda: _hash_input.compute())
-            futures.append(executor.submit(self._sort_routes))
             futures.append(executor.submit(self._init_db))
             futures.append(executor.submit(self._init_api))
             for future in concurrent.futures.as_completed(futures):
                 future.result()
         self.config_hash = _hash.result()
 
-    def _sort_routes(self):
-        self.routes = self.config.mlapi.routes
-        if len(self.routes) > 1:
-            logger.debug(f"Routes: BEFORE sorting >> {self.routes}")
-            self.routes.sort(key=lambda x: x.weight)
-            logger.debug(f"Routes: AFTER sorting >> {self.routes}")
 
     def _init_db(self):
         from .Libs.DB import ZMDB
@@ -882,8 +875,34 @@ class ZMClient:
         del zones
         image: Union[bytes, np.ndarray, None]
         matched_l, matched_c, matched_b = [], [], []
+        ml_user = g.config.mlapi.username
+        ml_pass = g.config.mlapi.password
+        ml_token = ""
+        ml_token_data = {}
+        route = g.config.mlapi
         import aiohttp
 
+        # login to the API, the endpoint is /login and
+        # it is a body request with username and password
+        async with aiohttp.ClientSession() as session:
+            async with session.post(f"{str(route.host)}login", data={"username": ml_user, "password": ml_pass.get_secret_value()}) as r:
+                status = r.status
+                if status == 200:
+                    resp = await r.json()
+                    # {'access_token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6
+                    #   IkpXVCJ9.eyJzdWIiOiJiYXVkbmVvIiwiZXhwIjoiMTY5NTMwMDAzNiJ9.KELBopJqxM893xQVqVrnKjKA3WA4MKLE4rjbM6zBuEI', 'token_type': 'bearer', 'expire
+                    #   ': '2023-09-21T12:40:36.095057Z'}
+                    if ml_token := resp.get("access_token"):
+                        ml_token_data = resp
+                        logger.info(f"{lp} Login successful to ZoMi ML API")
+
+                else:
+                    logger.error(
+                        f"{lp}route '{route.name}' returned ERROR status {status} \n{r}"
+                    )
+
+        if not ml_token:
+            raise RuntimeError(f"{lp} Login failed to ZoMi ML API")
         image_loop = 0
         # Use an async generator to get images from the image pipeline
         async for image, image_name in self.image_pipeline.image_generator():
@@ -915,217 +934,212 @@ class ZMClient:
                 logger.debug(
                     f"{lp}animations:: Added image to frame buffer: {image_name} -- {type(image)=}"
                 )
-            # results: Optional[List[Dict[str, Any]]] = None
             from ..Shared.Models.config import DetectionResults
 
             results: Optional[List[DetectionResults]] = None
             reply: Optional[Dict[str, Any]] = None
 
-            route_loop: int = 0
-            # todo: load balance routes?
-            for route in self.routes:
-                route_loop += 1
-                if route.enabled:
-                    url = f"{str(route.host)}detect/group"
-                    with aiohttp.MultipartWriter("form-data") as mpwriter:
-                        part = mpwriter.append_json(models_str)
-                        part.set_content_disposition("form-data", name="hints_model")
+            url = f"{str(route.host)}detect/group"
+            with aiohttp.MultipartWriter("form-data") as mpwriter:
+                part = mpwriter.append_json(models_str)
+                part.set_content_disposition("form-data", name="hints_model")
 
-                        part = mpwriter.append(
-                            image,
-                            {"Content-Type": "image/jpeg"},
-                        )
-                        part.set_content_disposition(
-                            "form-data", name="image", filename=image_name
-                        )
-                        logger.debug(
-                            f"Sending image to 'ZoMi Machine Learning API' ['{route.name}' @ "
-                            f"{url if not g.config.logging.sanitize.enabled else g.config.logging.sanitize.replacement_str}]"
-                        )
-                        _perf = perf_counter()
-                        r: aiohttp.ClientResponse
-                        session: aiohttp.ClientSession = g.api.async_session
-                        async with session.post(
-                            url,
-                            data=mpwriter,
-                            timeout=aiohttp.ClientTimeout(total=30.0),
-                        ) as r:
-                            status = r.status
-                            if status == 200:
-                                if r.content_type == "application/json":
-                                    reply = await r.json()
-                                else:
-                                    logger.error(
-                                        f"{lp} Route '{route.name}' returned a non-json response! \n{r}"
-                                    )
-                            else:
-                                logger.error(
-                                    f"{lp}route '{route.name}' returned ERROR status {status} \n{r}"
-                                )
-                    if any([img_pull_method.api.enabled, img_pull_method.zms.enabled]):
-                        assert isinstance(
-                            image, bytes
-                        ), "Image is not bytes after getting from pipeline"
-                        image: bytes
-                        image_name = int(str(image_name).split("fid_")[1].split(".")[0])
-
-                    if image_name not in final_detections:
-                        final_detections[str(image_name)] = []
-                    if image_name not in self.filtered_labels:
-                        self.filtered_labels[str(image_name)] = []
-                    if reply:
-                        results = []
-                        for _rep in reply:
-                            results.append(DetectionResults(**_rep))
-                        image = await self.convert_to_cv2(image)
-                        assert isinstance(
-                            image, np.ndarray
-                        ), "Image is not np.ndarray after converting from bytes"
-                        image: np.ndarray
-                        filter_start = perf_counter()
-                        res_loop = 0
-
-                        # results = [DetectionResults(
-                        # success=True, name='yolo-nas-s trt', type=<ModelType: object detection>,
-                        # processor=<ModelProcessor: GPU>,
-                        # results=[<'refrigerator' (69.46%) @ [669, 32, 1841, 1079]>, <'person' (61.75%) @ [365, 45, 622, 830]>, <'person' (52.01%) @ [0, 945, 539, 1079]>, <'bottle' (38.37%) @ [479, 549, 595, 832]>, <'bottle' (33.38%) @ [269, 689, 312, 771]>], removed=None), DetectionResults(success=False, name='openalpr gpu', type=<ModelType: alpr detection>, processor=<ModelProcessor: NONE>, results=[], removed=None)]
-                        result: DetectionResults
-                        for result in results:
-                            res_loop += 1
-                            logger.debug(
-                                f"{LP} starting to process results from model: {result.name}"
-                            )
-
-                            if result.success is True:
-                                logger.debug(
-                                    f"There are {len(result.results)} UNFILTERED Results from model: {result.name} for image '{image_name}'"
-                                )
-                                if result.extra_image_data:
-                                    logger.debug(
-                                        f"There is extra image data in the result: {result.extra_image_data}"
-                                    )
-                                    if "virel" in result.extra_image_data:
-                                        from zm_ml.Server.ML.Detectors.virelai import (
-                                            VirelAI,
-                                        )
-
-                                        _v = VirelAI()
-                                        _v.logger(logger)
-                                        logger.debug(
-                                            f"virelAI quirk: grab annotated image from their secondary API"
-                                        )
-                                        image = _v.get_image(image)
-                                        del _v
-                                        # write to file
-                                        # cv2.imwrite(f'/tmp/virel.jpg', image)
-                                    filtered_result = result
-                                elif not result.extra_image_data:
-                                    filtered_result = await self.filter_detections(
-                                        result, image_name
-                                    )
-                                # check strategy
-                                strategy: MatchStrategy = g.config.matching.strategy
-                                if filtered_result.success is True:
-                                    final_label = []
-                                    final_confidence = []
-                                    final_bbox = []
-                                    for _res in filtered_result.results:
-                                        final_label.append(_res.label)
-                                        final_confidence.append(_res.confidence)
-                                        final_bbox.append(_res.bounding_box)
-
-                                    if (
-                                        (strategy == MatchStrategy.first)
-                                        or (
-                                            (strategy == MatchStrategy.most)
-                                            and (len(final_label) > len(matched_l))
-                                        )
-                                        or (
-                                            (strategy == MatchStrategy.most)
-                                            and (len(final_label) == len(matched_l))
-                                            and (sum(matched_c) < sum(final_confidence))
-                                        )
-                                        # or (
-                                        # (frame_strategy == "most_models")
-                                        # and (len(item["detection_types"]) > len(matched_detection_types))
-                                        # )
-                                        #         or (
-                                        #         (strategy == "most_models")
-                                        #         and (len(item["detection_types"]) == len(matched_detection_types))
-                                        #         and (sum(matched_c) < sum(item["confidences"]))
-                                        # )
-                                        or (
-                                            (strategy == MatchStrategy.most_unique)
-                                            and (
-                                                len(set(final_label))
-                                                > len(set(matched_l))
-                                            )
-                                        )
-                                        or (
-                                            # tiebreaker using sum of confidences
-                                            (strategy == MatchStrategy.most_unique)
-                                            and (
-                                                len(set(final_label))
-                                                == len(set(matched_l))
-                                            )
-                                            and (sum(matched_c) < sum(final_confidence))
-                                        )
-                                    ):
-                                        logger.debug(
-                                            f"\n\nFOUND A BETTER MATCH [{strategy=}] THAN model: {matched_model_names}"
-                                            f" image name: {matched_frame_id}: LABELS: {matched_l} with "
-                                            f" model: {result.name} image name: {image_name} ||| "
-                                            f"LABELS: {final_label}\n\n"
-                                        )
-
-                                        matched_l = final_label
-                                        matched_model_names = result.name
-                                        matched_c = final_confidence
-                                        matched_frame_id = image_name
-                                        matched_detection_types = result.type
-                                        matched_b = final_bbox
-                                        matched_processor = result.processor
-                                        # FIXME: Is filtered out objects really needed in the results?
-                                        if str(image_name) in self.filtered_labels:
-                                            matched_e = self.filtered_labels[
-                                                str(image_name)
-                                            ]
-                                        else:
-                                            matched_e = []
-                                        matched_frame_img = image.copy()
-
-                                    final_detections[str(image_name)].append(
-                                        filtered_result
-                                    )
-
-                                logger.debug(
-                                    f"perf:: Filtering for {image_name}:{result.name} took "
-                                    f"{perf_counter() - filter_start:.5f} seconds"
-                                )
-
-                            else:
-                                logger.warning(
-                                    f"Result was not successful, not filtering"
-                                )
-
-                            if strategy == MatchStrategy.first and matched_l:
-                                logger.debug(
-                                    f"Strategy is 'first' and there is a filtered match, breaking RESULT "
-                                    f"LOOP {res_loop}"
-                                )
-                                break
-                        if strategy == MatchStrategy.first and matched_l:
-                            logger.debug(
-                                f"Strategy is 'first' and there is a filtered match, breaking ROUTE loop {route_loop}"
-                            )
-                            break
-                else:
-                    logger.warning(f"ZM_ML Server route '{route.name}' is disabled!")
-
-                logger.debug(
-                    f"{lp}perf:: HTTP Detection request to '{route.name}' completed in "
-                    f"{perf_counter() - _perf:.5f} seconds // {image_name=}"
+                part = mpwriter.append(
+                    image,
+                    {"Content-Type": "image/jpeg"},
                 )
+                part.set_content_disposition(
+                    "form-data", name="image", filename=image_name
+                )
+                logger.debug(
+                    f"Sending image to 'ZoMi Machine Learning API' ['{route.name}' @ "
+                    f"{url if not g.config.logging.sanitize.enabled else g.config.logging.sanitize.replacement_str}]"
+                )
+                _perf = perf_counter()
+                r: aiohttp.ClientResponse
+                session: aiohttp.ClientSession = g.api.async_session
+                async with session.post(
+                    url,
+                    data=mpwriter,
+                    timeout=aiohttp.ClientTimeout(total=30.0),
+                    headers={
+                        "Authorization": f"Bearer {ml_token}",
+                    }
+                ) as r:
+                    status = r.status
+                    if status == 200:
+                        if r.content_type == "application/json":
+                            reply = await r.json()
+                        else:
+                            logger.error(
+                                f"{lp} Route '{route.name}' returned a non-json response! \n{r}"
+                            )
+                    else:
+                        logger.error(
+                            f"{lp}route '{route.name}' returned ERROR status {status} \n{r}"
+                        )
+            if any([img_pull_method.api.enabled, img_pull_method.zms.enabled]):
+                assert isinstance(
+                    image, bytes
+                ), "Image is not bytes after getting from pipeline"
+                image: bytes
+                image_name = int(str(image_name).split("fid_")[1].split(".")[0])
+
+            if image_name not in final_detections:
+                final_detections[str(image_name)] = []
+            if image_name not in self.filtered_labels:
+                self.filtered_labels[str(image_name)] = []
+            if reply:
+                results = []
+                for _rep in reply:
+                    results.append(DetectionResults(**_rep))
+                image = await self.convert_to_cv2(image)
+                assert isinstance(
+                    image, np.ndarray
+                ), "Image is not np.ndarray after converting from bytes"
+                image: np.ndarray
+                filter_start = perf_counter()
+                res_loop = 0
+
+                # results = [DetectionResults(
+                # success=True, name='yolo-nas-s trt', type=<ModelType: object detection>,
+                # processor=<ModelProcessor: GPU>,
+                # results=[<'refrigerator' (69.46%) @ [669, 32, 1841, 1079]>, <'person' (61.75%) @ [365, 45, 622, 830]>, <'person' (52.01%) @ [0, 945, 539, 1079]>, <'bottle' (38.37%) @ [479, 549, 595, 832]>, <'bottle' (33.38%) @ [269, 689, 312, 771]>], removed=None), DetectionResults(success=False, name='openalpr gpu', type=<ModelType: alpr detection>, processor=<ModelProcessor: NONE>, results=[], removed=None)]
+                result: DetectionResults
+                for result in results:
+                    res_loop += 1
+                    logger.debug(
+                        f"{LP} starting to process results from model: {result.name}"
+                    )
+
+                    if result.success is True:
+                        logger.debug(
+                            f"There are {len(result.results)} UNFILTERED Results from model: {result.name} for image '{image_name}'"
+                        )
+                        if result.extra_image_data:
+                            logger.debug(
+                                f"There is extra image data in the result: {result.extra_image_data}"
+                            )
+                            if "virel" in result.extra_image_data:
+                                from zm_ml.Server.ML.Detectors.virelai import (
+                                    VirelAI,
+                                )
+
+                                _v = VirelAI()
+                                _v.logger(logger)
+                                logger.debug(
+                                    f"virelAI quirk: grab annotated image from their secondary API"
+                                )
+                                image = _v.get_image(image)
+                                del _v
+                                # write to file
+                                # cv2.imwrite(f'/tmp/virel.jpg', image)
+                            filtered_result = result
+                        elif not result.extra_image_data:
+                            filtered_result = await self.filter_detections(
+                                result, image_name
+                            )
+                        # check strategy
+                        strategy: MatchStrategy = g.config.matching.strategy
+                        if filtered_result.success is True:
+                            final_label = []
+                            final_confidence = []
+                            final_bbox = []
+                            for _res in filtered_result.results:
+                                final_label.append(_res.label)
+                                final_confidence.append(_res.confidence)
+                                final_bbox.append(_res.bounding_box)
+
+                            if (
+                                (strategy == MatchStrategy.first)
+                                or (
+                                    (strategy == MatchStrategy.most)
+                                    and (len(final_label) > len(matched_l))
+                                )
+                                or (
+                                    (strategy == MatchStrategy.most)
+                                    and (len(final_label) == len(matched_l))
+                                    and (sum(matched_c) < sum(final_confidence))
+                                )
+                                # or (
+                                # (frame_strategy == "most_models")
+                                # and (len(item["detection_types"]) > len(matched_detection_types))
+                                # )
+                                #         or (
+                                #         (strategy == "most_models")
+                                #         and (len(item["detection_types"]) == len(matched_detection_types))
+                                #         and (sum(matched_c) < sum(item["confidences"]))
+                                # )
+                                or (
+                                    (strategy == MatchStrategy.most_unique)
+                                    and (
+                                        len(set(final_label))
+                                        > len(set(matched_l))
+                                    )
+                                )
+                                or (
+                                    # tiebreaker using sum of confidences
+                                    (strategy == MatchStrategy.most_unique)
+                                    and (
+                                        len(set(final_label))
+                                        == len(set(matched_l))
+                                    )
+                                    and (sum(matched_c) < sum(final_confidence))
+                                )
+                            ):
+                                logger.debug(
+                                    f"\n\nFOUND A BETTER MATCH [{strategy=}] THAN model: {matched_model_names}"
+                                    f" image name: {matched_frame_id}: LABELS: {matched_l} with "
+                                    f" model: {result.name} image name: {image_name} ||| "
+                                    f"LABELS: {final_label}\n\n"
+                                )
+
+                                matched_l = final_label
+                                matched_model_names = result.name
+                                matched_c = final_confidence
+                                matched_frame_id = image_name
+                                matched_detection_types = result.type
+                                matched_b = final_bbox
+                                matched_processor = result.processor
+                                # FIXME: Is filtered out objects really needed in the results?
+                                if str(image_name) in self.filtered_labels:
+                                    matched_e = self.filtered_labels[
+                                        str(image_name)
+                                    ]
+                                else:
+                                    matched_e = []
+                                matched_frame_img = image.copy()
+
+                            final_detections[str(image_name)].append(
+                                filtered_result
+                            )
+
+                        logger.debug(
+                            f"perf:: Filtering for {image_name}:{result.name} took "
+                            f"{perf_counter() - filter_start:.5f} seconds"
+                        )
+
+                    else:
+                        logger.warning(
+                            f"Result was not successful, not filtering"
+                        )
+
+                    if strategy == MatchStrategy.first and matched_l:
+                        logger.debug(
+                            f"Strategy is 'first' and there is a filtered match, breaking RESULT "
+                            f"LOOP {res_loop}"
+                        )
+                        break
+                if strategy == MatchStrategy.first and matched_l:
+                    logger.debug(
+                        f"Strategy is 'first' and there is a filtered match, breaking IMAGE loop {image_loop}"
+                    )
+                    break
+
+            logger.debug(
+                f"{lp}perf:: HTTP Detection request to '{route.name}' completed in "
+                f"{perf_counter() - _perf:.5f} seconds // {image_name=}"
+            )
             if strategy == MatchStrategy.first and matched_l:
                 logger.debug(
                     f"Strategy is 'first' and there is a filtered match, breaking out of image loop {image_loop}"

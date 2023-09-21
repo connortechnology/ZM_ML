@@ -88,10 +88,9 @@ class ZoneMinderSettings(BaseSettings, extra="allow"):
     )
 
 
-class ServerRoute(DefaultEnabled):
+class ServerRoute(BaseModel):
     # Make 1 attr required so empty entries will fail.
     name: str = Field(...)
-    weight: Optional[int] = Field(0)
     host: AnyUrl = Field(...)
     username: Optional[str] = None
     password: Optional[SecretStr] = None
@@ -100,10 +99,6 @@ class ServerRoute(DefaultEnabled):
     _validate_mlapi_host_no_scheme = field_validator("host", mode="before")(
         validate_no_scheme_url
     )
-
-
-class ServerRoutes(BaseModel):
-    routes: List[ServerRoute] = Field(default_factory=list)
 
 
 class AnimationSettings(BaseModel):
@@ -515,7 +510,7 @@ class ConfigFileModel(BaseModel):
     system: SystemSettings = Field(default_factory=SystemSettings)
     zoneminder: ZoneMinderSettings = Field(default_factory=ZoneMinderSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
-    mlapi: ServerRoutes = Field(default_factory=ServerRoutes)
+    mlapi: ServerRoute = Field(default_factory=ServerRoute)
     animation: AnimationSettings = Field(default_factory=AnimationSettings)
     notifications: MLNotificationSettings = Field(
         default_factory=MLNotificationSettings
