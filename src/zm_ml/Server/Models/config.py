@@ -1394,14 +1394,14 @@ class APIDetector:
         )
         return available
 
-    def detect(self, image: np.ndarray) -> Dict[str, Any]:
+    def detect(self, images: List[np.ndarray]) -> Dict[str, Any]:
         """Detect objects in the image"""
         if self.model is None:
             logger.warning(
                 f"Detector for {self.config.name} is not loaded, cannot detect objects!"
             )
             return
-        return self.model.detect(image)
+        return self.model.detect(images)
 
 
 class GlobalConfig(BaseModel, arbitrary_types_allowed=True):

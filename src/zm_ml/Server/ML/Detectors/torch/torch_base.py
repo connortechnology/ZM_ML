@@ -141,7 +141,6 @@ class TorchDetector(FileLock):
                 logger.warning(f"{LP} pretrained was not defined, user trained models are: Not Implemented yet....")
 
 
-
     def _convert_image(self, image: np.ndarray) -> torch.Tensor:
         """Convert Image from numpy array to torch tensor and convert to channels first
 

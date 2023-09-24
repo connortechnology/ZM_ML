@@ -90,87 +90,91 @@ class CV2YOLODetector(CV2Base):
                 f"perf:{LP} '{self.name}' FAILED in {time.perf_counter() - load_timer:.5f} s"
             )
 
-    def detect(self, input_image: np.ndarray):
-        if input_image is None:
-            raise ValueError(f"{LP} no image passed!")
-        if not self.net:
-            self.load_model()
-        _h, _w = self.config.height, self.config.width
-        if self.config.square:
-            input_image = self.square_image(input_image)
-        h, w = input_image.shape[:2]
-        # dnn.DetectionModel resizes the image and calculates scale of bounding boxes for us
-        labels, confs, b_boxes = [], [], []
-        nms_threshold, conf_threshold = self.options.nms, self.options.confidence
+    def detect(self, input_images: List[np.ndarray]):
+        result = []
+        for input_image in input_images:
+            if input_image is None:
+                raise ValueError(f"{LP} no image passed!")
+            if not self.net:
+                self.load_model()
+            _h, _w = self.config.height, self.config.width
+            if self.config.square:
+                input_image = self.square_image(input_image)
+            h, w = input_image.shape[:2]
+            # dnn.DetectionModel resizes the image and calculates scale of bounding boxes for us
+            labels, confs, b_boxes = [], [], []
+            nms_threshold, conf_threshold = self.options.nms, self.options.confidence
 
-        logger.debug(
-            f"{LP}detect: '{self.name}' ({self.processor}) - "
-            f"input image {w}*{h} - model input {_w}*{_h}"
-            f"{' [squared]' if self.config.square else ''}"
-        )
-        self.acquire_lock()
-        try:
-            detection_timer = time.perf_counter()
-
-            l, c, b = self.model.detect(
-                input_image, conf_threshold, nms_threshold
+            logger.debug(
+                f"{LP}detect: '{self.name}' ({self.processor}) - "
+                f"input image {w}*{h} - model input {_w}*{_h}"
+                f"{' [squared]' if self.config.square else ''}"
             )
+            self.acquire_lock()
+            try:
+                detection_timer = time.perf_counter()
+
+                l, c, b = self.model.detect(
+                    input_image, conf_threshold, nms_threshold
+                )
 
 
-            for (class_id, confidence, box) in zip(l, c, b):
-                confidence = float(confidence)
-                x, y, _w, _h = (
-                    int(round(box[0])),
-                    int(round(box[1])),
-                    int(round(box[2])),
-                    int(round(box[3])),
+                for (class_id, confidence, box) in zip(l, c, b):
+                    confidence = float(confidence)
+                    x, y, _w, _h = (
+                        int(round(box[0])),
+                        int(round(box[1])),
+                        int(round(box[2])),
+                        int(round(box[3])),
+                    )
+                    b_boxes.append(
+                        [
+                            x,
+                            y,
+                            x + _w,
+                            y + _h,
+                        ]
+                    )
+                    labels.append(self.config.labels[class_id])
+                    confs.append(confidence)
+            except Exception as all_ex:
+                err_msg = repr(all_ex)
+                # cv2.error: OpenCV(4.2.0) /home/<Someone>/opencv/modules/dnn/src/cuda/execution.hpp:52: error: (-217:Gpu
+                # API call) invalid device function in function 'make_policy'
+                logger.error(f"{LP} exception during detection -> {all_ex}")
+                # OpenCV 4.7.0 Weird Error fixed with rolling fix
+                # OpenCV:YOLO: exception during detection -> OpenCV(4.7.0-dev) /opt/opencv/modules/dnn/src/layers/cpu_kernels/conv_winograd_f63.cpp:401: error: (-215:Assertion failed) CONV_WINO_IBLOCK == 3 && CONV_WINO_KBLOCK == 4 && CONV_WINO_ATOM_F32 == 4 in function 'winofunc_BtXB_8x8_f32'
+                if err_msg.find("-215:Assertion failed") > 0:
+                    if err_msg.find("CONV_WINO_IBLOCK == 3 && CONV_WINO_KBLOCK == 4") > 0:
+                        _msg = f"{LP} OpenCV 4.7.x WEIRD bug detected! " \
+                               f"Please update to OpenCV 4.7.1+ or 4.6.0 or less!"
+                        logger.error(_msg)
+                        raise RuntimeError(_msg)
+                elif err_msg.find("-217:Gpu") > 0:
+                    if (
+                        err_msg.find("'make_policy'") > 0
+                        and self.processor == ModelProcessor.GPU
+                    ):
+                        _msg = f"{LP} (-217:Gpu # API call) invalid device function in function 'make_policy' - " \
+                            f"This happens when OpenCV is compiled with the incorrect Compute Capability " \
+                            f"(CUDA_ARCH_BIN). There is a high probability that you need to recompile OpenCV with " \
+                            f"the correct CUDA_ARCH_BIN before GPU detections will work properly!"
+                        logger.error(_msg)
+                        raise RuntimeError(_msg)
+                raise all_ex
+            finally:
+                self.release_lock()
+            logger.debug(
+                f"perf:{LP}{self.processor}: '{self.name}' detection "
+                f"took: {time.perf_counter() - detection_timer:.5f} s"
+            )
+            result.append(
+                DetectionResults(
+                    success=True if labels else False,
+                    type=self.config.type_of,
+                    processor=self.processor,
+                    name=self.name,
+                    results=[Result(label=labels[i], confidence=confs[i], bounding_box=b_boxes[i]) for i in range(len(labels))],
                 )
-                b_boxes.append(
-                    [
-                        x,
-                        y,
-                        x + _w,
-                        y + _h,
-                    ]
-                )
-                labels.append(self.config.labels[class_id])
-                confs.append(confidence)
-        except Exception as all_ex:
-            err_msg = repr(all_ex)
-            # cv2.error: OpenCV(4.2.0) /home/<Someone>/opencv/modules/dnn/src/cuda/execution.hpp:52: error: (-217:Gpu
-            # API call) invalid device function in function 'make_policy'
-            logger.error(f"{LP} exception during detection -> {all_ex}")
-            # OpenCV 4.7.0 Weird Error fixed with rolling fix
-            # OpenCV:YOLO: exception during detection -> OpenCV(4.7.0-dev) /opt/opencv/modules/dnn/src/layers/cpu_kernels/conv_winograd_f63.cpp:401: error: (-215:Assertion failed) CONV_WINO_IBLOCK == 3 && CONV_WINO_KBLOCK == 4 && CONV_WINO_ATOM_F32 == 4 in function 'winofunc_BtXB_8x8_f32'
-            if err_msg.find("-215:Assertion failed") > 0:
-                if err_msg.find("CONV_WINO_IBLOCK == 3 && CONV_WINO_KBLOCK == 4") > 0:
-                    _msg = f"{LP} OpenCV 4.7.x WEIRD bug detected! " \
-                           f"Please update to OpenCV 4.7.1+ or 4.6.0 or less!"
-                    logger.error(_msg)
-                    raise RuntimeError(_msg)
-            elif err_msg.find("-217:Gpu") > 0:
-                if (
-                    err_msg.find("'make_policy'") > 0
-                    and self.processor == ModelProcessor.GPU
-                ):
-                    _msg = f"{LP} (-217:Gpu # API call) invalid device function in function 'make_policy' - " \
-                        f"This happens when OpenCV is compiled with the incorrect Compute Capability " \
-                        f"(CUDA_ARCH_BIN). There is a high probability that you need to recompile OpenCV with " \
-                        f"the correct CUDA_ARCH_BIN before GPU detections will work properly!"
-                    logger.error(_msg)
-                    raise RuntimeError(_msg)
-            raise all_ex
-        finally:
-            self.release_lock()
-        logger.debug(
-            f"perf:{LP}{self.processor}: '{self.name}' detection "
-            f"took: {time.perf_counter() - detection_timer:.5f} s"
-        )
-        result = DetectionResults(
-            success=True if labels else False,
-            type=self.config.type_of,
-            processor=self.processor,
-            name=self.name,
-            results=[Result(label=labels[i], confidence=confs[i], bounding_box=b_boxes[i]) for i in range(len(labels))],
-        )
+            )
         return result

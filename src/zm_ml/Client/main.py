@@ -9,6 +9,7 @@ import os
 import pickle
 import re
 import signal
+from datetime import datetime, timedelta
 from pathlib import Path
 from shutil import which
 from time import perf_counter, time
@@ -603,7 +604,6 @@ class ZMClient:
                 future.result()
         self.config_hash = _hash.result()
 
-
     def _init_db(self):
         from .Libs.DB import ZMDB
 
@@ -816,8 +816,6 @@ class ZMClient:
                     f"models from detection_settings is empty using 'yolov4'"
                 )
                 models = {"yolov4": {}}
-        model_names = list(models.keys())
-        models_str = ",".join(model_names)
         _start_detections = perf_counter()
         base_filters = g.config.matching.filters
         if g.mid in g.config.monitors:
@@ -874,36 +872,79 @@ class ZMClient:
                 self.zones[zone_name].points = zone_points
         del zones
         image: Union[bytes, np.ndarray, None]
+        route = g.config.mlapi
         matched_l, matched_c, matched_b = [], [], []
         ml_user = g.config.mlapi.username
         ml_pass = g.config.mlapi.password
         ml_token = ""
         ml_token_data = {}
-        route = g.config.mlapi
+        token_cache = g.config.system.variable_data_path / ".ml_token.pkl"
+        if token_cache.exists():
+            from jose import jwt
+
+            try:
+                ml_token_data = pickle.load(token_cache.open("rb"))
+                ml_token = ml_token_data.get("access_token")
+
+            except Exception as e:
+                logger.error(f"{lp} Error loading token from cache: {e}")
+                ml_token = ""
+            else:
+                if ml_token:
+                    _decoded = jwt.get_unverified_claims(ml_token)
+                    _expire = _decoded.get("exp")
+                    expire_at = datetime.fromtimestamp(float(_expire))
+                    logger.debug(f"{lp} ZoMi token expires at: {expire_at} (TYPE: {type(_expire)})")
+                    if _expire:
+                        if expire_at < datetime.now() - timedelta(minutes=5):
+                            logger.debug(
+                                f"{lp} Cached token expired (or about to expire), refreshing..."
+                            )
+                            ml_token = ""
+                        else:
+                            logger.debug(f"{lp} Cached token should still be valid!")
+
         import aiohttp
+        if not ml_token:
+            logger.debug(f"{lp} No cached token found, logging in to API...")
 
-        # login to the API, the endpoint is /login and
-        # it is a body request with username and password
-        async with aiohttp.ClientSession() as session:
-            async with session.post(f"{str(route.host)}login", data={"username": ml_user, "password": ml_pass.get_secret_value()}) as r:
-                status = r.status
-                if status == 200:
-                    resp = await r.json()
-                    # {'access_token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6
-                    #   IkpXVCJ9.eyJzdWIiOiJiYXVkbmVvIiwiZXhwIjoiMTY5NTMwMDAzNiJ9.KELBopJqxM893xQVqVrnKjKA3WA4MKLE4rjbM6zBuEI', 'token_type': 'bearer', 'expire
-                    #   ': '2023-09-21T12:40:36.095057Z'}
-                    if ml_token := resp.get("access_token"):
-                        ml_token_data = resp
-                        logger.info(f"{lp} Login successful to ZoMi ML API")
+            # login to the API, the endpoint is /login and
+            # it is a body request with username and password
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{str(route.host)}login",
+                    data={"username": ml_user, "password": ml_pass.get_secret_value()},
+                ) as r:
+                    status = r.status
+                    if status == 200:
+                        resp = await r.json()
+                        # {'access_token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6
+                        #   IkpXVCJ9.eyJzdWIiOiJiYXVkbmVvIiwiZXhwIjoiMTY5NTMwMDAzNiJ9.KELBopJqxM893xQVqVrnKjKA3WA4MKLE4rjbM6zBuEI', 'token_type': 'bearer', 'expire
+                        #   ': '2023-09-21T12:40:36.095057Z'}
+                        if ml_token := resp.get("access_token"):
+                            ml_token_data = resp
+                            logger.info(f"{lp} Login successful to ZoMi ML API")
+                            try:
+                                pickle.dump(ml_token_data, token_cache.open("wb"))
+                            except Exception as e:
+                                logger.error(f"{lp} Error saving token to cache: {e}")
+                            else:
+                                logger.debug(
+                                    f"{lp} Token saved to cache: {token_cache}"
+                                )
 
-                else:
-                    logger.error(
-                        f"{lp}route '{route.name}' returned ERROR status {status} \n{r}"
-                    )
+                    else:
+                        logger.error(
+                            f"{lp}route '{route.name}' returned ERROR status {status} \n{r}"
+                        )
 
         if not ml_token:
-            raise RuntimeError(f"{lp} Login failed to ZoMi ML API")
+            raise RuntimeError(
+                f"{lp} Login failed to ZoMi ML API, please check the credentials configured in your client config file. mlapi->username, mlapi->password."
+            )
+
         image_loop = 0
+        # todo: add relogin logic if the token is rejected.
         # Use an async generator to get images from the image pipeline
         async for image, image_name in self.image_pipeline.image_generator():
             image_loop += 1
@@ -939,17 +980,23 @@ class ZMClient:
             results: Optional[List[DetectionResults]] = None
             reply: Optional[Dict[str, Any]] = None
 
-            url = f"{str(route.host)}detect/group"
+            url = f"{str(route.host)}detect"
             with aiohttp.MultipartWriter("form-data") as mpwriter:
-                part = mpwriter.append_json(models_str)
-                part.set_content_disposition("form-data", name="hints_model")
+                for model_name in models.keys():
+                    part = mpwriter.append_json(
+                        str(model_name),
+                        {"Content-Type": "application/json"},
+                    )
+                    part.set_content_disposition("form-data", name="hints_model")
+
+
 
                 part = mpwriter.append(
                     image,
                     {"Content-Type": "image/jpeg"},
                 )
                 part.set_content_disposition(
-                    "form-data", name="image", filename=image_name
+                    "form-data", name="images", filename=image_name
                 )
                 logger.debug(
                     f"Sending image to 'ZoMi Machine Learning API' ['{route.name}' @ "
@@ -958,26 +1005,31 @@ class ZMClient:
                 _perf = perf_counter()
                 r: aiohttp.ClientResponse
                 session: aiohttp.ClientSession = g.api.async_session
-                async with session.post(
-                    url,
-                    data=mpwriter,
-                    timeout=aiohttp.ClientTimeout(total=30.0),
-                    headers={
-                        "Authorization": f"Bearer {ml_token}",
-                    }
-                ) as r:
-                    status = r.status
-                    if status == 200:
-                        if r.content_type == "application/json":
-                            reply = await r.json()
+                try:
+                    async with session.post(
+                        url,
+                        data=mpwriter,
+                        timeout=aiohttp.ClientTimeout(total=30.0),
+                        headers={
+                            "Authorization": f"Bearer {ml_token}",
+                        },
+                    ) as r:
+                        status = r.status
+                        if status == 200:
+                            if r.content_type == "application/json":
+                                reply = await r.json()
+                            else:
+                                logger.error(
+                                    f"{lp} Route '{route.name}' returned a non-json response! \n{r}"
+                                )
                         else:
                             logger.error(
-                                f"{lp} Route '{route.name}' returned a non-json response! \n{r}"
+                                f"{lp}route '{route.name}' returned ERROR status {status} \n{r}"
                             )
-                    else:
-                        logger.error(
-                            f"{lp}route '{route.name}' returned ERROR status {status} \n{r}"
-                        )
+                except Exception as e:
+                    logger.error(f"{lp} Error sending image to API: {e}")
+                    continue
+
             if any([img_pull_method.api.enabled, img_pull_method.zms.enabled]):
                 assert isinstance(
                     image, bytes
@@ -991,8 +1043,10 @@ class ZMClient:
                 self.filtered_labels[str(image_name)] = []
             if reply:
                 results = []
-                for _rep in reply:
-                    results.append(DetectionResults(**_rep))
+
+                for image_results in reply:
+                    for result_ in image_results:
+                        results.append(DetectionResults(**result_))
                 image = await self.convert_to_cv2(image)
                 assert isinstance(
                     image, np.ndarray
@@ -1072,18 +1126,12 @@ class ZMClient:
                                 # )
                                 or (
                                     (strategy == MatchStrategy.most_unique)
-                                    and (
-                                        len(set(final_label))
-                                        > len(set(matched_l))
-                                    )
+                                    and (len(set(final_label)) > len(set(matched_l)))
                                 )
                                 or (
                                     # tiebreaker using sum of confidences
                                     (strategy == MatchStrategy.most_unique)
-                                    and (
-                                        len(set(final_label))
-                                        == len(set(matched_l))
-                                    )
+                                    and (len(set(final_label)) == len(set(matched_l)))
                                     and (sum(matched_c) < sum(final_confidence))
                                 )
                             ):
@@ -1103,16 +1151,12 @@ class ZMClient:
                                 matched_processor = result.processor
                                 # FIXME: Is filtered out objects really needed in the results?
                                 if str(image_name) in self.filtered_labels:
-                                    matched_e = self.filtered_labels[
-                                        str(image_name)
-                                    ]
+                                    matched_e = self.filtered_labels[str(image_name)]
                                 else:
                                     matched_e = []
                                 matched_frame_img = image.copy()
 
-                            final_detections[str(image_name)].append(
-                                filtered_result
-                            )
+                            final_detections[str(image_name)].append(filtered_result)
 
                         logger.debug(
                             f"perf:: Filtering for {image_name}:{result.name} took "
@@ -1120,9 +1164,7 @@ class ZMClient:
                         )
 
                     else:
-                        logger.warning(
-                            f"Result was not successful, not filtering"
-                        )
+                        logger.warning(f"Result was not successful, not filtering")
 
                     if strategy == MatchStrategy.first and matched_l:
                         logger.debug(

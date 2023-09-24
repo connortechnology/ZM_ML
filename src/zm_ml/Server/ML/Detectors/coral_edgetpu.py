@@ -162,76 +162,82 @@ class TpuDetector(FileLock):
             logger.info(f"perf:{LP} NMS took: {time.perf_counter() - timer:.5f}s")
         return objects
 
-    def detect(self, input_image: np.ndarray):
+    def detect(self, input_images: List[np.ndarray]):
         """Performs object detection on the input image."""
+        result = []
         b_boxes, labels, confs = [], [], []
-        h, w = input_image.shape[:2]
-        nms = self.options.nms
         conf_threshold = self.config.detection_options.confidence
+        nms = self.options.nms
+        nms_str = f" - nms: {nms.threshold}" if nms.enabled else ""
         if not self.model:
             logger.warning(f"{LP} model not loaded? loading now...")
             self.load_model()
-        t = time.perf_counter()
-        input_image = cv2.cvtColor(input_image, cv2.COLOR_BGR2RGB)
-        input_image = Image.fromarray(input_image)
-        nms_str = f" - nms: {nms.threshold}" if nms.enabled else ""
-        logger.debug(
-            f"{LP}detect: input image {w}*{h} - confidence: {conf_threshold}{nms_str}"
-        )
-        # scale = min(orig_width / w, orig_height / h)
-        _, scale = common.set_resized_input(
-            self.model,
-            input_image.size,
-            lambda size: input_image.resize(size, Image.LANCZOS),
-        )
-        objs: List[detect.Object]
-        try:
-            self.acquire_lock()
-            self.model.invoke()
-        except Exception as ex:
-            logger.error(f"{LP} TPU error while calling invoke(): {ex}")
-            raise ex
-        else:
-            objs = detect.get_objects(self.model, self.options.confidence, scale)
-            logger.debug(
-                f"perf:{LP} '{self.name}' detection took: {time.perf_counter() - t:.5f}s"
-            )
-            _obj_len = len(objs)
-            logger.debug(f"{LP} RAW:: {_obj_len}")
-        finally:
-            self.release_lock()
-        if objs:
-            # Non Max Suppression
-            if nms.enabled:
-                objs = self.nms(objs, nms.threshold)
-                logger.info(
-                    f"{LP} {len(objs)}/{_obj_len} objects after NMS filtering with threshold: {nms.threshold}"
-                )
-            else:
-                logger.info(f"{LP} NMS disabled, {_obj_len} objects detected")
-            for obj in objs:
-                b_boxes.append(
-                    [
-                        int(round(obj.bbox.xmin)),
-                        int(round(obj.bbox.ymin)),
-                        int(round(obj.bbox.xmax)),
-                        int(round(obj.bbox.ymax)),
-                    ]
-                )
-                labels.append(self.config.labels[obj.id])
-                confs.append(float(obj.score))
-        else:
-            logger.warning(f"{LP} nothing returned from invoke()... ?")
 
-        result = DetectionResults(
-            success=True if labels else False,
-            type=self.config.type_of,
-            processor=self.processor,
-            name=self.name,
-            results=[
-                Result(label=labels[i], confidence=confs[i], bounding_box=b_boxes[i])
-                for i in range(len(labels))
-            ],
-        )
+        for input_image in input_images:
+
+            h, w = input_image.shape[:2]
+            t = time.perf_counter()
+            input_image = cv2.cvtColor(input_image, cv2.COLOR_BGR2RGB)
+            input_image = Image.fromarray(input_image)
+            logger.debug(
+                f"{LP}detect: input image {w}*{h} - confidence: {conf_threshold}{nms_str}"
+            )
+            # scale = min(orig_width / w, orig_height / h)
+            _, scale = common.set_resized_input(
+                self.model,
+                input_image.size,
+                lambda size: input_image.resize(size, Image.LANCZOS),
+            )
+            objs: List[detect.Object]
+            try:
+                self.acquire_lock()
+                self.model.invoke()
+            except Exception as ex:
+                logger.error(f"{LP} TPU error while calling invoke(): {ex}")
+                raise ex
+            else:
+                objs = detect.get_objects(self.model, self.options.confidence, scale)
+                logger.debug(
+                    f"perf:{LP} '{self.name}' detection took: {time.perf_counter() - t:.5f}s"
+                )
+                _obj_len = len(objs)
+                logger.debug(f"{LP} RAW:: {_obj_len}")
+            finally:
+                self.release_lock()
+            if objs:
+                # Non Max Suppression
+                if nms.enabled:
+                    objs = self.nms(objs, nms.threshold)
+                    logger.info(
+                        f"{LP} {len(objs)}/{_obj_len} objects after NMS filtering with threshold: {nms.threshold}"
+                    )
+                else:
+                    logger.info(f"{LP} NMS disabled, {_obj_len} objects detected")
+                for obj in objs:
+                    b_boxes.append(
+                        [
+                            int(round(obj.bbox.xmin)),
+                            int(round(obj.bbox.ymin)),
+                            int(round(obj.bbox.xmax)),
+                            int(round(obj.bbox.ymax)),
+                        ]
+                    )
+                    labels.append(self.config.labels[obj.id])
+                    confs.append(float(obj.score))
+            else:
+                logger.warning(f"{LP} nothing returned from invoke()... ?")
+
+            result.append(
+                DetectionResults(
+                    success=True if labels else False,
+                    type=self.config.type_of,
+                    processor=self.processor,
+                    name=self.name,
+                    results=[
+                        Result(label=labels[i], confidence=confs[i], bounding_box=b_boxes[i])
+                        for i in range(len(labels))
+                    ],
+                )
+            )
 
         return result

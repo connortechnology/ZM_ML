@@ -12,6 +12,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, Field
+from starlette.requests import Request
 
 from .Log import SERVER_LOGGER_NAME
 
@@ -33,8 +34,6 @@ __all__ = [
     "get_password_hash",
     "verify_token",
     "create_access_token",
-    "get_current_user",
-    "get_current_active_user",
 ]
 credentials_exception: HTTPException = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -320,32 +319,41 @@ class UserDB:
         return f"UserDB({self.path}, active={self.init})"
 
 
-def verify_token(token: Annotated[str, Depends(OAUTH2_SCHEME)]) -> Optional[str]:
+def verify_token(
+        token: Annotated[str, Depends(OAUTH2_SCHEME)],
+        request: Request,
+) -> Optional[ZoMiUser]:
     from .app import get_global_config
 
     global g
 
     g = get_global_config()
-    if not g.config.server.auth.enabled:
-        logger.debug(f"in verify_token():: Authentication disabled")
+    lp = "usr mngmt:token:verify::"
+    real_ip = request.client.host
+    user: Optional[ZoMiUser] = None
+    try:
+        payload = jwt.decode(
+            token,
+            g.config.server.auth.sign_key.get_secret_value(),
+            algorithms=[g.config.server.auth.algorithm],
+        )
+        username: str = payload.get("sub")
+        logger.info(f"{lp} Attempting to verify a request from username: {username} using IP: {real_ip}")
+        if username is None:
+            raise credentials_exception
+    except JWTError as e:
+        logger.warning(f"{lp} JWTError: {e}")
+        user = None
+    except Exception as e:
+        logger.warning(f"{lp} Exception: {e}")
+        user = None
     else:
-        try:
-            payload = jwt.decode(
-                token,
-                g.config.server.auth.sign_key.get_secret_value(),
-                algorithms=[g.config.server.auth.algorithm],
-            )
-            username: str = payload.get("sub")
-            if username is None:
-                raise credentials_exception
-        except JWTError as e:
-            logger.warning(f"in verify_token():: JWTError: {e}")
-            return None
         user = g.user_db.get_user(username=username)
         if user is None:
-            logger.warning(f"in verify_token():: User {username} not found")
             raise credentials_exception
-    return token
+        else:
+            logger.debug(f"{lp} User {username} verified!")
+    return user
 
 
 def create_access_token(data: dict, *args, **kwargs) -> Token:
@@ -375,48 +383,3 @@ def create_access_token(data: dict, *args, **kwargs) -> Token:
         algorithm=algo,
     )
     return Token(access_token=encoded_jwt, token_type="bearer", expire=expire)
-
-
-async def get_current_user(token: Annotated[str, Depends(OAUTH2_SCHEME)]):
-    from .app import get_global_config
-
-    global g
-
-    if g is None:
-        g = get_global_config()
-    logger.debug(f"in get_current_user():: {token=}")
-    try:
-        payload = jwt.decode(
-            token,
-            g.config.server.auth.sign_key.get_secret_value(),
-            algorithms=[g.config.server.auth.algorithm],
-        )
-        logger.debug(f"in get_current_user():: decoded token: {payload=}")
-        username: str = payload.get("sub")
-        if username is None:
-            logger.warning(f"in get_current_user():: No username pulled from token")
-            raise credentials_exception
-    except JWTError as e:
-        logger.warning(f"in get_current_user():: {e}")
-        raise credentials_exception
-    if g.config.server.auth.enabled:
-        user = g.user_db.get_user(username=username)
-        if user is None:
-            raise credentials_exception
-    else:
-        logger.warning(
-            f"in get_current_user():: Authentication disabled, returning bogus user"
-        )
-        user = ZoMiUser(
-            username=username, password="<REDACTED>", perms=["*"], disabled=False
-        )
-    return user
-
-
-async def get_current_active_user(
-    current_user: Annotated[ZoMiUser, Depends(get_current_user)]
-):
-    logger.debug(f"in get_current_active_user():: {current_user=}")
-    if current_user.disabled:
-        raise HTTPException(status_code=400, detail="Inactive user")
-    return current_user

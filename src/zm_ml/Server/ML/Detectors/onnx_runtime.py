@@ -139,39 +139,45 @@ class ORTDetector(FileLock):
         logger.debug(f"{LP} Warming up model: {self.name}")
         # reverse h/w
 
-
         input_tensor = np.random.uniform(
             low=0.0,
             high=1.0,
             size=(1, self.input_shape[1], self.input_shape[3], self.input_shape[2]),
-
         ).astype(np.float32)
         self.inference(input_tensor)
 
-    def detect(self, image: np.ndarray):
-        input_tensor = self.prepare_input(image)
-        logger.debug(
-            f"{LP}detect: '{self.name}' ({self.processor}) - "
-            f"input image {self.img_width}*{self.img_height} - model input {self.config.width}*{self.config.height}"
-            f"{' [squared]' if self.config.square else ''}"
-        )
-        outputs = self.inference(input_tensor)
-        b_boxes: List
-        confs: List
-        labels: List
-        b_boxes, confs, labels = self.process_output(outputs)
+    def detect(self, images: List[np.ndarray]):
+        result = []
+        for image in images:
+            input_tensor = self.prepare_input(image)
+            logger.debug(
+                f"{LP}detect: '{self.name}' ({self.processor}) - "
+                f"input image {self.img_width}*{self.img_height} - model input {self.config.width}*{self.config.height}"
+                f"{' [squared]' if self.config.square else ''}"
+            )
+            outputs = self.inference(input_tensor)
+            b_boxes: List
+            confs: List
+            labels: List
+            b_boxes, confs, labels = self.process_output(outputs)
 
-        # labels = [self.config.labels[i] for i in labels]
-        result = DetectionResults(
-            success=True if labels else False,
-            name=self.name,
-            type=self.config.type_of,
-            processor=self.processor,
-            results=[
-                Result(label=self.config.labels[labels[i]], confidence=confs[i], bounding_box=b_boxes[i])
-                for i in range(len(labels))
-            ],
-        )
+            # labels = [self.config.labels[i] for i in labels]
+            result.append(
+                DetectionResults(
+                    success=True if labels else False,
+                    name=self.name,
+                    type=self.config.type_of,
+                    processor=self.processor,
+                    results=[
+                        Result(
+                            label=self.config.labels[labels[i]],
+                            confidence=confs[i],
+                            bounding_box=b_boxes[i],
+                        )
+                        for i in range(len(labels))
+                    ],
+                )
+            )
         return result
 
     def prepare_input(self, image: np.ndarray) -> np.ndarray:
@@ -224,10 +230,14 @@ class ORTDetector(FileLock):
             self.release_lock()
         return outputs
 
-    def process_output(self, output: List[Optional[np.ndarray]]) -> Tuple[List, List, List]:
+    def process_output(
+        self, output: List[Optional[np.ndarray]]
+    ) -> Tuple[List, List, List]:
         return_empty: bool = False
         if output:
-            logger.debug(f"{LP} '{self.name}' output shapes: {[o.shape for o in output]}")
+            logger.debug(
+                f"{LP} '{self.name}' output shapes: {[o.shape for o in output]}"
+            )
             # NAS new model.export() has FLAT (n, 7) and BATCHED  outputs
             num_outputs = len(output)
             if num_outputs == 1:
@@ -238,7 +248,9 @@ class ORTDetector(FileLock):
                         # v8
                         # (1, 84, 8400) -> (8400, 84)
                         predictions = np.squeeze(output[0]).T
-                        logger.debug(f"{LP} yolov8 output shape = (1, <X>, 8400) detected!")
+                        logger.debug(
+                            f"{LP} yolov8 output shape = (1, <X>, 8400) detected!"
+                        )
                         # Filter out object confidence scores below threshold
                         scores = np.max(predictions[:, 4:], axis=1)
                         # predictions = predictions[scores > self.options.confidence, :]
@@ -252,7 +264,9 @@ class ORTDetector(FileLock):
                         boxes = self.extract_boxes(predictions)
                         class_ids = np.argmax(predictions[:, 4:], axis=1)
                     elif len(output[0].shape) == 2 and output[0].shape[1] == 7:
-                        logger.debug(f"{LP} YOLO-NAS model.export() FLAT output detected!")
+                        logger.debug(
+                            f"{LP} YOLO-NAS model.export() FLAT output detected!"
+                        )
                         # YLO-NAS .export FLAT output = (n, 7)
                         flat_predictions = output[0]
                         # pull out the class index and class score from the predictions
@@ -266,7 +280,9 @@ class ORTDetector(FileLock):
                 # NAS - .convert_to_onnx() output = [(1, 8400, 4), (1, 8400, 80)]
                 if output[0].shape == (1, 8400, 4) and output[1].shape == (1, 8400, 80):
                     # YOLO-NAS
-                    logger.debug(f"{LP} YOLO-NAS model.convert_to_onnx() output detected!")
+                    logger.debug(
+                        f"{LP} YOLO-NAS model.convert_to_onnx() output detected!"
+                    )
                     _boxes: np.ndarray
                     raw_scores: np.ndarray
                     # get boxes and scores from outputs
@@ -287,12 +303,21 @@ class ORTDetector(FileLock):
                 # pred_scores [B, N]
                 # pred_classes [B, N]
                 # Here B corresponds to batch size and N is the maximum number of detected objects per image
-                if len(output[0].shape) == 2 and len(output[1].shape) == 3 and len(output[2].shape) == 2 and len(output[3].shape) == 2:
-                    logger.debug(f"{LP} YOLO-NAS model.export() BATCHED output detected!")
+                if (
+                    len(output[0].shape) == 2
+                    and len(output[1].shape) == 3
+                    and len(output[2].shape) == 2
+                    and len(output[3].shape) == 2
+                ):
+                    logger.debug(
+                        f"{LP} YOLO-NAS model.export() BATCHED output detected!"
+                    )
                     batch_size = output[0].shape[0]
                     max_detections = output[1].shape[1]
                     num_predictions, pred_boxes, pred_scores, pred_classes = output
-                    assert num_predictions.shape[0] == 1, "Only batch size of 1 is supported by this function"
+                    assert (
+                        num_predictions.shape[0] == 1
+                    ), "Only batch size of 1 is supported by this function"
 
                     num_predictions = int(num_predictions.item())
                     boxes = pred_boxes[0, :num_predictions]
@@ -303,18 +328,22 @@ class ORTDetector(FileLock):
 
         if return_empty:
             return [], [], []
-        logger.debug(F"{LP} BEFORE NMS - {type(boxes) = } - {type(scores) = } - {type(class_ids) = }")
+        logger.debug(
+            f"{LP} BEFORE NMS - {type(boxes) = } - {type(scores) = } - {type(class_ids) = }"
+        )
         indices = cv2.dnn.NMSBoxes(
             boxes, scores, self.options.confidence, self.options.nms
         )
         if len(indices) == 0:
-            logger.warning(f"{LP} '{self.name}' no indices returned from NMSBoxes, returning top 10 boxes by confidence")
+            logger.warning(
+                f"{LP} '{self.name}' no indices returned from NMSBoxes, returning top 10 boxes by confidence"
+            )
             boxes = boxes[np.argsort(scores)[::-1]][:10]
             scores = scores[np.argsort(scores)[::-1]][:10]
             class_ids = class_ids[np.argsort(scores)[::-1]][:10]
         else:
             logger.debug(f"{LP} '{self.name}' NMS indices: {indices =}")
-            boxes = boxes[indices],
+            boxes = (boxes[indices],)
             scores = scores[indices]
             class_ids = class_ids[indices]
         if isinstance(boxes, tuple):
@@ -323,7 +352,11 @@ class ORTDetector(FileLock):
         if isinstance(scores, tuple):
             if len(scores) == 1:
                 scores = scores[0]
-        return boxes.astype(np.int32).tolist(), scores.astype(np.float32).tolist(), class_ids.astype(np.int32).tolist()
+        return (
+            boxes.astype(np.int32).tolist(),
+            scores.astype(np.float32).tolist(),
+            class_ids.astype(np.int32).tolist(),
+        )
 
     def extract_boxes(self, predictions):
         """Extract boxes from predictions, scale them and convert from xywh to xyxy format"""
