@@ -1198,11 +1198,12 @@ def do_install(_inst_type: str):
         "-m",
         "pip",
         "install",
-        "--no-cache-dir" if args.no_cache else None,
         # "--root-user-action=ignore",
         # "--report",
         # "./pip_install_report.json",
     ]
+    if args.no_cache:
+        _pip_prefix.append("--no-cache-dir")
     if _inst_type != "secrets":
         install_host_dependencies(_inst_type)
         logger.info(f"Installing '{_inst_type}' specific files...")
