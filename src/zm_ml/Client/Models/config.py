@@ -67,7 +67,7 @@ class ZoneMinderSettings(BaseSettings, extra="allow"):
         write_notes: bool = Field(True)
 
     class ZMAPISettings(BaseSettings):
-        model_config = SettingsConfigDict(env_prefix="ML_CLIENT_ZONEMINDER_API_")
+        model_config = SettingsConfigDict(env_prefix="ML_CLIENT_ZONEMINDER_API_", extra="allow")
         api_url: Optional[AnyUrl] = Field(None)
         user: Optional[SecretStr] = Field(None)
         password: Optional[SecretStr] = Field(None)
