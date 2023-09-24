@@ -1198,7 +1198,7 @@ def do_install(_inst_type: str):
         "-m",
         "pip",
         "install",
-        "--no-cache-dir" if args.no_cache else "",
+        "--no-cache-dir" if args.no_cache else None,
         # "--root-user-action=ignore",
         # "--report",
         # "./pip_install_report.json",
