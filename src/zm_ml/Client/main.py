@@ -830,9 +830,9 @@ class ZMClient:
             self.zones["!ZM-ML!_full_image"] = MonitorZones.model_construct(
                 points=[
                     (0, 0),
-                    (g.mon_width, 0),
-                    (g.mon_width, g.mon_height),
-                    (0, g.mon_height),
+                    (g.mon_height, 0),
+                    (g.mon_height, g.mon_width),
+                    (0, g.mon_width),
                 ],
                 resolution=(int(g.mon_width), int(g.mon_height)),
                 object_confirm=False,
