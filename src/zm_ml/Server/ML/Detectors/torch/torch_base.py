@@ -176,7 +176,7 @@ class TorchDetector(FileLock):
             logger.debug(f"{LP} using device: {dev}")
             return torch.device(dev)
 
-    def detect(self, image: np.ndarray):
+    async def detect(self, image: np.ndarray):
         labels, confs, b_boxes = [], [], []
         oom: bool = False
         if not self.ok:

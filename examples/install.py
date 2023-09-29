@@ -389,7 +389,19 @@ def parse_cli():
     global args, models
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--no-cache-dir", action="store_true", dest="no_cache", help="Do not use cache directory for pip install")
+    parser.add_argument(
+        "--no-cache-dir",
+        action="store_true",
+        dest="no_cache",
+        help="Do not use cache directory for pip install",
+    )
+    parser.add_argument(
+        "--editable",
+        action="store_true",
+        dest="pip_install_editable",
+        help="Use the --editable flag when installing via pip (a git pull will update "
+             "the installed package) BE AWARE: you must keep the git source directory intact for this to work",
+    )
     parser.add_argument(
         "--zm-portal",
         dest="zm_portal",
@@ -1203,7 +1215,12 @@ def do_install(_inst_type: str):
         # "./pip_install_report.json",
     ]
     if args.no_cache:
+        logger.info("Disabling pip cache...")
         _pip_prefix.append("--no-cache-dir")
+    if args.pip_install_editable:
+        logger.info("Installing in pip --editable mode, DO NOT remove the source git"
+                    " directory after install! git pull will update the installed package")
+        _pip_prefix.append("--editable")
     if _inst_type != "secrets":
         install_host_dependencies(_inst_type)
         logger.info(f"Installing '{_inst_type}' specific files...")
@@ -1298,8 +1315,10 @@ def do_install(_inst_type: str):
 
         # Add the source dir to the pip install command
         _pip_prefix.append(_src)
-        logger.info(f"This may appear frozen for a good amount of time, the venv is being installed and "
-                    f"many packages are being built. Please be patient... 5+ minutes is not uncommon.")
+        logger.info(
+            f"This may appear frozen for a good amount of time, the venv is being installed and "
+            f"many packages are being built. Please be patient... 5+ minutes is not uncommon."
+        )
         # create venv, upgrade pip and setup tools and install ZoMi ML into the venv
         _venv = ZoMiEnvBuilder(
             with_pip=True, cmd=_pip_prefix, upgrade_deps=True, prompt="ZoMi_ML"
@@ -1511,7 +1530,9 @@ class ZoMiEnvBuilder(venv.EnvBuilder):
 
         # set python executable to venv executable
         self.install_cmd.insert(0, context.env_exec_cmd)
-        logger.debug(f"venv builder:DBG>>> About to run install command: '{self.install_cmd}'")
+        logger.debug(
+            f"venv builder:DBG>>> About to run install command: '{self.install_cmd}'"
+        )
 
         try:
             # ran = subprocess.run(
@@ -1553,7 +1574,6 @@ class ZoMiEnvBuilder(venv.EnvBuilder):
                             msg += c
 
 
-
 if __name__ == "__main__":
     # check python is 3.8+ only
     import sys
@@ -1561,7 +1581,7 @@ if __name__ == "__main__":
     if sys.version_info.major < 3:
         logger.error("Python 3+ is required to run this install script!")
         sys.exit(1)
-    if sys.version_info.minor not in [8, 9, 10, 11, 12, 13, 14 ,15]:
+    if sys.version_info.minor not in [8, 9, 10, 11, 12, 13, 14, 15]:
         logger.error("Python 3.8+ is required to run this install script!")
         sys.exit(1)
 

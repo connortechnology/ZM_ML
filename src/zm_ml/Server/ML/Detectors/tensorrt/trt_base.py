@@ -341,92 +341,58 @@ class TensorRtDetector(FileLock):
             f"perf:{LP} Engine warmed up in {time.perf_counter() - _start:.3f} seconds"
         )
 
-    def detect(self, input_images: List[np.ndarray]) -> DetectionResults:
-        result = []
+    async def detect(self, input_image: np.ndarray) -> DetectionResults:
         labels = np.array([], dtype=np.int32)
         confs = np.array([], dtype=np.float32)
         b_boxes = np.array([], dtype=np.float32)
         # bgr, ratio, dwdh = letterbox(input_image, self.inp_info[0].shape[-2:])
         # dw, dh = int(dwdh[0]), int(dwdh[1])
-        for input_image in input_images:
-            rgb = cv2.cvtColor(input_image, cv2.COLOR_BGR2RGB)
-            self.img_height, self.img_width = rgb.shape[:2]
-            # resize image to network size
-            rgb = cv2.resize(rgb, (self.input_width, self.input_height))
-            tensor = blob(rgb)
-            # dwdh = np.array(dwdh * 2, dtype=np.float32)
-            tensor = np.ascontiguousarray(tensor)
-            # inference
-            _start = time.perf_counter()
-            try:
-                self.acquire_lock()
-                data = self.__call__(tensor)
-            except Exception as all_ex:
-                logger.error(f"{LP} EXCEPTION! {all_ex}")
-                return DetectionResults(
-                    success=False,
-                    type=self.config.type_of,
-                    processor=self.processor,
-                    name=self.name,
-                    results=[],
-                )
-            else:
-                logger.debug(
-                    f"perf:{LP} '{self.name}' inference took {time.perf_counter() - _start:.5f} seconds"
-                )
-                # if True == False:
-                #
-                #     b_boxes, confs, labels = _postprocess(
-                #         data, bgr.shape[:2], self.options.confidence, self.options.nms
-                #     )
-                #     if b_boxes.size == 0:
-                #         # if no bounding box
-                #         logger.warning(f"{LP} Nothing detected!")
-                #
-                #     logger.debug(
-                #         f"{LP} bboxes before === {b_boxes}"
-                #     )
-                #     b_boxes -= dwdh
-                #     logger.debug(f"{LP} bboxes after dwdh ({dwdh}) === {b_boxes}")
-                #     b_boxes /= ratio
-                #     logger.debug(f"{LP} bboxes after dwdh ({dwdh}) and ratio ({ratio}) === {b_boxes}")
-                #     for bbox, score, label in zip(b_boxes, confs, labels):
-                #         bbox = bbox.round().astype(int).tolist()
-                #         cls_id = int(label)
-                #         lbls.append(self.config.labels[cls_id])
-                #         # color = COLORS[cls]
-                #         # cv2.rectangle(draw, bbox[:2], bbox[2:], color, 2)
-                #         # cv2.putText(draw,
-                #         #             f'{cls}:{score:.3f}', (bbox[0], bbox[1] - 2),
-                #         #             cv2.FONT_HERSHEY_SIMPLEX,
-                #         #             0.75, [225, 255, 255],
-                #         #             thickness=2)
-                #     if isinstance(b_boxes, np.ndarray):
-                #         b_boxes = b_boxes.round().astype(int).tolist()
-                #     if isinstance(confs, np.ndarray):
-                #         confs = confs.astype(float).tolist()
-
-            finally:
-                self.release_lock()
-
-            b_boxes, confs, labels = self.process_output(list(data))
-            # logger.debug(f"{LP} {lbls = } -- {confs = } -- {b_boxes = }")
-            result.append(
-                DetectionResults(
-                    success=True if labels else False,
-                    type=self.config.type_of,
-                    processor=self.processor,
-                    name=self.name,
-                    results=[
-                        Result(
-                            label=self.config.labels[labels[i]],
-                            confidence=confs[i],
-                            bounding_box=b_boxes[i],
-                        )
-                        for i in range(len(labels))
-                    ],
-                )
+        rgb = cv2.cvtColor(input_image, cv2.COLOR_BGR2RGB)
+        self.img_height, self.img_width = rgb.shape[:2]
+        # resize image to network size
+        rgb = cv2.resize(rgb, (self.input_width, self.input_height))
+        tensor = blob(rgb)
+        # dwdh = np.array(dwdh * 2, dtype=np.float32)
+        tensor = np.ascontiguousarray(tensor)
+        # inference
+        _start = time.perf_counter()
+        try:
+            self.acquire_lock()
+            data = self.__call__(tensor)
+        except Exception as all_ex:
+            logger.error(f"{LP} EXCEPTION! {all_ex}")
+            return DetectionResults(
+                success=False,
+                type=self.config.type_of,
+                processor=self.processor,
+                name=self.name,
+                results=[],
             )
+        else:
+            logger.debug(
+                f"perf:{LP} '{self.name}' inference took {time.perf_counter() - _start:.5f} seconds"
+            )
+
+        finally:
+            self.release_lock()
+
+        b_boxes, confs, labels = self.process_output(list(data))
+        # logger.debug(f"{LP} {lbls = } -- {confs = } -- {b_boxes = }")
+        result = DetectionResults(
+            success=True if labels else False,
+            type=self.config.type_of,
+            processor=self.processor,
+            name=self.name,
+            results=[
+                Result(
+                    label=self.config.labels[labels[i]],
+                    confidence=confs[i],
+                    bounding_box=b_boxes[i],
+                )
+                for i in range(len(labels))
+            ],
+        )
+
         return result
 
     def set_profiler(self, profiler: Optional[trt.IProfiler]) -> None:
@@ -511,6 +477,7 @@ class TensorRtDetector(FileLock):
         boxes: np.ndarray = np.array([], dtype=np.float32)
         scores: np.ndarray = np.array([], dtype=np.float32)
         labels: np.ndarray = np.array([], dtype=np.int32)
+        nms, conf = self.options.nms, self.options.confidence
         if output:
             # Fixme: allow for custom class length (80 is for COCO)
             output_shape = [o.shape for o in output]
@@ -575,9 +542,7 @@ class TensorRtDetector(FileLock):
                         shape_str = "<UNKNOWN>"
                         _boxes, raw_scores = output
                     # YOLO-NAS
-                    logger.debug(
-                        f"{LP} YOLO-NAS model.{shape_str} output detected!"
-                    )
+                    logger.debug(f"{LP} YOLO-NAS model.{shape_str} output detected!")
                     _boxes: np.ndarray
                     raw_scores: np.ndarray
                     # get boxes and scores from outputs
@@ -591,7 +556,9 @@ class TensorRtDetector(FileLock):
                     # find index from max scores (class_id) and flatten it [1, n, num_class] => [n]
                     class_ids = np.argmax(raw_scores, axis=2).flatten()
                 else:
-                    logger.warning(f"{LP} '{self.name}' has unknown output shape: {output_shape}, should be: Legacy: {legacy_shape} or New Flat: {new_flat_shape}")
+                    logger.warning(
+                        f"{LP} '{self.name}' has unknown output shape: {output_shape}, should be: Legacy: {legacy_shape} or New Flat: {new_flat_shape}"
+                    )
             elif num_outputs == 4:
                 # NAS model.export() batch output len = 4
                 # num_predictions [B, 1]
@@ -626,28 +593,16 @@ class TensorRtDetector(FileLock):
             logger.warning(f"{LP} '{self.name}' return_empty = True !!")
             return [], [], []
 
-        logger.debug(
-            f"{LP} BEFORE NMS - {type(boxes) = } - {type(scores) = } - {type(class_ids) = } \\"
-            f" {len(boxes) = } - {len(scores) = } - {len(class_ids) = }"
-        )
-
         indices = cv2.dnn.NMSBoxes(
-            boxes, scores, self.options.confidence, self.options.nms
+            boxes, scores, conf, nms
         )
-
         if len(indices) == 0:
-            logger.warning(
-                f"{LP} '{self.name}' no indices returned from NMSBoxes, returning top 10 sorted by confidence !!"
-            )
-            # we dont want to return all 8400 boxes, sort by highest confidence and truncate to 10
-            boxes = boxes[np.argsort(scores)[::-1]][:10]
-            scores = scores[np.argsort(scores)[::-1]][:10]
-            class_ids = class_ids[np.argsort(scores)[::-1]][:10]
-        else:
-            logger.debug(f"{LP} '{self.name}' NMS indices: {indices =}")
-            boxes = (boxes[indices],)
-            scores = scores[indices]
-            class_ids = class_ids[indices]
+            logger.debug(f"{LP} no detections after filter by NMS ({nms}) and confidence ({conf})")
+            return [], [], []
+
+        boxes = (boxes[indices],)
+        scores = scores[indices]
+        class_ids = class_ids[indices]
         if isinstance(boxes, tuple):
             if len(boxes) == 1:
                 boxes = boxes[0]

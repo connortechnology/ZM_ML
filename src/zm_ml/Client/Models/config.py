@@ -377,6 +377,7 @@ class DetectionSettings(BaseModel):
         training: Optional[Training] = Field(default_factory=Training)
 
     models: Optional[Dict] = Field(default_factory=dict)
+    motion_only: Optional[bool] = Field(True)
     import_zones: Optional[bool] = Field(False)
     match_origin_zone: Optional[bool] = Field(False)
     images: Optional[ImageSettings] = Field(default_factory=ImageSettings)

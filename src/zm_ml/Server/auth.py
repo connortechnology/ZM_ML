@@ -47,34 +47,37 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class ZoMiUser(BaseModel):
     """
-        ZoMi User
+        DB User Schema
 
-    :param username: ZoMi Username
+    :param username: ZoMi API Username
     :type username: str
-    :param password: ZoMi Password
+    :param password: Hashed ZoMi API Password
     :type password: str
-    :param perms: ZoMi Permissions
+    :param perms: ZoMi Permissions (WIP)
     :type perms: List[str]
-    :param disabled: ZoMi User Disabled
+    :param disabled: User Disabled
     :type disabled: bool
     """
 
     username: str = Field(..., description="ZoMi Username")
-    password: Optional[str] = Field(None, description="ZoMi Password HASHED")
-    perms: Optional[List[str]] = Field(None, description="ZoMi Permissions")
-    disabled: Optional[bool] = Field(False, description="ZoMi User Disabled")
+    password: Optional[str] = Field(None, description="Hashed ZoMi Password")
+    perms: Optional[List[str]] = Field(None, description="ZoMi Permissions (WIP)")
+    disabled: Optional[bool] = Field(False, description="User Disabled")
 
 
 class Token(BaseModel):
+    """Represents a JWT token with some extra data"""
     access_token: str
     token_type: str
+    # So we dont need to decode the token to get the expire time
     expire: datetime
 
 
 def check_init(func):
+    """Decorator to check if the UserDB is initialized"""
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        assert isinstance(self, UserDB), f"self is not a UserDB instance: {self=}"
+        assert isinstance(self, UserDB), f"self is not a UserDB instance: {self=} -- {type(self)=}"
         assert self.init, f"UserDB not initialized: {self.init=}"
         return func(self, *args, **kwargs)
 
@@ -84,10 +87,12 @@ def check_init(func):
 def verify_password(
     plain_password: Union[str, bytes], hashed_password: Union[str, bytes]
 ) -> bool:
+    """Verify a password against a bcrypt hash"""
     return pwd_context.verify(plain_password, hashed_password)
 
 
 def get_password_hash(password: Union[str, bytes]) -> str:
+    """Get a bcrypt hash of a password"""
     return pwd_context.hash(password)
 
 
@@ -112,6 +117,10 @@ class UserDB:
     def _get_db(self) -> tinydb.TinyDB:
         return self.db
 
+    def __call__(self, username: str) -> Optional[ZoMiUser]:
+        """Default to getting a user by username"""
+        return self.get_user(username)
+
     def disable_user(self, username: str):
         lp = "usr mngmt:disable::"
         # check if the user exists
@@ -128,10 +137,12 @@ class UserDB:
             logger.warning(f"{lp} User {username} not found")
         return False
 
+
     def enable_user(self, username: str):
         lp = "usr mngmt:enable::"
         # check if the user exists
-        if self.table.contains(tinydb.Query().username == username):
+        if self.get_user(username):
+            # check if the user is disabled
             if self.table.get(tinydb.Query().username == username).get("disabled"):
                 logger.debug(f"{lp} User {username} is now enabled")
                 self.table.update(
@@ -163,8 +174,11 @@ class UserDB:
         lp = "user db::"
         if not self.table.all():
             logger.info(
-                f"{lp} No users found, creating default user: {DFLT_USER_UNAME} with password: {DFLT_USER_PASSW}"
+                f"{lp} ANTI-LOCKOUT RULE!!!! No users found, creating default user: "
+                f"{DFLT_USER_UNAME} with password: {DFLT_USER_PASSW}\n"
+                f"{lp} If you do not want this default user to have access, disable it."
             )
+
             self.create_user(DFLT_USER_UNAME, DFLT_USER_PASSW, disabled=False)
 
     def set_input(self, db_path: Path) -> None:
@@ -182,11 +196,11 @@ class UserDB:
     @check_init
     def create_user(self, username: str, password: str, disabled: bool = False) -> bool:
         lp = "usr mngmt:create::"
-        logger.debug(f"{lp} Creating user {username}")
+        logger.debug(f"{lp} Requested for: {username}")
 
         # check if the user exists
         if self.get_user(username):
-            logger.warning(f"{lp} User {username} already exists, use update instead!")
+            logger.warning(f"{lp} User {username} already exists, use update to change password or use enable/disable")
             return False
 
         try:
@@ -200,13 +214,14 @@ class UserDB:
             )
         except Exception as e:
             logger.error(
-                f"Didnt create user ({username}) ->> Exception [{e.__class__.__name__}]: {e}"
+                f"{lp} Didnt create user ({username}) ->> Exception [{e.__class__.__name__}]: {e}"
             )
         else:
             logger.info(f"{lp} Created user {username}")
             # remove the default user, if in db
             if self.get_user(DFLT_USER_UNAME):
-                logger.info(f"{lp} Removing default user: {DFLT_USER_UNAME}")
+                logger.info(f"{lp} ANTI LOCKOUT RULE!!! There are other entries in the DB, so there is no need to "
+                            f"keep the default user. Removing default user: {DFLT_USER_UNAME}")
                 self.delete_user(DFLT_USER_UNAME)
 
             return True
@@ -215,21 +230,31 @@ class UserDB:
     @check_init
     def get_user(self, username: str) -> Optional[ZoMiUser]:
         lp = "usr mngmt:get::"
-        logger.debug(f"{lp} User: {username}")
         user = self.table.get(tinydb.Query().username == username)
         if user:
-            user = ZoMiUser(**user)
-            if user.disabled:
-                logger.warning(f"in get_user():: User {username} is disabled")
-                raise HTTPException(status_code=400, detail="Inactive user")
+            logger.debug(f"{lp} Found in DB: {username}")
+            try:
+                user = ZoMiUser(**user)
+
+            except Exception as e:
+                logger.error(f"{lp} Could not create ZoMiUser from DB entry: {e}", exc_info=True)
+                raise e
+            else:
+                if user.disabled:
+                    logger.warning(f"{lp} User {username} is disabled")
+                    raise HTTPException(status_code=400, detail="User has been marked as disabled")
+            logger.debug(f"DBG>>>> returning user: {user}")
             return user
+        else:
+            logger.warning(f"{lp} User {username} not found")
+        return None
 
     @check_init
     def update_user(self, username: str, password: str, disabled: bool = False) -> bool:
         lp = "usr mngmt:update::"
         user = self.get_user(username)
         if user:
-            logger.debug(f"{lp} User: {username}")
+            logger.debug(f"{lp} Found in DB: {username}")
             user.password = get_password_hash(password)
             user.disabled = disabled
             self.table.update(user.model_dump(), tinydb.Query().username == username)
@@ -244,11 +269,11 @@ class UserDB:
         user = self.get_user(username)
         if user:
             try:
-                logger.debug(f"{lp} User {username}")
                 self.table.remove(tinydb.Query().username == username)
             except Exception as e:
                 logger.error(f"{lp} Could not delete user {username}: {e}")
             else:
+                logger.debug(f"{lp} Removed: {username}")
                 self._check_add_default_user()
                 return True
 
@@ -259,7 +284,7 @@ class UserDB:
     @check_init
     def list_users(self):
         lp = "usr mngmt:list::"
-        logger.debug(f"{lp} Listing users")
+        logger.debug(f"{lp} Listing ALL users")
         return [ZoMiUser(**user) for user in self.table.all()]
 
     def authenticate_user(
@@ -319,18 +344,24 @@ class UserDB:
         return f"UserDB({self.path}, active={self.init})"
 
 
-def verify_token(
+async def verify_token(
         token: Annotated[str, Depends(OAUTH2_SCHEME)],
         request: Request,
-) -> Optional[ZoMiUser]:
+) -> bool:
+    """Used as a fastapi Depends() injection to verify a JWT token
+
+    :param token: The JWT token to verify
+    :param request: The starlette Request object
+    :return: True if the token is valid, False if not
+    """
     from .app import get_global_config
-
     global g
-
-    g = get_global_config()
+    if g is None:
+        g = get_global_config()
     lp = "usr mngmt:token:verify::"
+    # logger.debug(f"{lp} Request headers: {request.headers}")
     real_ip = request.client.host
-    user: Optional[ZoMiUser] = None
+    ret_: bool = False
     try:
         payload = jwt.decode(
             token,
@@ -343,20 +374,25 @@ def verify_token(
             raise credentials_exception
     except JWTError as e:
         logger.warning(f"{lp} JWTError: {e}")
-        user = None
     except Exception as e:
         logger.warning(f"{lp} Exception: {e}")
-        user = None
     else:
         user = g.user_db.get_user(username=username)
         if user is None:
             raise credentials_exception
         else:
             logger.debug(f"{lp} User {username} verified!")
-    return user
+            ret_ = True
+    return ret_
 
 
 def create_access_token(data: dict, *args, **kwargs) -> Token:
+    """Create a JWT token from a dict of data
+
+    :param data: The data to encode into the token
+
+    :return: A Token object
+    """
     from .app import get_global_config
 
     global g

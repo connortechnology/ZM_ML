@@ -758,6 +758,24 @@ class ZMClient:
                 f"{lp} Running detection for event {eid}, obtaining monitor info using DB and API..."
             )
             await self._get_db_data(eid)
+            # Check that the cause from db has "Motion" or "Trigger" in it
+            if g.config.detection_settings.motion_only is True:
+                cause = self.db.cause_from_eid(eid)
+                _cont = True
+                if cause:
+                    if cause.find("Motion") == -1 and cause.find("Trigger") == -1:
+                        _cont = False
+                    else:
+                        _cont = True
+                else:
+                    _cont = False
+
+                if not _cont:
+                    logger.info(
+                        f"{lp} Event {eid} is not a motion or trigger event, skipping detection"
+                    )
+                    return None
+
             g.Monitor = await self.api.get_monitor_data(g.mid)
             g.Event, _, g.Frame, _ = await self.api.get_all_event_data(eid)
         elif not eid and mid:
@@ -905,50 +923,13 @@ class ZMClient:
                             logger.debug(f"{lp} Cached token should still be valid!")
 
         import aiohttp
-        if not ml_token:
-            logger.debug(f"{lp} No cached token found, logging in to API...")
 
-            # login to the API, the endpoint is /login and
-            # it is a body request with username and password
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    f"{str(route.host)}login",
-                    data={"username": ml_user, "password": ml_pass.get_secret_value()},
-                ) as r:
-                    status = r.status
-                    if status == 200:
-                        resp = await r.json()
-                        # {'access_token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6
-                        #   IkpXVCJ9.eyJzdWIiOiJiYXVkbmVvIiwiZXhwIjoiMTY5NTMwMDAzNiJ9.KELBopJqxM893xQVqVrnKjKA3WA4MKLE4rjbM6zBuEI', 'token_type': 'bearer', 'expire
-                        #   ': '2023-09-21T12:40:36.095057Z'}
-                        if ml_token := resp.get("access_token"):
-                            ml_token_data = resp
-                            logger.info(f"{lp} Login successful to ZoMi ML API")
-                            try:
-                                pickle.dump(ml_token_data, token_cache.open("wb"))
-                            except Exception as e:
-                                logger.error(f"{lp} Error saving token to cache: {e}")
-                            else:
-                                logger.debug(
-                                    f"{lp} Token saved to cache: {token_cache}"
-                                )
-
-                    else:
-                        logger.error(
-                            f"{lp}route '{route.name}' returned ERROR status {status} \n{r}"
-                        )
-
-        if not ml_token:
-            raise RuntimeError(
-                f"{lp} Login failed to ZoMi ML API, please check the credentials configured in your client config file. mlapi->username, mlapi->password."
-            )
 
         image_loop = 0
         # todo: add relogin logic if the token is rejected.
         # Use an async generator to get images from the image pipeline
         async for image, image_name in self.image_pipeline.image_generator():
             image_loop += 1
-
             if image is None:
                 # None is returned if no image was returned by API
                 logger.warning(f"{lp} No image returned! trying again...")
@@ -957,6 +938,44 @@ class ZMClient:
                 # False is returned if the image stream has been exhausted
                 logger.warning(f"{lp} Image stream has been exhausted!")
                 break
+
+            if not ml_token:
+                logger.debug(f"{lp} No cached token found, logging in to API...")
+
+                # login to the API, the endpoint is /login and
+                # it is a body request with username and password
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                            f"{str(route.host)}login",
+                            data={"username": ml_user, "password": ml_pass.get_secret_value()},
+                    ) as r:
+                        status = r.status
+                        if status == 200:
+                            resp = await r.json()
+                            # {'access_token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6
+                            #   IkpXVCJ9.eyJzdWIiOiJiYXVkbmVvIiwiZXhwIjoiMTY5NTMwMDAzNiJ9.KELBopJqxM893xQVqVrnKjKA3WA4MKLE4rjbM6zBuEI', 'token_type': 'bearer', 'expire
+                            #   ': '2023-09-21T12:40:36.095057Z'}
+                            if ml_token := resp.get("access_token"):
+                                ml_token_data = resp
+                                logger.info(f"{lp} Login successful to ZoMi ML API")
+                                try:
+                                    pickle.dump(ml_token_data, token_cache.open("wb"))
+                                except Exception as e:
+                                    logger.error(f"{lp} Error saving token to cache: {e}")
+                                else:
+                                    logger.debug(
+                                        f"{lp} Token saved to cache: {token_cache}"
+                                    )
+
+                        else:
+                            logger.error(
+                                f"{lp}route '{route.name}' returned ERROR status {status} \n{r}"
+                            )
+
+            if not ml_token:
+                raise RuntimeError(
+                    f"{lp} Login failed to ZoMi ML API, please check the credentials configured in your client config file. mlapi->username, mlapi->password."
+                )
 
             if any([g.config.animation.gif, g.config.animation.mp4]):
                 if g.config.animation.low_memory:
@@ -984,12 +1003,10 @@ class ZMClient:
             with aiohttp.MultipartWriter("form-data") as mpwriter:
                 for model_name in models.keys():
                     part = mpwriter.append_json(
-                        str(model_name),
+                        model_name,
                         {"Content-Type": "application/json"},
                     )
                     part.set_content_disposition("form-data", name="hints_model")
-
-
 
                 part = mpwriter.append(
                     image,
@@ -1014,18 +1031,24 @@ class ZMClient:
                             "Authorization": f"Bearer {ml_token}",
                         },
                     ) as r:
+                        r.raise_for_status()
                         status = r.status
-                        if status == 200:
-                            if r.content_type == "application/json":
-                                reply = await r.json()
-                            else:
-                                logger.error(
-                                    f"{lp} Route '{route.name}' returned a non-json response! \n{r}"
-                                )
+                        if r.content_type == "application/json":
+                            reply = await r.json()
                         else:
                             logger.error(
-                                f"{lp}route '{route.name}' returned ERROR status {status} \n{r}"
+                                f"{lp} Route '{route.name}' returned a non-json response! \n{r}"
                             )
+                # deal with unauthorized
+                except aiohttp.ClientResponseError as e:
+                    logger.warning(f"{lp} API returned: {e}")
+                    if e.status == 401:
+                        logger.error(
+                            f"{lp} API returned 401 unauthorized, trying to re-authorize with credentials"
+                        )
+                        ml_token = ""
+                    continue
+
                 except Exception as e:
                     logger.error(f"{lp} Error sending image to API: {e}")
                     continue
@@ -1043,9 +1066,10 @@ class ZMClient:
                 self.filtered_labels[str(image_name)] = []
             if reply:
                 results = []
+                logger.debug(f"DBG>>> {reply = }")
 
-                for image_results in reply:
-                    for result_ in image_results:
+                for img_result in reply:
+                    for result_ in img_result:
                         results.append(DetectionResults(**result_))
                 image = await self.convert_to_cv2(image)
                 assert isinstance(
@@ -1055,10 +1079,6 @@ class ZMClient:
                 filter_start = perf_counter()
                 res_loop = 0
 
-                # results = [DetectionResults(
-                # success=True, name='yolo-nas-s trt', type=<ModelType: object detection>,
-                # processor=<ModelProcessor: GPU>,
-                # results=[<'refrigerator' (69.46%) @ [669, 32, 1841, 1079]>, <'person' (61.75%) @ [365, 45, 622, 830]>, <'person' (52.01%) @ [0, 945, 539, 1079]>, <'bottle' (38.37%) @ [479, 549, 595, 832]>, <'bottle' (33.38%) @ [269, 689, 312, 771]>], removed=None), DetectionResults(success=False, name='openalpr gpu', type=<ModelType: alpr detection>, processor=<ModelProcessor: NONE>, results=[], removed=None)]
                 result: DetectionResults
                 for result in results:
                     res_loop += 1
@@ -1697,6 +1717,12 @@ class ZMClient:
                     logger.debug(
                         f"{__lp} NOT in zone '{zone_name}', continuing to next zone..."
                     )
+                    # log the bbox and zone coords
+                    logger.debug(
+                        f"{__lp} bbox: {list(zip(*bbox_polygon.exterior.coords.xy))[:-1]}"
+                    )
+                    logger.debug(f"{__lp} zone: {list(zip(*zone_polygon.exterior.coords.xy))[:-1]}")
+
                 # logger.debug(
                 #     f"\n---------------------END OF ZONE LOOP # {idx} ---------------------"
                 # )

@@ -40,7 +40,7 @@ class AWSRekognition:
         logger.debug(f"{LP} initialized")
         self.init = True
 
-    def detect(self, input_image: np.ndarray):
+    async def detect(self, input_image: np.ndarray):
         b_boxes, labels, confs = [], [], []
         h, w = input_image.shape[:2]
         t = time.perf_counter()

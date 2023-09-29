@@ -140,7 +140,7 @@ class PlateRecognizer(AlprBase):
             response = response.json()
         return response
 
-    def detect(self, input_images: Optional[List[np.ndarray]] = None):
+    def detect(self, input_image: Optional[np.ndarray] = None):
         """Detects license plate using platerecognizer
 
         Args:
@@ -156,103 +156,109 @@ class PlateRecognizer(AlprBase):
         if self.options.stats:
             logger.debug(f"{self.lp} API usage stats: {json.dumps(self.stats())}")
         response: Optional[Union[requests.Response, Dict]] = None
-        for input_image in input_images:
+        try:
+            platerec_url = self.url
+            # if self.config.api_type == ALPRAPIType.CLOUD:
+            #     if not platerec_url.endswith("/plate-reader") or not platerec_url.endswith("/plate-reader/"):
+            #         logger.debug(f"{self.lp} cloud API, appending '/plate-reader' to url (currently: {platerec_url}")
+            #         platerec_url += "/plate-reader"
 
-            try:
-                platerec_url = self.url
-                # if self.config.api_type == ALPRAPIType.CLOUD:
-                #     if not platerec_url.endswith("/plate-reader") or not platerec_url.endswith("/plate-reader/"):
-                #         logger.debug(f"{self.lp} cloud API, appending '/plate-reader' to url (currently: {platerec_url}")
-                #         platerec_url += "/plate-reader"
-
-                platerec_payload = {}
-                if self.options.regions:
-                    platerec_payload["regions"] = self.options.regions
-                if self.options.payload:
-                    logger.debug(
-                        f"{self.lp} found API payload, overriding existing payload"
-                    )
-                    platerec_payload = self.options.payload
-
-                if self.options.config:
-                    logger.debug(f"{self.lp} found API config, using it")
-                    platerec_payload["config"] = self.options.config
-                headers = {"Authorization": f"Token {self.api_key}"} if self.api_key else {}
-
+            platerec_payload = {}
+            if self.options.regions:
+                platerec_payload["regions"] = self.options.regions
+            if self.options.payload:
                 logger.debug(
-                    f"{self.lp} sending request to {platerec_url} with payload: {platerec_payload} and headers: {headers}"
+                    f"{self.lp} found API payload, overriding existing payload"
                 )
-                response = requests.post(
-                    platerec_url,
-                    timeout=15,
-                    files=dict(upload=cv2.imencode(".jpg", input_image)[1].tobytes()),
-                    data=platerec_payload,
-                    headers=headers,
-                    stream=True,
-                )
-                response.raise_for_status()
-            except requests.exceptions.RequestException as e:
-                logger.error(f"{self.lp} request exception -> {e}")
-                if response:
-                    c = response.content
-                    response = {
-                        "error": f"{self.lp} rejected the upload with: {e}.",
-                        "results": [],
-                    }
-                    logger.error(f"{self.lp} API rejected the upload with {e} and body:{c}")
-                raise
-            except Exception as e:
-                logger.error(f"{self.lp} exception -> {e}")
-                raise
-            else:
-                resp_data: bytes = b""
-                if response:
-                    try:
-                        for data in response.iter_content(chunk_size=1024):
-                            resp_data += data
-                    except requests.exceptions.ChunkedEncodingError as ex:
-                        logger.error(f"Invalid chunk encoding: {ex}")
-                        raise
-                    else:
-                        response = json.loads(resp_data)
-                        logger.debug(f"{self.lp} API response JSON={response}")
+                platerec_payload = self.options.payload
 
-            plates: Dict
-            if response:
-                if response.get("results"):
-                    for plates in response.get("results"):
-                        label = plates["plate"]
-                        dscore = plates["dscore"]
-                        score = float(plates["score"])
-
-                        if (
-                            dscore >= self.options.min_dscore
-                            and score >= self.options.min_score
-                        ):
-                            x1 = round(int(plates["box"]["xmin"]))
-                            y1 = round(int(plates["box"]["ymin"]))
-                            x2 = round(int(plates["box"]["xmax"]))
-                            y2 = round(int(plates["box"]["ymax"]))
-                            labels.append(label)
-                            b_boxes.append([x1, y1, x2, y2])
-                            confs.append(score)
-                        else:
-                            logger.debug(
-                                f"{self.lp} discarding plate:{label} because its dscore:{dscore}/score:{score} are not in "
-                                f"range of configured dscore:{self.options.min_dscore} score:"
-                                f"{self.options.min_score}"
-                            )
-
-            result.append(
-                DetectionResults(
-                    success=True if labels else False,
-                    type=self.config.type_of,
-                    processor=self.processor,
-                    name=self.name,
-                    results=[Result(label=labels[i], confidence=confs[i], bounding_box=b_boxes[i]) for i in
-                             range(len(labels))],
-                )
+            if self.options.config:
+                logger.debug(f"{self.lp} found API config, using it")
+                platerec_payload["config"] = self.options.config
+            headers = (
+                {"Authorization": f"Token {self.api_key}"} if self.api_key else {}
             )
+
+            logger.debug(
+                f"{self.lp} sending request to {platerec_url} with payload: {platerec_payload} and headers: {headers}"
+            )
+            response = requests.post(
+                platerec_url,
+                timeout=15,
+                files=dict(upload=cv2.imencode(".jpg", input_image)[1].tobytes()),
+                data=platerec_payload,
+                headers=headers,
+                stream=True,
+            )
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"{self.lp} request exception -> {e}")
+            if response:
+                c = response.content
+                response = {
+                    "error": f"{self.lp} rejected the upload with: {e}.",
+                    "results": [],
+                }
+                logger.error(
+                    f"{self.lp} API rejected the upload with {e} and body:{c}"
+                )
+            raise
+        except Exception as e:
+            logger.error(f"{self.lp} exception -> {e}")
+            raise
+        else:
+            resp_data: bytes = b""
+            if response:
+                try:
+                    for data in response.iter_content(chunk_size=1024):
+                        resp_data += data
+                except requests.exceptions.ChunkedEncodingError as ex:
+                    logger.error(f"Invalid chunk encoding: {ex}")
+                    raise
+                else:
+                    response = json.loads(resp_data)
+                    logger.debug(f"{self.lp} API response JSON={response}")
+
+        plates: Dict
+        if response:
+            if response.get("results"):
+                for plates in response.get("results"):
+                    label = plates["plate"]
+                    dscore = plates["dscore"]
+                    score = float(plates["score"])
+
+                    if (
+                        dscore >= self.options.min_dscore
+                        and score >= self.options.min_score
+                    ):
+                        x1 = round(int(plates["box"]["xmin"]))
+                        y1 = round(int(plates["box"]["ymin"]))
+                        x2 = round(int(plates["box"]["xmax"]))
+                        y2 = round(int(plates["box"]["ymax"]))
+                        labels.append(label)
+                        b_boxes.append([x1, y1, x2, y2])
+                        confs.append(score)
+                    else:
+                        logger.debug(
+                            f"{self.lp} discarding plate:{label} because its dscore:{dscore}/score:{score} are not in "
+                            f"range of configured dscore:{self.options.min_dscore} score:"
+                            f"{self.options.min_score}"
+                        )
+
+        result = DetectionResults(
+            success=True if labels else False,
+            type=self.config.type_of,
+            processor=self.processor,
+            name=self.name,
+            results=[
+                Result(
+                    label=labels[i],
+                    confidence=confs[i],
+                    bounding_box=b_boxes[i],
+                )
+                for i in range(len(labels))
+            ],
+        )
 
         return result
 
@@ -439,15 +445,21 @@ class OpenAlprCloud(AlprBase):
                 bbox.append([x1, y1, x2, y2])
                 confs.append(conf)
 
-        return {
-            "success": True if labels else False,
-            "type": self.config.type_of,
-            "processor": self.processor,
-            "model_name": self.name,
-            "label": labels,
-            "confidence": confs,
-            "bounding_box": bbox,
-        }
+        result = DetectionResults(
+            success=True if labels else False,
+            type=self.config.type_of,
+            processor=self.processor,
+            name=self.name,
+            results=[
+                Result(
+                    label=labels[i],
+                    confidence=confs[i],
+                    bounding_box=bbox[i],
+                )
+                for i in range(len(labels))
+            ],
+        )
+        return result
 
 
 class OpenAlprCmdLine(AlprBase):
@@ -467,11 +479,11 @@ class OpenAlprCmdLine(AlprBase):
             self.cmd = f"{self.cmd} -j"
         logger.debug(f"{self.lp} initialized with cmd: {self.cmd}")
 
-    def detect(self, input_images: List[np.ndarray]):
+    async def detect(self, input_image: np.ndarray):
         """Detection using OpenALPR command line
 
         Args:
-            input_images (image): image buffer
+            input_image (image): image buffer
         """
         result = []
         bbox = []
@@ -480,79 +492,66 @@ class OpenAlprCmdLine(AlprBase):
 
         alpr_cmdline_exc_start = time.perf_counter()
 
-        for input_image in input_images:
-            self._prepare_image(input_image)
-            do_cmd = f"{self.cmd} {self.filename}"
-            logger.debug(f"{self.lp} executing: '{do_cmd}'")
-            try:
-                response = subprocess.check_output(do_cmd, shell=True, text=True)
-                # this will cause the json.loads to fail if using gpu
-                p = "--(!)Loaded CUDA classifier\n"
-                if response.find(p) != -1:
-                    logger.debug(f"{self.lp} CUDA was used for processing!")
-                response = response.split(p)[1]
-                logger.debug(
-                    f"perf:{self.lp} took {time.perf_counter() - alpr_cmdline_exc_start} seconds"
-                )
-                logger.debug(f"{self.lp} JSON response -> {response}")
-                response = json.loads(response)
-            except subprocess.CalledProcessError as e:
-                logger.error(f"{self.lp} Error executing command -> {e}")
-                response = b"{}"
-            # catch json parsing errors
-            except Exception as e:
-                logger.error(f"{self.lp} Error -> {type(e)} :: {e}")
-                response = {}
+        self._prepare_image(input_image)
+        do_cmd = f"{self.cmd} {self.filename}"
+        logger.debug(f"{self.lp} executing: '{do_cmd}'")
+        try:
+            response = subprocess.check_output(do_cmd, shell=True, text=True)
+            # this will cause the json.loads to fail if using gpu
+            p = "--(!)Loaded CUDA classifier\n"
+            if response.find(p) != -1:
+                logger.debug(f"{self.lp} CUDA was used for processing!")
+            response = response.split(p)[1]
+            logger.debug(
+                f"perf:{self.lp} took {time.perf_counter() - alpr_cmdline_exc_start} seconds"
+            )
+            logger.debug(f"{self.lp} JSON response -> {response}")
+            response = json.loads(response)
+        except subprocess.CalledProcessError as e:
+            logger.error(f"{self.lp} Error executing command -> {e}")
+            response = b"{}"
+        # catch json parsing errors
+        except Exception as e:
+            logger.error(f"{self.lp} Error -> {type(e)} :: {e}")
+            response = {}
 
-            rescale = False
-            if self.remove_temp:  # move to BytesIO buffer?
-                os.remove(self.filename)
-            results = response.get("results")
-            # all_matches = response.get("candidates")
+        rescale = False
+        if self.remove_temp:  # move to BytesIO buffer?
+            os.remove(self.filename)
+        results = response.get("results")
+        # all_matches = response.get("candidates")
 
-            """{"version":2,
-            "data_type":"alpr_results",
-            "epoch_time":1631393388251,
-            "img_width":800,
-            "img_height":450,
-            "processing_time_ms":501.429291,
-            "regions_of_interest":[{"x":0,"y":0,"width":800,"height":450}],
-    
-              "results":[
-              {"plate":"CFT4539","confidence":90.140419,"matches_template":0,"plate_index":0,"region":"","region_confidence":0,"processing_time_ms"
-              :93.152191,"requested_topn":10,"coordinates":[{"x":412,"y":175},{"x":694,"y":180},{"x":694,"y":299},{"x":412,"y":295}],
-    
-              "candidates":[{"plate":"CFT4539","confidence":90.140419,"matches_template":0},{"plate":"CF
-              T4S39","confidence":82.398186,"matches_template":0},{"plate":"CFT439","confidence":79.333336,"matches_template":0},{"plate":"GFT4539","confidence":80.629532,"matches_template":0},{"plate":"CT4539","confidence"
-              :80.943665,"matches_template":0},{"plate":"CPT4539","confidence":80.256454,"matches_template":0},{"plate":"CFT459","confidence":77.853737,"matches_template":0},{"plate":"CFT4B39","confidence":77.567482,"matche
-              s_template":0},{"plate":"CF4539","confidence":75.923660,"matches_template":0}]
-              # end of candidates
-              } # end of plate
-              ] # end of results
-              }"""
-            if results:
-                for plates in results:
-                    x1 = round(int(plates["coordinates"][0]["x"]))
-                    y1 = round(int(plates["coordinates"][0]["y"]))
-                    x2 = round(int(plates["coordinates"][2]["x"]))
-                    y2 = round(int(plates["coordinates"][2]["y"]))
-                    candidates = plates.get("candidates")
-                    if candidates:
-                        for plate in candidates:
-                            label = plate["plate"]
-                            conf = float(plate["confidence"]) / 100
-                            if conf < self.options.confidence:
-                                logger.debug(
-                                    f"{self.lp} discarding plate: {label} ({conf}) is less than the configured min confidence "
-                                    f"-> '{self.options.confidence}'"
-                                )
-                                continue
-                            labels.append(label)
-                            bbox.append([x1, y1, x2, y2])
-                            confs.append(conf)
-                    else:
-                        label = plates["plate"]
-                        conf = float(plates["confidence"]) / 100
+        """{"version":2,
+        "data_type":"alpr_results",
+        "epoch_time":1631393388251,
+        "img_width":800,
+        "img_height":450,
+        "processing_time_ms":501.429291,
+        "regions_of_interest":[{"x":0,"y":0,"width":800,"height":450}],
+
+          "results":[
+          {"plate":"CFT4539","confidence":90.140419,"matches_template":0,"plate_index":0,"region":"","region_confidence":0,"processing_time_ms"
+          :93.152191,"requested_topn":10,"coordinates":[{"x":412,"y":175},{"x":694,"y":180},{"x":694,"y":299},{"x":412,"y":295}],
+
+          "candidates":[{"plate":"CFT4539","confidence":90.140419,"matches_template":0},{"plate":"CF
+          T4S39","confidence":82.398186,"matches_template":0},{"plate":"CFT439","confidence":79.333336,"matches_template":0},{"plate":"GFT4539","confidence":80.629532,"matches_template":0},{"plate":"CT4539","confidence"
+          :80.943665,"matches_template":0},{"plate":"CPT4539","confidence":80.256454,"matches_template":0},{"plate":"CFT459","confidence":77.853737,"matches_template":0},{"plate":"CFT4B39","confidence":77.567482,"matche
+          s_template":0},{"plate":"CF4539","confidence":75.923660,"matches_template":0}]
+          # end of candidates
+          } # end of plate
+          ] # end of results
+          }"""
+        if results:
+            for plates in results:
+                x1 = round(int(plates["coordinates"][0]["x"]))
+                y1 = round(int(plates["coordinates"][0]["y"]))
+                x2 = round(int(plates["coordinates"][2]["x"]))
+                y2 = round(int(plates["coordinates"][2]["y"]))
+                candidates = plates.get("candidates")
+                if candidates:
+                    for plate in candidates:
+                        label = plate["plate"]
+                        conf = float(plate["confidence"]) / 100
                         if conf < self.options.confidence:
                             logger.debug(
                                 f"{self.lp} discarding plate: {label} ({conf}) is less than the configured min confidence "
@@ -562,28 +561,37 @@ class OpenAlprCmdLine(AlprBase):
                         labels.append(label)
                         bbox.append([x1, y1, x2, y2])
                         confs.append(conf)
+                else:
+                    label = plates["plate"]
+                    conf = float(plates["confidence"]) / 100
+                    if conf < self.options.confidence:
+                        logger.debug(
+                            f"{self.lp} discarding plate: {label} ({conf}) is less than the configured min confidence "
+                            f"-> '{self.options.confidence}'"
+                        )
+                        continue
+                    labels.append(label)
+                    bbox.append([x1, y1, x2, y2])
+                    confs.append(conf)
 
-
-        result.append(
-            DetectionResults(
-                success=True if labels else False,
-                type=self.config.type_of,
-                processor=self.processor,
-                name=self.name,
-                results=[
-                    Result(
-                        label=labels[i],
-                        confidence=confs[i],
-                        bounding_box=bbox[i],
-                    )
-                    for i in range(len(labels))
-                ],
-            )
+        result = DetectionResults(
+            success=True if labels else False,
+            type=self.config.type_of,
+            processor=self.processor,
+            name=self.name,
+            results=[
+                Result(
+                    label=labels[i],
+                    confidence=confs[i],
+                    bounding_box=bbox[i],
+                )
+                for i in range(len(labels))
+            ],
         )
         return result
 
 
-'''
+"""
 curl -X 'POST' \
   'https://zomi.baudneo.com/ml/detect/group' \
   -H 'CF-Access-Client-Id: 2beb7e31ce62a280c0f5bf7ef5e08517.access' \
@@ -592,4 +600,4 @@ curl -X 'POST' \
   -H 'Content-Type: multipart/form-data' \
   -F 'hints_model=openalpr gpu' \
   -F 'image=@/shared/t.jpg;type=image/jpeg'
-'''
+"""

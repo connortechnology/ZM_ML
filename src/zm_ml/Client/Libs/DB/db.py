@@ -435,7 +435,9 @@ class ZMDB:
         return width, height, color
 
     def _get_image_buffer_from_mid(self, mid: int) -> int:
-        """Get the monitor ImageBufferCount from the DB."""
+        """Get the monitor ImageBufferCount from the DB.
+
+        Key in DB: 'ImageBufferCount'"""
         buffer: Optional[int] = None
         buffer_select: select = select(
             self.meta.tables["Monitors"].c.ImageBufferCount
@@ -446,12 +448,16 @@ class ZMDB:
         buffer_result.close()
         return buffer
 
-    def _cause_from_eid(self, eid: int) -> str:
-        """Get the cause of the event from the DB"""
+    def cause_from_eid(self, eid: int) -> str:
+        """Get the cause of the event from the DB.
+
+        Key in DB: 'Cause'"""
         return self._reason_from_eid(eid)
 
     def eid_exists(self, eid: int) -> bool:
-        """Check if an event ID exists in the DB"""
+        """Check if an event ID exists in the DB
+
+        Key in DB: 'Id'"""
         event_exists: bool = False
         event_exists = (
             self.run_select(

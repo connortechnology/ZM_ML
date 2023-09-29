@@ -3,19 +3,21 @@ from logging import getLogger
 from typing import Optional
 from os import getuid
 
+import numpy as np
 from portalocker import BoundedSemaphore, AlreadyLocked
 
 
 from zm_ml.Server.Log import SERVER_LOGGER_NAME
+
 logger = getLogger(SERVER_LOGGER_NAME)
-LP: str = 'Lock:'
+LP: str = "Lock:"
 
 
 class FileLock:
     lock: Optional[BoundedSemaphore] = None
     is_locked: bool = False
-    name: str = ''
-    processor: str = ''
+    name: str = ""
+    processor: str = ""
     lock_timeout = 0.0
     lock_maximum = 0
     lock_name = ""
@@ -23,7 +25,6 @@ class FileLock:
 
     def __init__(self):
         self.create_lock()
-
 
     def create_lock(self):
         from ..app import locks_enabled, get_global_config
@@ -59,14 +60,18 @@ class FileLock:
                     f"[timeout: {self.lock.timeout}]"
                 )
             else:
-                raise RuntimeError(f"{LP} No locks defined in config file?!?! DEFAULTS FAILED?!?!?! HELP")
+                raise RuntimeError(
+                    f"{LP} No locks defined in config file?!?! DEFAULTS FAILED?!?!?! HELP"
+                )
 
     def acquire_lock(self):
         from ..app import locks_enabled
 
         if locks_enabled():
             if self.is_locked:
-                logger.debug(f"{LP} '{self.name}' lock for '{self.lock.name}' already acquired")
+                logger.debug(
+                    f"{LP} '{self.name}' lock for '{self.lock.name}' already acquired"
+                )
                 return
             try:
                 if self.lock:
@@ -124,6 +129,4 @@ class FileLock:
                 # )
                 self.lock.release()
                 self.is_locked = False
-                logger.debug(
-                    f"{LP} '{self.name}' released '{self.lock.name}'"
-                )
+                logger.debug(f"{LP} '{self.name}' released '{self.lock.name}'")

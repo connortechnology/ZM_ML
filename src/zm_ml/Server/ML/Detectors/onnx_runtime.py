@@ -146,38 +146,33 @@ class ORTDetector(FileLock):
         ).astype(np.float32)
         self.inference(input_tensor)
 
-    def detect(self, images: List[np.ndarray]):
-        result = []
-        for image in images:
-            input_tensor = self.prepare_input(image)
-            logger.debug(
-                f"{LP}detect: '{self.name}' ({self.processor}) - "
-                f"input image {self.img_width}*{self.img_height} - model input {self.config.width}*{self.config.height}"
-                f"{' [squared]' if self.config.square else ''}"
-            )
-            outputs = self.inference(input_tensor)
-            b_boxes: List
-            confs: List
-            labels: List
-            b_boxes, confs, labels = self.process_output(outputs)
+    async def detect(self, image: np.ndarray):
+        input_tensor = self.prepare_input(image)
+        logger.debug(
+            f"{LP}detect: '{self.name}' ({self.processor}) - "
+            f"input image {self.img_width}*{self.img_height} - model input {self.config.width}*{self.config.height}"
+            f"{' [squared]' if self.config.square else ''}"
+        )
+        outputs = self.inference(input_tensor)
+        b_boxes: List
+        confs: List
+        labels: List
+        b_boxes, confs, labels = self.process_output(outputs)
 
-            # labels = [self.config.labels[i] for i in labels]
-            result.append(
-                DetectionResults(
-                    success=True if labels else False,
-                    name=self.name,
-                    type=self.config.type_of,
-                    processor=self.processor,
-                    results=[
-                        Result(
-                            label=self.config.labels[labels[i]],
-                            confidence=confs[i],
-                            bounding_box=b_boxes[i],
-                        )
-                        for i in range(len(labels))
-                    ],
+        result = DetectionResults(
+            success=True if labels else False,
+            name=self.name,
+            type=self.config.type_of,
+            processor=self.processor,
+            results=[
+                Result(
+                    label=self.config.labels[labels[i]],
+                    confidence=confs[i],
+                    bounding_box=b_boxes[i],
                 )
-            )
+                for i in range(len(labels))
+            ],
+        )
         return result
 
     def prepare_input(self, image: np.ndarray) -> np.ndarray:

@@ -1394,14 +1394,18 @@ class APIDetector:
         )
         return available
 
-    def detect(self, images: List[np.ndarray]) -> Dict[str, Any]:
-        """Detect objects in the image"""
+    async def detect(self, images: List[np.ndarray]) -> DetectionResult:
+        """Detect objects in the images
+
+        :param images: List of images to detect objects in
+        :return: `DetectionResult` object
+        """
         if self.model is None:
             logger.warning(
                 f"Detector for {self.config.name} is not loaded, cannot detect objects!"
             )
             return
-        return self.model.detect(images)
+        return await self.model.detect(images)
 
 
 class GlobalConfig(BaseModel, arbitrary_types_allowed=True):
@@ -1427,6 +1431,23 @@ class GlobalConfig(BaseModel, arbitrary_types_allowed=True):
     )
     user_db: None = Field(None, description="User Database (TinyDB)")
 
+    def create_detector(self, model: BaseModelConfig) -> Optional[APIDetector]:
+        logger.debug(f"Attempting to create new detector for '{model.name}'")
+        try:
+            ret_ = APIDetector(model)
+        except ImportError as e:
+            logger.warning(e, exc_info=True)
+            _ret = None
+        except Exception as e:
+            logger.error(e, exc_info=True)
+            _ret = None
+        else:
+            self.detectors.append(ret_)
+
+        if not ret_:
+            logger.error(f"Unable to create detector for '{model.name}'")
+
+        return ret_
 
     def get_detector(self, model: BaseModelConfig) -> Optional[APIDetector]:
         """Get a detector by ID (UUID4)"""
@@ -1436,17 +1457,7 @@ class GlobalConfig(BaseModel, arbitrary_types_allowed=True):
                 ret_ = detector
                 break
         if not ret_:
-            logger.debug(f"Attempting to create new detector for '{model.name}'")
-            try:
-                ret_ = APIDetector(model)
-            except ImportError as e:
-                logger.warning(e, exc_info=True)
-            except Exception as e:
-                logger.error(e, exc_info=True)
-            else:
-                self.detectors.append(ret_)
-        if not ret_:
-            logger.error(f"Unable to create detector for '{model.name}'")
+            ret_ = self.create_detector(model)
         return ret_
 
 

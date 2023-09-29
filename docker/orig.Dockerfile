@@ -441,7 +441,7 @@ RUN set -x \
 
 
 # ZM ML Server Install
-ARG CBB123=3
+ARG CBB123=5
 ARG ZMML_VERSION=master
 #COPY . /opt/zm_ml/src
 RUN set -x \
@@ -535,6 +535,8 @@ RUN set -x \
 --model /tpu_test/mobilenet_v2_1.0_224_inat_bird_quant_edgetpu.tflite \
 --labels /tpu_test/inat_bird_labels.txt \
 --input /tpu_test/parrot.jpg" > /tpu_test/tpu_test \
+# list the biggest directories on the system using du
+&& du -a /es | sort -n -r | head -n 10 \
     &&  cat /zm_ml/data/venv/lib/python3.9/site-packages/zm_ml/Server/auth.py
 
 

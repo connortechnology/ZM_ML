@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import random
 import sys
@@ -8,6 +9,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from platform import python_version
 from typing import Union, Dict, List, Optional, Any, TYPE_CHECKING, Annotated, Tuple
+
+from starlette.requests import Request
+from starlette.responses import StreamingResponse, Response
 
 try:
     import cv2
@@ -247,39 +251,53 @@ async def detect(
     _model_hints = [normalize_id(model_hint) for model_hint in _model_hints]
     logger.debug(f"threaded_detect: model_hints -> {_model_hints}")
     detectors: List[APIDetector] = []
+    found_models = []
     for model in available_models:
         identifiers = {model.name, str(model.id)}
         if any(
             [normalize_id(model_hint) in identifiers for model_hint in _model_hints]
         ):
-            logger.info(f"Found model: {model.name} ({model.id})")
             detector = get_global_config().get_detector(model)
             detectors.append(detector)
+            found_models.append(f"<'{model.name}' ({model.id})>")
+    logger.info(f"Found models: {found_models}")
     images = [load_image_into_numpy_array(await image.read()) for image in images]
-    detections: List[Dict] = []
+    detections: List[List[DetectionResults]] = []
     # logger.info(f"Detectors ({len(Detectors)}) -> {Detectors}")
-    futures = []
-    import concurrent.futures
-
-    with concurrent.futures.ThreadPoolExecutor() as executor:
+    #### async
+    for image in images:
+        img_dets = []
         for detector in detectors:
             # logger.info(f"Starting detection for {detector}")
-            futures.append(executor.submit(detector.detect, images))
-    for future in futures:
-        detections.append(future.result())
-    logger.info(f"{LP} ThreadPool detections -> {detections}")
+            img_dets.append(await detector.detect(image))
+        detections.append(img_dets)
+    ##### ThreadPool
+    # futures = []
+    # import concurrent.futures
+    #
+    # with concurrent.futures.ThreadPoolExecutor() as executor:
+    #     for image in images:
+    #         for detector in detectors:
+    #             # logger.info(f"Starting detection for {detector}")
+    #             futures.append(executor.submit(detector.detect, image))
+    # for future in futures:
+    #     detections.append(future.result())
+    # logger.info(f"{LP} ThreadPool detections -> {detections}")
     if return_image:
         return detections, images
     return detections
 
 
-def load_image_into_numpy_array(data: bytes):
-    """Load an uploaded image into a numpy array"""
+def load_image_into_numpy_array(data: bytes) -> np.ndarray:
+    """Load an uploaded image into a numpy array
+
+    :param data: The image data in bytes
+    :return: A cv2 imdecoded numpy array
+    """
     np_img = np.frombuffer(data, np.uint8)
     if np_img is None:
-        raise RuntimeError("Failed to decode image")
+        raise RuntimeError("Failed to create numpy array from image data")
     frame = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
-    logger.debug(f"{LP} {type(frame) = }")
     return frame
 
 
@@ -288,14 +306,9 @@ async def docs():
     return RedirectResponse(url="/docs")
 
 
-
-
-
-
-
-
 @app.get("/models/available/all", summary="Get a list of all available models")
 async def available_models_all():
+    """FastAPI endpoint. Get a list of all available models"""
     try:
         logger.debug(f"About to try and grab available models....")
         x = {"models": get_global_config().available_models}
@@ -312,10 +325,13 @@ async def available_models_all():
     summary="Get a list of available models based on the type",
 )
 async def available_models_type(model_type: ModelType):
+    """FastAPI endpoint. Get a list of available models based on the model type: obj, face, alpr"""
     available_models = get_global_config().available_models
     return {
         "models": [
-            model.model_dump() for model in available_models if model.type_of == model_type
+            model.model_dump()
+            for model in available_models
+            if model.type_of == model_type
         ]
     }
 
@@ -325,11 +341,14 @@ async def available_models_type(model_type: ModelType):
     summary="Get a list of available models based on the processor",
 )
 async def available_models_proc(processor: ModelProcessor):
+    """FastAPI endpoint. Get a list of available models based on the processor: cpu, gpu, tpu, none"""
     logger.info(f"available_models_proc: {processor}")
     available_models = get_global_config().available_models
     return {
         "models": [
-            model.model_dump() for model in available_models if model.processor == processor
+            model.model_dump()
+            for model in available_models
+            if model.processor == processor
         ]
     }
 
@@ -339,13 +358,17 @@ async def available_models_proc(processor: ModelProcessor):
     summary="Get a list of available models based on the framework",
 )
 async def available_models_framework(framework: ModelFrameWork):
+    """FastAPI endpoint. Get a list of available models based on the framework: torch, ort, trt, opencv, etc"""
     logger.info(f"available_models_proc: {framework}")
     available_models = get_global_config().available_models
     return {
         "models": [
-            model.model_dump() for model in available_models if model.framework == framework
+            model.model_dump()
+            for model in available_models
+            if model.framework == framework
         ]
     }
+
 
 @app.post(
     "/annotate",
@@ -359,17 +382,25 @@ async def available_models_framework(framework: ModelFrameWork):
     summary="Return an annotated jpeg image with bounding boxes and labels",
 )
 async def get_annotated_image(
-        user_obj = Depends(verify_token),
-        hints_: List[str] = Body(..., example="yolov4", description="comma seperated model names/UUIDs"),
-    image: UploadFile = File(...)
+    user_obj=Depends(verify_token),
+    hints_: List[str] = Body(
+        ..., example="yolov4, yolo-nas-s trt", description="A list of model names/UUIDs"
+    ),
+    image: UploadFile = File(...),
 ):
-    logger.info(f"get_annotated_image: {hints_ = }")
+    """FastAPI endpoint. Return an annotated jpeg image with bounding boxes and labels"""
+    logger.info(f"get_annotated_image: model hints (before) = {hints_}")
     if hints_:
         from ..Shared.Models.config import DetectionResults, Result
 
-        hints_ = hints_[0].strip('"').split(",")
+        hints_ = [x.strip('"').strip("'").strip() for x in hints_]
+        if len(hints_) == 1:
+            split_hints = hints_[0].split(",")
+            if len(split_hints) > 1:
+                hints_ = split_hints
+        logger.info(f"get_annotated_image: model hints (AFTER) = {hints_}")
         detections: List[List[DetectionResults]]
-        detections, image = await detect(hints_, [image], return_image=True)
+        detections, images = await detect(hints_, [image], return_image=True)
         i = 0
         SLATE_COLORS: List[Tuple[int, int, int]] = [
             (39, 174, 96),
@@ -379,42 +410,181 @@ async def get_annotated_image(
             (243, 134, 48),
             (91, 177, 47),
         ]
-        num_dets = len(detections[0])
-        for detection in detections[0]:
-            i += 1
-            logger.debug(f"DBG>>> ANNOTATE:detection: {detection} ({i}/{num_dets})")
-            if detection and isinstance(detection, DetectionResults):
-                rand_color = random.randrange(len(SLATE_COLORS)-1)
-                rand_color2 = random.randrange(len(SLATE_COLORS)-1)
-                logger.debug(f"DBG>>> ANNOTATE:detection: is a DetectionResults object, num results: {len(detection.results)}")
 
-                det: Result
-                for det in detection.results:
-                    x1, y1, x2, y2 = det.bounding_box
-                    cv2.rectangle(image, (x1, y1), (x2, y2), rand_color, 2)
-                    cv2.putText(
-                        image,
-                        f"{det.label} ({det.confidence:.2f})[{detection.name}]",
-                        (x1, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.9,
-                        rand_color2,
-                        2,
+        image_buffer = b""
+        img_loop = 0
+        num_dets = len(detections)
+        logger.debug(f"DBG>>> ANNOTATE: num_dets: {num_dets} ---- {detections = }")
+        for img_detection, _image in zip(detections, images):
+            img_loop += 1
+            for detection in img_detection:
+                i += 1
+                logger.debug(f"DBG>>> ANNOTATE:detection: {detection} ({i}/{num_dets})")
+                if detection and isinstance(detection, DetectionResults):
+                    rand_color = random.randrange(len(SLATE_COLORS) - 1)
+                    rand_color2 = random.randrange(len(SLATE_COLORS) - 1)
+                    logger.debug(f"DBG>>> ANNOTATE: colors chosen randomly: {rand_color} {rand_color2}")
+                    logger.debug(
+                        f"DBG>>> ANNOTATE:detection: is a DetectionResults object, num results: {len(detection.results)}"
                     )
 
-            elif detection and not isinstance(detection, DetectionResults):
-                raise RuntimeError(f"DetectionResults object expected, got {type(detection)}")
-            else:
-                logger.warning(f"DetectionResults object is {type(detection)}")
-        is_success, image_buffer = cv2.imencode(".jpg", image)
-        if not is_success:
-            raise RuntimeError("Failed to encode image")
-        image_bytes = image_buffer.tobytes()
+                    det: Result
+                    for det in detection.results:
+                        x1, y1, x2, y2 = det.bounding_box
+                        cv2.rectangle(_image, (x1, y1), (x2, y2), rand_color, 2)
+                        cv2.putText(
+                            _image,
+                            f"{det.label} ({det.confidence:.2f})[{detection.name}]",
+                            (x1, y1 - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.9,
+                            rand_color2,
+                            2,
+                        )
+
+                elif detection and not isinstance(detection, DetectionResults):
+                    raise RuntimeError(
+                        f"DetectionResults object expected, got {type(detection)}"
+                    )
+                else:
+                    logger.warning(f"DetectionResults object is {type(detection)}")
+                is_success, img_buffer = cv2.imencode(".jpg", _image)
+                if not is_success:
+                    raise RuntimeError("Failed to encode image")
+                image_buffer = img_buffer.tobytes()
 
         # media_type here sets the media type of the actual response sent to the client.
         # Return the results in a header, this allows Swagger UI to display the image
         import json
-        return Response(content=image_bytes, media_type="image/jpeg", headers={"Results": json.dumps([x.model_dump() for x in detections])}, background=None)
+
+        results_json = []
+        for img_det in detections:
+            for _det in img_det:
+                results_json.append(_det.model_dump())
+        return Response(
+            content=image_buffer,
+            media_type="image/jpeg",
+            headers={"Results": json.dumps(results_json)},
+            background=None,
+        )
+
+
+@app.post(
+    "/annotate2",
+    # Set what the media type will be in the autogenerated OpenAPI specification.
+    # https://fastapi.tiangolo.com/advanced/additional-responses/#additional-media-types-for-the-main-response
+    responses={200: {"content": {"image/jpeg": {}}}},
+    # Prevent FastAPI from adding "application/json" as an additional
+    # response media type in the autogenerated OpenAPI specification.
+    # https://github.com/tiangolo/fastapi/issues/3258
+    response_class=StreamingResponse,
+    summary="Return an annotated jpeg image with bounding boxes and labels",
+)
+async def get_annotated_image2(
+    user_obj=Depends(verify_token),
+    hints_: List[str] = Body(
+        ..., example="yolov4, yolo-nas-s trt", description="A list of model names/UUIDs"
+    ),
+    images: List[UploadFile] = File(...),
+):
+    """FastAPI endpoint. EXPERIMENT!!!
+
+    Return a List of annotated jpeg image with bounding boxes and labels. Results are returned in a header
+    """
+    logger.info(f"get_annotated_image: model hints (before) = {hints_}")
+    if hints_:
+        from ..Shared.Models.config import DetectionResults, Result
+
+        hints_ = [x.strip('"').strip("'").strip() for x in hints_]
+        if len(hints_) == 1:
+            split_hints = hints_[0].split(",")
+            if len(split_hints) > 1:
+                hints_ = split_hints
+        logger.info(f"get_annotated_image: model hints (AFTER) = {hints_}")
+        detections: List[List[DetectionResults]]
+        detections, images = await detect(hints_, images, return_image=True)
+        i = 0
+        SLATE_COLORS: List[Tuple[int, int, int]] = [
+            (39, 174, 96),
+            (142, 68, 173),
+            (0, 129, 254),
+            (254, 60, 113),
+            (243, 134, 48),
+            (91, 177, 47),
+        ]
+
+        image_buffer = b""
+        img_loop = 0
+        num_dets = len(detections)
+        logger.debug(f"DBG>>> ANNOTATE: num_dets: {num_dets} ---- {detections = }")
+        for img_detection, _image in zip(detections, images):
+            img_loop += 1
+            for detection in img_detection:
+                i += 1
+                logger.debug(f"DBG>>> ANNOTATE:detection: {detection} ({i}/{num_dets})")
+                if detection and isinstance(detection, DetectionResults):
+                    rand_color = random.randrange(len(SLATE_COLORS) - 1)
+                    rand_color2 = random.randrange(len(SLATE_COLORS) - 1)
+                    logger.debug(
+                        f"DBG>>> ANNOTATE:detection: is a DetectionResults object, num results: {len(detection.results)}"
+                    )
+
+                    det: Result
+                    for det in detection.results:
+                        x1, y1, x2, y2 = det.bounding_box
+                        cv2.rectangle(_image, (x1, y1), (x2, y2), rand_color, 2)
+                        cv2.putText(
+                            _image,
+                            f"{det.label} ({det.confidence:.2f})[{detection.name}]",
+                            (x1, y1 - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.9,
+                            rand_color2,
+                            2,
+                        )
+
+                elif detection and not isinstance(detection, DetectionResults):
+                    raise RuntimeError(
+                        f"DetectionResults object expected, got {type(detection)}"
+                    )
+                else:
+                    logger.warning(f"DetectionResults object is {type(detection)}")
+                is_success, img_buffer = cv2.imencode(".jpg", _image)
+                if not is_success:
+                    raise RuntimeError("Failed to encode image")
+                image_buffer.append(img_buffer.tobytes())
+
+        # media_type here sets the media type of the actual response sent to the client.
+        # Return the results in a header, this allows Swagger UI to display the image
+
+        results_json = []
+        for img_det in detections:
+            for _det in img_det:
+                results_json.append(_det.model_dump())
+
+        async def streamer(_images):
+            from io import BytesIO
+
+            for image_bytes in _images:
+                bio = BytesIO()
+                bytes_written = bio.write(image_bytes)
+                logger.debug(
+                    f"DBG>>> ANNOTATE: bytes_written to BytesIO buffer: {bytes_written}"
+                )
+                yield bio.getvalue()
+
+        return StreamingResponse(
+            streamer(image_buffer),
+            headers={"Results": json.dumps(results_json)},
+            media_type="image/jpeg",
+            background=None,
+        )
+        return StreamingResponse(
+            content=image_buffer,
+            media_type="image/jpeg",
+            headers={"Results": json.dumps(results_json)},
+            background=None,
+        )
 
 
 @app.post(
@@ -422,31 +592,29 @@ async def get_annotated_image(
     summary="Detect objects in images using a set of threaded models referenced by name/UUID",
 )
 async def run_detection(
-    user_obj = Depends(verify_token),
+    user_obj=Depends(verify_token),
     hints_model: List[str] = Body(
         ...,
-        description="comma seperated model names/UUIDs",
+        description="List of model names/UUIDs",
         example="yolov4,97acd7d4-270c-4667-9d56-910e1510e8e8,yolov7 tiny",
-
     ),
     images: List[UploadFile] = File(..., description="Images to run the ML model on"),
-
 ):
+    """FastAPI endpoint. Detect objects in images using a set of threaded models referenced by name/UUID"""
+    start = time.perf_counter()
     if hints_model:
         hints_model = [hint.strip("'").strip('"').strip() for hint in hints_model]
-        logger.info(f"group_detect hints: {hints_model}")
+        if len(hints_model) == 1:
+            split_hints = hints_model[0].split(",")
+            if len(split_hints) > 1:
+                hints_model = split_hints
         detections = await detect(hints_model, images)
-        logger.debug(f"DBG>>> group detect results: {detections}")
-        dets: List[DetectionResults]
-        for dets in detections:
-            if dets:
-                from ..Shared.Models.config import DetectionResults
-
-                if isinstance(dets, DetectionResults):
-                    dets = dets.model_dump()
-        return detections
-    return {"error": "No models specified"}
-
+        logger.debug(f"{LP}DBG>>> /detect results: {detections}")
+    else:
+        detections = {"error": "No models specified"}
+    end = time.perf_counter()
+    logger.info(f"perf:{LP} /detect took {end - start:.5f} s")
+    return detections
 
 
 class MLAPI:
@@ -476,15 +644,15 @@ class MLAPI:
         if run_server:
             self.start()
 
-    def read_settings(self):
+    def read_settings(self) -> Settings:
+        """Read the YAML config file,  initialize the user_db, set the global config (g.config) object and load models"""
         logger.info(f"reading settings from '{self.cfg_file.as_posix()}'")
         from .Models.config import parse_client_config_file
 
         self.cached_settings = parse_client_config_file(self.cfg_file)
         from .auth import UserDB
 
-        get_global_config().user_db = UserDB()
-        get_global_config().user_db.set_input(self.cached_settings.server.auth.db_file)
+        get_global_config().user_db = UserDB(self.cached_settings.server.auth.db_file)
         get_global_config().config = self.cached_settings
         init_logs(self.cached_settings)
         logger.info(f"Starting to load models...")
@@ -493,17 +661,25 @@ class MLAPI:
         ) = self.cached_settings.available_models
 
         if available_models:
-            futures = []
             timer = time.perf_counter()
+            _method = "ThreadPool"
+
+            # import uvloop
+            # _method = "Async"
+            # for model in available_models:
+            #     loop = uvloop.new_event_loop()
+            #     loop.run_until_complete(get_global_config().create_detector(model))
+
+            futures = []
             with ThreadPoolExecutor() as executor:
                 for model in available_models:
                     futures.append(
-                        executor.submit(get_global_config().get_detector, model)
+                        executor.submit(get_global_config().create_detector, model)
                     )
             for future in futures:
                 future.result()
             logger.info(
-                f"perf:{LP} TOTAL ThreadPool loading models took {time.perf_counter() - timer:.5f} s"
+                f"perf:{LP} Loading '{_method}' models took {time.perf_counter() - timer:.5f} s"
             )
         else:
             logger.warning(f"No models found in config file!")
@@ -523,7 +699,7 @@ class MLAPI:
         cf_ipv6_url = "https://www.cloudflare.com/ips-v6"
         cf_ipv4 = requests.get(cf_ipv4_url).text.splitlines()
         cf_ipv6 = requests.get(cf_ipv6_url).text.splitlines()
-        cf_ips = cf_ipv4 + cf_ipv6 + ["10.0.1.5"]
+        cf_ips = cf_ipv4 + cf_ipv6
         return cf_ips
 
     def start(self):
@@ -534,7 +710,9 @@ class MLAPI:
         ]
         if self.cached_settings.uvicorn.grab_cloudflare_ips:
             forwarded_allow += self._get_cf_ip_list()
-            logger.debug(f"Grabbed Cloudflare IP ranges -> {forwarded_allow = }")
+            logger.debug(
+                f"Grabbed Cloudflare IP ranges to append to forwarded_allow hosts"
+            )
         for model in get_global_config().available_models:
             _avail[normalize_id(model.name)] = str(model.id)
         logger.info(f"AVAILABLE MODELS! --> {_avail}")
@@ -575,19 +753,28 @@ class MLAPI:
 
 
 # AUTH STUFF
-@app.get("/test_auth/", summary="Test authentication")
-async def _test_auth(user_obj: Annotated[str, Depends(verify_token)]):
-    return {"user_object": user_obj}
-
-@app.post("/login", response_model=Token, summary="Login to get an authentication token")
+@app.post(
+    "/login",
+    response_model=Token,
+    summary="Login to get an authentication token",
+)
 async def login_for_access_token(
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
+    request: Request, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
 ):
-    logger.debug(f"{LP} login_for_access_token: {form_data}")
-    user = get_global_config().user_db.authenticate_user(form_data.username, form_data.password)
+    """FastAPI endpoint. Login to get an authentication token"""
+
+    logger.debug(
+        f"{LP} Access token requested by: {form_data.username} using IP: {request.client.host}"
+    )
+
+    user = get_global_config().user_db.authenticate_user(
+        form_data.username, form_data.password
+    )
+
     if not user:
         raise credentials_exception
     access_token = create_access_token(
         data={"sub": user.username}
     )
+
     return access_token

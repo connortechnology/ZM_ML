@@ -27,6 +27,7 @@ g: Optional[GlobalConfig] = None
 
 
 class PipeLine:
+    _event_data_recursions: int = 0
     options: Union[APIPullMethod, ZMSPullMethod, None] = None
 
     async def _grab_event_data(self, msg: Optional[str] = None):
@@ -40,7 +41,17 @@ class PipeLine:
                 )
             except Exception as e:
                 logger.error(f"{LP} error grabbing event data from API -> {e}")
-                raise e
+                # recurse
+                if self._event_data_recursions < 3:
+                    self._event_data_recursions += 1
+                    await self._grab_event_data(msg="retrying to grab event data...")
+                else:
+                    logger.error(
+                        f"{LP} max recursions reached trying to grab event data, aborting!"
+                    )
+                    raise RuntimeError(
+                        f"{LP} max recursions reached trying to grab event data, aborting!"
+                    )
             else:
                 self.event_tot_frames = int(g.Event.get("Frames", 0))
                 self.event_end_datetime = g.Event.get("EndDateTime", "")
@@ -181,11 +192,11 @@ class PipeLine:
 
     async def image_generator(self):
         """Generator to return images from the source"""
-        logger.debug(f"{LP}image_generator: STARTING {self.frames_processed = } ---- {self.total_max_frames = } ::: {self.frames_processed < self.total_max_frames = }")
-        while self.frames_processed < self.total_max_frames:
+        logger.debug(f"{LP}image_generator: STARTING {self.frames_attempted = } ---- {self.total_max_frames = } ::: {self.frames_attempted < self.total_max_frames = }")
+        while self.frames_attempted < self.total_max_frames:
             yield await self.get_image()
-            logger.debug(f"{LP}image_generator: AFTER YIELD {self.frames_processed = } ---- {self.total_max_frames = } ::: {self.frames_processed < self.total_max_frames = }")
-
+            logger.debug(
+                f"{LP}image_generator: AFTER YIELD {self.frames_attempted = } ---- {self.total_max_frames = } ::: {self.frames_attempted < self.total_max_frames = }")
 
 
 class APIImagePipeLine(PipeLine):
@@ -238,7 +249,7 @@ class APIImagePipeLine(PipeLine):
 
         response: Optional[aiohttp.ClientResponse] = None
         lp = f"{LP}read:"
-        if self.frames_processed > 0:
+        if self.frames_attempted > 0:
             logger.debug(
                 f"{lp} [{self.frames_processed}/{self.total_max_frames} frames processed: {self._processed_fids}] "
                 f"- [{self.frames_skipped}/{self.total_max_frames} frames skipped: {self._skipped_fids}] - "
@@ -246,8 +257,12 @@ class APIImagePipeLine(PipeLine):
             )
         else:
             logger.debug(f"{lp} processing first frame!")
+            _msg = f"{lp} checking snapshot ids enabled, will check every {self.options.snapshot_frame_skip} frames"
+            if g.past_event:
+                _msg = (f"{lp} this is a past event (not live), skipping snapshot "
+                        f"id checks (snapshot frame ID will not change)")
             logger.debug(
-                f"{lp} checking snapshot ids enabled!"
+                _msg
             ) if self.options.check_snapshots else None
 
         curr_snapshot = None
@@ -280,7 +295,7 @@ class APIImagePipeLine(PipeLine):
             )
             return self._process_frame(skip=True)
         #  SET URL TO GRAB IMAGE FROM 
-        logger.debug(f"Calculated Frame ID as {self.current_frame}")
+        logger.debug(f"Calculated Frame ID as: {self.current_frame}")
         fid_url = f"{g.api.portal_base_url}/index.php?view=image&eid={g.eid}&fid={self.current_frame}"
 
         for image_grab_attempt in range(self.max_attempts):
