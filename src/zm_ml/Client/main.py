@@ -912,7 +912,9 @@ class ZMClient:
                     _decoded = jwt.get_unverified_claims(ml_token)
                     _expire = _decoded.get("exp")
                     expire_at = datetime.fromtimestamp(float(_expire))
-                    logger.debug(f"{lp} ZoMi token expires at: {expire_at} (TYPE: {type(_expire)})")
+                    logger.debug(
+                        f"{lp} ZoMi token expires at: {expire_at} (TYPE: {type(_expire)})"
+                    )
                     if _expire:
                         if expire_at < datetime.now() - timedelta(minutes=5):
                             logger.debug(
@@ -923,7 +925,6 @@ class ZMClient:
                             logger.debug(f"{lp} Cached token should still be valid!")
 
         import aiohttp
-
 
         image_loop = 0
         # todo: add relogin logic if the token is rejected.
@@ -946,8 +947,11 @@ class ZMClient:
                 # it is a body request with username and password
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
-                            f"{str(route.host)}login",
-                            data={"username": ml_user, "password": ml_pass.get_secret_value()},
+                        f"{str(route.host)}login",
+                        data={
+                            "username": ml_user,
+                            "password": ml_pass.get_secret_value(),
+                        },
                     ) as r:
                         status = r.status
                         if status == 200:
@@ -961,7 +965,9 @@ class ZMClient:
                                 try:
                                     pickle.dump(ml_token_data, token_cache.open("wb"))
                                 except Exception as e:
-                                    logger.error(f"{lp} Error saving token to cache: {e}")
+                                    logger.error(
+                                        f"{lp} Error saving token to cache: {e}"
+                                    )
                                 else:
                                     logger.debug(
                                         f"{lp} Token saved to cache: {token_cache}"
@@ -1052,6 +1058,11 @@ class ZMClient:
                 except Exception as e:
                     logger.error(f"{lp} Error sending image to API: {e}")
                     continue
+
+            logger.debug(
+                f"{lp}perf:: HTTP Detection request to '{route.name}' completed in "
+                f"{perf_counter() - _perf:.5f} seconds"
+            )
 
             if any([img_pull_method.api.enabled, img_pull_method.zms.enabled]):
                 assert isinstance(
@@ -1198,10 +1209,6 @@ class ZMClient:
                     )
                     break
 
-            logger.debug(
-                f"{lp}perf:: HTTP Detection request to '{route.name}' completed in "
-                f"{perf_counter() - _perf:.5f} seconds // {image_name=}"
-            )
             if strategy == MatchStrategy.first and matched_l:
                 logger.debug(
                     f"Strategy is 'first' and there is a filtered match, breaking out of image loop {image_loop}"
@@ -1721,7 +1728,9 @@ class ZMClient:
                     logger.debug(
                         f"{__lp} bbox: {list(zip(*bbox_polygon.exterior.coords.xy))[:-1]}"
                     )
-                    logger.debug(f"{__lp} zone: {list(zip(*zone_polygon.exterior.coords.xy))[:-1]}")
+                    logger.debug(
+                        f"{__lp} zone: {list(zip(*zone_polygon.exterior.coords.xy))[:-1]}"
+                    )
 
                 # logger.debug(
                 #     f"\n---------------------END OF ZONE LOOP # {idx} ---------------------"
