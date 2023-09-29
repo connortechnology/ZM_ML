@@ -114,7 +114,7 @@ class ZMDB:
                         _data = zm_conf_file.read()
                         config_file.read_string(f"[zm_root]\n{_data}")
             except Exception as exc:
-                logger.error(f"{LP} error opening ZoneMinder .conf files! -> {files}")
+                logger.error(f"{LP} error opening ZoneMinder .conf files: {exc}")
             else:
                 logger.debug(f"{LP} ZoneMinder .conf files -> {files}")
                 for section in config_file.sections():
