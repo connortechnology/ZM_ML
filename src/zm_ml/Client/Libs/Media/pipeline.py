@@ -275,12 +275,18 @@ class APIImagePipeLine(PipeLine):
             ):
                 await self._grab_event_data(msg=f"grabbing data for snapshot comparisons...")
                 if curr_snapshot := int(g.Event.get("MaxScoreFrameId", 0)):
-                    if self.last_snapshot_id and curr_snapshot > self.last_snapshot_id:
-                        logger.debug(
-                            f"{lp} current snapshot frame id is not the same as the last snapshot id "
-                            f"CURR:{curr_snapshot} - PREV:{self.last_snapshot_id}, grabbing new snapshot image"
-                        )
-                        self.current_frame = curr_snapshot
+                    if self.last_snapshot_id:
+                        if curr_snapshot > self.last_snapshot_id:
+                            logger.debug(
+                                f"{lp} current snapshot frame id is not the same as the last snapshot id "
+                                f"CURR:{curr_snapshot} - PREV:{self.last_snapshot_id}, grabbing new snapshot image"
+                            )
+                            self.current_frame = curr_snapshot
+                        else:
+                            logger.debug(
+                                f"{lp} current snapshot frame id is the same as the last snapshot id "
+                                f"CURR:{curr_snapshot} - PREV:{self.last_snapshot_id}, skipping frame"
+                            )
                     self.last_snapshot_id = curr_snapshot
                 else:
                     logger.warning(
