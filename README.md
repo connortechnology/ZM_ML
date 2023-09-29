@@ -70,11 +70,18 @@ See the Wiki for [Manual Installation](https://github.com/baudneo/ZM_ML/wiki/Man
 See the Wiki for [Bootstrap](https://github.com/baudneo/ZM_ML/wiki/Manual-Installation#bootstrap) instructions.
 
 # Server info
-1. Based on [FastAPI](https://fastapi.tiangolo.com/ "FastAPI") (With all the Pydantic goodness!)
-2. OpenCV DNN for CPU/GPU
+1. Based on [FastAPI](https://fastapi.tiangolo.com/ "FastAPI") (With all the Pydantic v2 goodness!)
+2. ML frameworks supported:
+    - OpenCV DNN for CPU/GPU (darknet)
+    - Torch
+    - ONNX Runtime
+    - pycoral/tflite (for TPU)
+    - TensorRT
+    - Ultralytics
+    - SuperGradients (WIP)
+
 3. [OpenALPR](https://github.com/openalpr/openalpr) local binary supported (Must compile OpenALPR with CUDA for GPU support)
 4. Cloud ALPR integrations. [[See notes](#_cloud-alpr_)]
-5. [pycoral](https://github.com/google-coral/pycoral) (tflite) for TPU support.
 6. DLib based [face-recognition](https://github.com/ageitgey/face_recognition) (GPU Recommended)
 7. Run locally on ZoneMinder machine or deploy to a remote machine.
 8. Docker images! [Docker Hub](https://hub.docker.com/repository/docker/baudneo/zm_ml)
@@ -83,11 +90,12 @@ See the Wiki for [Bootstrap](https://github.com/baudneo/ZM_ML/wiki/Manual-Instal
 
 :warning: **NOTE:** If you do a manual install and want GPU accelration, you will need to compiel OpenCV, DLib and OpenALPR with CUDA support! 
 
-1. AMD GPU's (ROCm) are __NOT__ supported, blame AMD.
+1. AMD GPU's (ROCm) are __CURRENTLY NOT__ supported, this may change in the future when more frameworkjs integrate ROCm.
 2. Intel ARC/iGPU's are __CURRENTLY NOT__ supported. (this may change as I am working on OpenVINO support)
 3. NVidia GPUs are supported. (CUDA)
    - GPU must be Compute Capability 5.3+
    - See [here](https://developer.nvidia.com/cuda-gpus#compute) for a list of GPUs and their Compute Capability
+   - Jetson *should* work, but is untested.
 4. Coral.ai Google edgeTPU Accelerator (USB is confirmed, M.2/PCIe needs testing)
 5. CPU
 
