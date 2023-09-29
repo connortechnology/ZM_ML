@@ -243,7 +243,6 @@ class UserDB:
                 if user.disabled:
                     logger.warning(f"{lp} User {username} is disabled")
                     raise HTTPException(status_code=400, detail="User has been marked as disabled")
-            logger.debug(f"DBG>>>> returning user: {user}")
             return user
         else:
             logger.warning(f"{lp} User {username} not found")
