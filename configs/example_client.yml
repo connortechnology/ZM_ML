@@ -415,12 +415,25 @@ notifications:
     # - Path to the script to run
     script: ${DATA_DIR}/scripts/notify.sh
 
+
+
     # - A list of arguments to pass to the script, order matters
     # - > NOT IMPLEMENTED YET <
+
+    # - Pass the JWT token to the script in any URL that requires it.
+    # - NOTE: The script will see your token in plain text, so make sure you trust the script.
+    pass_token: no
+
+    # - Pass the username and password to the script in any URL that requires it.
+    # - This should only be used in extreme cases where a token may expire by the time you call a delayed task.
+    # - This will pass credentials in plain text to the script. May god have mercy on your soul.
+    pass_creds: no
+
     args:
       - mid  # Monitor ID
       - eid  # Event ID
       - fmt_str  # "[166] :detected:person(54%-yolov7x[gpu])"
+      # If ZM is protected by auth,
       - event_url # https://zm.example.com/zm/index.php?view=event&eid=166
       - event_system_path # /var/lib/zoneminder/events/1/etc
       - results  # [ {label: person, conf: 0.68, bbox: (x, y, x2, y2)},  ]
@@ -438,9 +451,9 @@ label_groups:
     - car
     - truck
     - bus
-    - motorbike
+    - motorcycle
     - boat
-  # - For face detection/recognition
+  # - For face detection/recognition. Train the faces and name them.
   friends:
     - Bart
     - Maggie
@@ -449,17 +462,23 @@ label_groups:
     - Nelson
     - Sideshow Bob
     - Mr. Burns
-  # - For ALPR
+
+  # - All patterns support regex!
   my_plates:
-    - 1ABC123
+    - 1ABC([0-9])?23
     - 2DEF456
     - 3GHI789
   suspicious_plates:
-    - 4N47K1NG
+    - CR1M3L0RD
     - 5H4D0W
-    - PEN15
+    - 1337H4X0R
 
 detection_settings:
+  # - Only run on events that were triggered by Motion or ZM Trigger.
+  # - This will skip "Continuous" events
+  motion_only: yes
+
+
   models:
     # - Models to run on all monitors
     # - NOTE: You can override these settings per monitor
