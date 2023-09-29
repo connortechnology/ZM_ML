@@ -1049,8 +1049,9 @@ class ZMAPI:
         """Exit the API session."""
         lp = f"{LP}close::"
         self.session.close()
-        if self.async_session.closed:
-            logger.debug(f"{lp} async session already closed")
-        else:
-            await self.async_session.close()
+        if self.async_session:
+            if self.async_session.closed:
+                logger.debug(f"{lp} async session already closed")
+            else:
+                await self.async_session.close()
         logger.debug(f"{lp} sessions closed")
