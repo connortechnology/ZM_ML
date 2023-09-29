@@ -702,22 +702,50 @@ class MLAPI:
         cf_ips = cf_ipv4 + cf_ipv6
         return cf_ips
 
+    def _breakdown_subnets(self, ip_list: List[str]) -> List[str]:
+        """Breakdown a list of IP ranges into individual IPs
+
+        gunicorn < 22.0 does not support subnets in forwarded_allow_ips"""
+        ips = []
+        if ip_list:
+            logger.debug(f"Breaking down subnets: {ip_list}")
+            from ipaddress import ip_network
+
+            for ip in ip_list:
+                if "/" in ip:
+                    logger.debug(f"Breaking down subnet: {ip}")
+                    _append = [str(ip) for ip in ip_network(ip).hosts()]
+                    logger.debug(f"Subnet breakdown: {_append}")
+                    ips += _append
+                else:
+                    ips.append(ip)
+
+        return ips
+
     def start(self):
         _avail = {}
+        forward_ips = self.cached_settings.uvicorn.forwarded_allow_ips
         forwarded_allow = []
-        forwarded_allow = [
-            str(x) for x in self.cached_settings.uvicorn.forwarded_allow_ips if x
-        ]
+        if forward_ips:
+            forwarded_allow = [
+                str(x) for x in forward_ips if x
+            ]
+            logger.debug(f"Added {len(forwarded_allow)} forwarded_allow hosts")
         if self.cached_settings.uvicorn.grab_cloudflare_ips:
             forwarded_allow += self._get_cf_ip_list()
             logger.debug(
                 f"Grabbed Cloudflare IP ranges to append to forwarded_allow hosts"
             )
+        _proxy_headers = get_global_config().config.uvicorn.proxy_headers
+        # logger.debug(f"\n\nforwarded_allow: {forwarded_allow}\n\n{_proxy_headers = }\n")
         for model in get_global_config().available_models:
             _avail[normalize_id(model.name)] = str(model.id)
         logger.info(f"AVAILABLE MODELS! --> {_avail}")
         server_cfg = get_global_config().config.server
         logger.debug(f"Server Config: {server_cfg}")
+        # This takes forever when breaking down cloudflare ip subnets.
+        # Wait for
+        # forwarded_allow = self._breakdown_subnets(forwarded_allow)
         config = uvicorn.Config(
             app="zm_ml.Server.app:app",
             host=str(server_cfg.address),
@@ -728,7 +756,7 @@ class MLAPI:
                 "disable_existing_loggers": False,
             },
             log_level="debug",
-            proxy_headers=get_global_config().config.uvicorn.proxy_headers,
+            proxy_headers=_proxy_headers,
             # reload=False,
             # reload_dirs=[
             #     str(self.cfg_file.parent.parent / "src/zm_ml/Server"),
