@@ -213,6 +213,9 @@ class MLNotificationSettings(BaseModel):
         script: Optional[str] = None
         cooldown: Optional[CoolDownSettings] = Field(default_factory=CoolDownSettings)
         I_AM_AWARE_OF_THE_DANGER_OF_RUNNING_SHELL_SCRIPTS: Optional[str] = "No I am not"
+        # TODO: ARGS and AUTH
+        pass_token: Optional[bool] = Field(False, description="Pass JWT to script")
+        pass_creds: Optional[bool] = Field(False, description="Pass username and password to script")
         args: Optional[List[str]] = None
 
     class MQTTNotificationSettings(DefaultNotEnabled):
