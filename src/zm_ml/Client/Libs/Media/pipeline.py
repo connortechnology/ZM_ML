@@ -303,13 +303,15 @@ class APIImagePipeLine(PipeLine):
         #  SET URL TO GRAB IMAGE FROM 
         logger.debug(f"Calculated Frame ID as: {self.current_frame}")
         fid_url = f"{g.api.portal_base_url}/index.php?view=image&eid={g.eid}&fid={self.current_frame}"
+        timeout = g.config.detection_settings.images.pull_method.api.timeout
 
         for image_grab_attempt in range(self.max_attempts):
             image_grab_attempt += 1
             logger.debug(
                 f"{lp} attempt #{image_grab_attempt}/{self.max_attempts} to grab image ID: {self.current_frame}"
             )
-            api_response = await g.api.make_async_request(fid_url)
+
+            api_response = await g.api.make_async_request(fid_url, timeout=timeout)
             if isinstance(api_response, bytes) and api_response.startswith(
                 b"\xff\xd8\xff"
             ):
@@ -431,6 +433,7 @@ class ZMSImagePipeLine(PipeLine):
         url = f"{self.url}?mode=jpeg&event={g.eid}&frame={self.current_frame}&connkey={random.randint(100000, 999999)}"
 
         # run an async for loop
+        timeout = g.config.detection_settings.images.pull_method.zms.timeout
 
         for image_grab_attempt in range(self.max_attempts):
             image_grab_attempt += 1
@@ -438,7 +441,7 @@ class ZMSImagePipeLine(PipeLine):
                 f"{lp} attempt #{image_grab_attempt}/{self.max_attempts} to grab image ID: {self.current_frame}"
             )
             logger.debug(f"{lp} URL: {url}")
-            api_response = await g.api.make_async_request(url=url, type_action="post")
+            api_response = await g.api.make_async_request(url=url, type_action="post", timeout=timeout)
             # Cover unset and None
             if not api_response:
                 resp_msg = ""

@@ -763,7 +763,7 @@ class ZMClient:
                 cause = self.db.cause_from_eid(eid)
                 _cont = True
                 if cause:
-                    if cause.find("Motion") == -1 and cause.find("Trigger") == -1:
+                    if cause.find("Motion") == -1 and cause.find("Trigger") == -1 and cause.find("ONVIF"):
                         _cont = False
                     else:
                         _cont = True
@@ -956,9 +956,6 @@ class ZMClient:
                         status = r.status
                         if status == 200:
                             resp = await r.json()
-                            # {'access_token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6
-                            #   IkpXVCJ9.eyJzdWIiOiJiYXVkbmVvIiwiZXhwIjoiMTY5NTMwMDAzNiJ9.KELBopJqxM893xQVqVrnKjKA3WA4MKLE4rjbM6zBuEI', 'token_type': 'bearer', 'expire
-                            #   ': '2023-09-21T12:40:36.095057Z'}
                             if ml_token := resp.get("access_token"):
                                 ml_token_data = resp
                                 logger.info(f"{lp} Login successful to ZoMi ML API")

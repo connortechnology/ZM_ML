@@ -627,6 +627,7 @@ class ZMAPI:
         zms_req: bool = False,
         re_auth: bool = True,
         quiet: bool = False,
+        timeout: int = 15,
     ):
         lp: str = f"api::async {type_action}::"
         if not self.async_session:
@@ -863,7 +864,7 @@ class ZMAPI:
                 params=query,
                 ssl=ssl,
                 headers=headers,
-                timeout=aiohttp.ClientTimeout(total=5),
+                timeout=aiohttp.ClientTimeout(total=timeout),
             ) as r:
                 return await parse_response(r)
         elif type_action == "post":
@@ -873,7 +874,7 @@ class ZMAPI:
                 params=query,
                 ssl=ssl,
                 headers=headers,
-                timeout=aiohttp.ClientTimeout(total=5),
+                timeout=aiohttp.ClientTimeout(total=timeout),
             ) as r:
                 return await parse_response(r)
         elif type_action == "put":
@@ -883,7 +884,7 @@ class ZMAPI:
                 params=query,
                 ssl=ssl,
                 headers=headers,
-                timeout=aiohttp.ClientTimeout(total=5),
+                timeout=aiohttp.ClientTimeout(total=timeout),
             ) as r:
                 return await parse_response(r)
         elif type_action == "delete":
@@ -893,7 +894,7 @@ class ZMAPI:
                 params=query,
                 ssl=ssl,
                 headers=headers,
-                timeout=aiohttp.ClientTimeout(total=5),
+                timeout=aiohttp.ClientTimeout(total=timeout),
             ) as r:
                 return await parse_response(r)
         else:

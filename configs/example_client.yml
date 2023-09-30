@@ -516,6 +516,8 @@ detection_settings:
       # - API WORKS
       api:
         enabled: yes
+        # Timeout in seconds for image grab request
+        timeout: 15
         # - How many frames per second should be grabbed to run Object Detection on (Default: 1)
         # - the monitors capturing FPS is grabbed from ZM and used to calculate the frame id to grab.
         fps: 1
@@ -545,7 +547,11 @@ detection_settings:
       # - ZMS is the CGI api that comes with ZM. This may end up being the default method.
       zms:
         enabled: no
+        # - Timeout in seconds for image grab request
+        timeout: 15
+
         # - The complete URL to zms cgi script (i.e.: https://zm.example.com/zm/cgi-bin/nph-zms)
+        # - If not supplied it tries to use the portal_url and api_url to construct it
         #url:
 
         # How many frames per second should be grabbed to run Object Detection on (Default: 1)

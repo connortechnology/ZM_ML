@@ -271,6 +271,7 @@ class APIPullMethod(DefaultNotEnabled):
     check_snapshots: Optional[bool] = Field(True)
     snapshot_frame_skip: Optional[int] = Field(3)
     max_frames: Optional[int] = Field(0)
+    timeout: Optional[int] = Field(10)
     _lp: str = Field("", description='logging prefix', repr=False)
 
 
@@ -302,6 +303,7 @@ class ZMSPullMethod(DefaultNotEnabled):
     attempts: Optional[int] = Field(3, description="Number of attempts to get a frame")
     delay: Optional[float] = Field(1.0, description="Delay between attempts")
     max_frames: Optional[int] = Field(0, description="Maximum number of frames to process")
+    timeout: Optional[int] = Field(10)
 
     _lp: str = Field("", description='logging prefix', repr=False)
 
