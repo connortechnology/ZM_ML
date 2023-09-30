@@ -720,6 +720,16 @@ class ZMAPI:
                             logger.debug(
                                 f"{lp} DBG>>> ZMS CGI response: {_resp[:min(100, len(_resp)-1)]}"
                             )
+                            # remove boundary from response
+                            if boundary:
+                                if _resp.startswith(boundary):
+                                    _resp = _resp.split(boundary)[1]
+                                    logger.debug(
+                                        f"{lp} stripping out boundary from response ---- AFTER: {_resp[:min(100, len(_resp) - 1)]}"
+                                    )
+                            # b'--ZoneMinderFrame\r\nContent-Typ
+                            #   e: image/jpeg\r\nContent-Length: 134116\r\n\r\n\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xdb\x00C\x00\n\
+                            #   x07\x07\x08'
                             if _resp.startswith(b'Content-Type: image/jpeg'):
                                 split_resp = _resp.split(b"\r\n\r\n")
                                 logger.debug(f"{lp} stripping out nph headers from response - {len(split_resp) = }")
