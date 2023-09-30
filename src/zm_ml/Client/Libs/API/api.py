@@ -723,7 +723,7 @@ class ZMAPI:
                             # remove boundary from response
                             if boundary:
                                 if _resp.startswith(boundary):
-                                    _resp = _resp.split(boundary)[1]
+                                    _resp = _resp.split(boundary + b"\r\n")[1]
                                     logger.debug(
                                         f"{lp} stripping out boundary from response ---- AFTER: {_resp[:min(100, len(_resp) - 1)]}"
                                     )
