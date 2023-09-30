@@ -395,7 +395,10 @@ class ZMSImagePipeLine(PipeLine):
             )
             cgi_sys_path = Path(g.db.cgi_path)
             # ZM_PATH_CGI=/usr/lib/zoneminder/cgi-bin
-            self.url = f"{g.api.portal_base_url}/{cgi_sys_path.name}/nph-zms"
+            portal_url = g.api.portal_base_url
+            if portal_url.endswith("/"):
+                portal_url = portal_url[:-1]
+            self.url = f"{portal_url}/{cgi_sys_path.name}/nph-zms"
 
     async def get_image(self) -> Tuple[Optional[Union[bytes, bool]], Optional[str]]:
         if self.frames_attempted >= self.total_max_frames:
