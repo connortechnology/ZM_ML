@@ -395,7 +395,7 @@ class ZMSImagePipeLine(PipeLine):
             )
             cgi_sys_path = Path(g.db.cgi_path)
             # ZM_PATH_CGI=/usr/lib/zoneminder/cgi-bin
-            portal_url = g.api.portal_base_url
+            portal_url = str(g.api.portal_base_url)
             if portal_url.endswith("/"):
                 portal_url = portal_url[:-1]
             self.url = f"{portal_url}/{cgi_sys_path.name}/nph-zms"
