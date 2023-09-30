@@ -772,8 +772,13 @@ class ZMAPI:
                     logger.debug(
                         f"{lp} NOT 200|401|404 SOOOOOOOOOOOOOOOO Code={resp_status} error: {err}"
                     )
+
             except asyncio.TimeoutError as err:
                 logger.error(f"{lp} Timeout error: {err}", exc_info=True)
+
+            except Exception as err:
+                logger.error(f"{lp} Exception: {err}", exc_info=True)
+
             else:
 
                 # logger.debug(
