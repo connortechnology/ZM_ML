@@ -710,7 +710,8 @@ class ZMAPI:
 
                                 _resp += chunk
                         else:
-                            await resp.read()
+                            logger.debug(f"DBG FOR ZMS >>>>> non chunked response! doing a read()")
+                            _resp = await resp.read()
                         # split out nph headers from response
                         # example_response = b"Content-Type: image/jpeg\r\nContent-Length: 373781\r\n\r\n\xff\xd8\xff\xe0"
 
