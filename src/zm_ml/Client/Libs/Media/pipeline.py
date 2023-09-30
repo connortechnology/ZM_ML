@@ -389,7 +389,7 @@ class ZMSImagePipeLine(PipeLine):
         self.fps: Optional[int] = self.options.fps
         # We don't know how long an event will be so set an upper limit of at least
         # pre- + post-buffers calculated as seconds because we are pulling 1 FPS
-        self.total_max_frames = min(self.options.max_frames, self.total_min_frames)
+        self.total_max_frames = self.options.max_frames
 
         # Process URL, if it is empty grab API portal and append default path
         if not self.url:
