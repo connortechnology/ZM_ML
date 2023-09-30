@@ -302,10 +302,13 @@ class APIImagePipeLine(PipeLine):
             return self._process_frame(skip=True)
         #  SET URL TO GRAB IMAGE FROM 
         logger.debug(f"Calculated Frame ID as: {self.current_frame}")
-        fid_url = f"{g.api.portal_base_url}/index.php?view=image&eid={g.eid}&fid={self.current_frame}"
-        timeout = g.config.detection_settings.images.pull_method.api.timeout
+        portal_url = str(g.api.portal_base_url)
+        if portal_url.endswith("/"):
+            portal_url = portal_url[:-1]
+        fid_url = f"{portal_url}/index.php?view=image&eid={g.eid}&fid={self.current_frame}"
+        timeout = g.config.detection_settings.images.pull_method.api.timeout or 15
 
-        for image_grab_attempt in range(self.max_attempts):
+        async for image_grab_attempt in range(self.max_attempts):
             image_grab_attempt += 1
             logger.debug(
                 f"{lp} attempt #{image_grab_attempt}/{self.max_attempts} to grab image ID: {self.current_frame}"

@@ -669,6 +669,8 @@ class ZMAPI:
                         logger.debug(
                             f"{lp} Content-Type='{content_type}' (ZMS CGI?)"
                         )
+                        logger.debug(f"DBG FOR ZMS >>>>> HEADERS: {resp.headers}")
+
                         if "boundary=" in content_type:
                             boundary = f"{content_type.split('boundary=')[1]}".encode()
                             logger.debug(
