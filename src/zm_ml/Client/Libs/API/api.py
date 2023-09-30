@@ -631,9 +631,8 @@ class ZMAPI:
     ):
         lp: str = f"api::async {type_action}::"
         if not self.async_session:
-            import uvloop
 
-            self.async_session = aiohttp.ClientSession(loop=uvloop.new_event_loop())
+            self.async_session = aiohttp.ClientSession()
         ssl = self.config.ssl_verify
         if ssl is not False:
             ssl = None
