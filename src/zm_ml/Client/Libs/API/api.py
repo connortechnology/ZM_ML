@@ -716,6 +716,10 @@ class ZMAPI:
                         # example_response = b"Content-Type: image/jpeg\r\nContent-Length: 373781\r\n\r\n\xff\xd8\xff\xe0"
 
                         if _resp:
+                            # only show the first 100 chars if it is that long
+                            logger.debug(
+                                f"{lp} DBG>>> ZMS CGI response: {_resp[:min(100, len(_resp)-1)]}"
+                            )
                             if _resp.startswith(b'Content-Type: image/jpeg'):
                                 split_resp = _resp.split(b"\r\n\r\n")
                                 logger.debug(f"{lp} stripping out nph headers from response - {len(split_resp) = }")
@@ -744,6 +748,8 @@ class ZMAPI:
                                                 f"{lp} DBG>>> UPDATING 'content-length' headers with nph response - "
                                                 f"{content_length}"
                                             )
+                        else:
+                            logger.warning(f"{lp} no response from ZMS CGI? {_resp = }")
 
                     else:
                         _resp = await resp.read()
@@ -777,10 +783,10 @@ class ZMAPI:
                     )
 
             except asyncio.TimeoutError as err:
-                logger.error(f"{lp} Timeout error: {err}", exc_info=True)
+                logger.error(f"{lp} asyncio.TimeoutError: {err}", exc_info=True)
 
             except Exception as err:
-                logger.error(f"{lp} Exception: {err}", exc_info=True)
+                logger.error(f"{lp} Generic Exception: {err}", exc_info=True)
 
             else:
 
