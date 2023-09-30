@@ -4,6 +4,7 @@ import logging
 import mmap
 import random
 import struct
+import time
 from collections import namedtuple
 from decimal import Decimal
 from enum import IntEnum
@@ -313,8 +314,11 @@ class APIImagePipeLine(PipeLine):
             logger.debug(
                 f"{lp} attempt #{image_grab_attempt}/{self.max_attempts} to grab image ID: {self.current_frame}"
             )
-
+            _perf = time.perf_counter()
             api_response = await g.api.make_async_request(fid_url, timeout=timeout)
+            logger.debug(
+                f"perf:{lp} API request took {time.perf_counter() - _perf:.5f)} seconds"
+            )
             if isinstance(api_response, bytes) and api_response.startswith(
                 b"\xff\xd8\xff"
             ):
@@ -447,7 +451,9 @@ class ZMSImagePipeLine(PipeLine):
                 f"{lp} attempt #{image_grab_attempt}/{self.max_attempts} to grab image ID: {self.current_frame}"
             )
             logger.debug(f"{lp} URL: {url}")
+            _perf = time.perf_counter()
             api_response = await g.api.make_async_request(url=url, type_action="post", timeout=timeout)
+            logger.debug(f"perf:{lp} ZMS request took: {time.perf_counter() - _perf:.5f}")
             # Cover unset and None
             if not api_response:
                 resp_msg = ""
