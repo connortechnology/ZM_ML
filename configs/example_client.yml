@@ -474,14 +474,14 @@ label_groups:
     - 1337H4X0R
 
 detection_settings:
-  # - Only run on events that were triggered by Motion or ZM Trigger.
+  # - Only run on events that were triggered by Motion, ZM Trigger or ONVIF.
   # - This will skip "Continuous" events
   motion_only: yes
 
 
   models:
     # - Models to run on all monitors
-    # - NOTE: You can override these settings per monitor
+    # - NOTE: You can override these settings per monitor in monitors: section
     yolov4 tiny:
     yolov7 tiny:
 
@@ -489,7 +489,7 @@ detection_settings:
   detect_color:
     # - GLOBAL:: This will detect color for all monitors, can be overridden per monitor and per zone.
     enabled: yes
-    # - Top X colors to detect (Default: 3)
+    # - Top N colors to detect (Default: 3)
     top_n: 3
     # - Only detect the color of these labels (label_groups supported)
     labels:
@@ -513,7 +513,7 @@ detection_settings:
       # - SHM scans shared memory for the image buffer, this may be the fastest method
       shm: no
 
-      # - API WORKS
+      # - API works but is slower.
       api:
         enabled: yes
         # Timeout in seconds for image grab request
@@ -544,7 +544,7 @@ detection_settings:
       # - ZMU is a binary that comes with ZM
       zmu: no
 
-      # - ZMS is the CGI api that comes with ZM. This may end up being the default method.
+      # - ZMS is the CGI app that comes with ZM. This may end up being the default method.
       zms:
         enabled: no
         # - Timeout in seconds for image grab request
