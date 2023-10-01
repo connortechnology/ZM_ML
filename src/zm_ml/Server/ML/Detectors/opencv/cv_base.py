@@ -10,9 +10,17 @@ import numpy as np
 from ...file_locks import FileLock
 
 from zm_ml.Server.Log import SERVER_LOGGER_NAME
+
 if TYPE_CHECKING:
-    from ....Models.config import BaseModelOptions, CV2YOLOModelOptions, CV2TFModelOptions, BaseModelConfig, \
-        CV2YOLOModelConfig, CV2HOGModelConfig, CV2TFModelConfig
+    from ....Models.config import (
+        BaseModelOptions,
+        CV2YOLOModelOptions,
+        CV2TFModelOptions,
+        BaseModelConfig,
+        CV2YOLOModelConfig,
+        CV2HOGModelConfig,
+        CV2TFModelConfig,
+    )
 
 
 logger = getLogger(SERVER_LOGGER_NAME)
@@ -20,19 +28,24 @@ LP: str = "OpenCV DNN:"
 
 
 class CV2Base(FileLock):
-    def __init__(self, model_config: Union[CV2YOLOModelConfig, CV2TFModelConfig, CV2HOGModelConfig]):
+    def __init__(
+        self,
+        model_config: Union[CV2YOLOModelConfig, CV2TFModelConfig, CV2HOGModelConfig],
+    ):
         super().__init__()
         if not model_config:
             raise ValueError(f"{LP} no config passed!")
         # Model init params
         self.config = model_config
-        self.options: Union[CV2YOLOModelOptions, CV2TFModelOptions, BaseModelOptions] = self.config.detection_options
+        self.options: Union[
+            CV2YOLOModelOptions, CV2TFModelOptions, BaseModelOptions
+        ] = self.config.detection_options
         self.processor: ModelProcessor = self.config.processor
         self.name = self.config.name
         self.net: Optional[cv2.dnn] = None
         self.model = None
         self.id = self.config.id
-
+        self.description = self.config.description
 
     def square_image(self, frame: np.ndarray):
         """Zero pad the matrix to make the image squared"""
@@ -78,8 +91,8 @@ class CV2Base(FileLock):
                 if self.config.cv2_cuda_fp_16:
                     self.net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA_FP16)
                     logger.debug(
-                        f"{LP} '{self.name}' half precision floating point (FP16) cuDNN target enabled (turn this off if it"
-                        f" makes detections slower or you see 'NaN' errors!)"
+                        f"{LP} '{self.name}' half precision floating point (FP16) cuDNN target enabled (turn this "
+                        f"off if it makes detections slower or you see 'NaN' errors!)"
                     )
                 else:
                     self.net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
