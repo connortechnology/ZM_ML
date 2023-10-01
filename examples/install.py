@@ -400,7 +400,7 @@ def parse_cli():
         action="store_true",
         dest="pip_install_editable",
         help="Use the --editable flag when installing via pip (a git pull will update "
-             "the installed package) BE AWARE: you must keep the git source directory intact for this to work",
+        "the installed package) BE AWARE: you must keep the git source directory intact for this to work",
     )
     parser.add_argument(
         "--zm-portal",
@@ -1133,10 +1133,11 @@ def main():
             "scripts",
             "images",
             "locks",
-            "unknown_faces",
-            "known_faces",
             "bin",
         ],
+    )
+    install_dirs(
+        DEFAULT_DATA_DIR + "/face_data", "Face Data", sub_dirs=["known", "unknown"]
     )
     install_dirs(
         cfg_dir, DEFAULT_CONFIG_DIR, "Config", sub_dirs=[], perms=cfg_create_mode
@@ -1218,8 +1219,10 @@ def do_install(_inst_type: str):
         logger.info("Disabling pip cache...")
         _pip_prefix.append("--no-cache-dir")
     if args.pip_install_editable:
-        logger.info("Installing in pip --editable mode, DO NOT remove the source git"
-                    " directory after install! git pull will update the installed package")
+        logger.info(
+            "Installing in pip --editable mode, DO NOT remove the source git"
+            " directory after install! git pull will update the installed package"
+        )
         _pip_prefix.append("--editable")
     if _inst_type != "secrets":
         install_host_dependencies(_inst_type)
