@@ -283,10 +283,10 @@ models:
       # - Max width of image to feed the model (scaling applied)
       max_size: 600
       # - Source dir where known faces are stored.
-      dir: "${DATA_DIR}/known_faces"
+      dir: "${DATA_DIR}/face_data/known"
 
     # - An unknown face is a detected face that does not match any known faces
-    # - Can possibly use the unknown face to train a new face
+    # - Can possibly use the unknown face to train a new face depending on the quality of the cropped image
     unknown_faces:
       enabled: yes
       # - The label to give an unknown face
@@ -294,7 +294,7 @@ models:
       # - When cropping an unknown face from the frame, how many pixels to add to each side
       leeway_pixels: 10
       # - Where to save unknown faces
-      dir: "${DATA_DIR}/unknown_faces"
+      dir: "${DATA_DIR}/face_data/unknown"
 
     detection_options:
       # - 'cnn' is more accurate but slower on CPUs. 'hog' is faster but less accurate
@@ -303,11 +303,11 @@ models:
       # - Confidence threshold for face DETECTION
       confidence: 0.5
 
-      # - How sure the model needs to be to classify a face as a known face
+      # - Confidence threshold for face RECOGNITION (comparing the detected face to known faces)
       recognition_threshold: 0.6
 
       # - How many times to upsample the image looking for faces.
-      # - Higher numbers find smaller faces but take longer.
+      # - Higher numbers find smaller faces but takes longer.
       upsample_times: 1
 
       # - How many times to re-sample the face when calculating encoding.
