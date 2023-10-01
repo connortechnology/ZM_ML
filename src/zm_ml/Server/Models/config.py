@@ -560,6 +560,7 @@ class CV2YOLOModelConfig(BaseModelConfig):
     cv2_cuda_fp_16: Optional[bool] = Field(
         False, description="model uses Floating Point 16 Backend (EXPERIMENTAL!)"
     )
+    gpu_idx: Optional[int] = Field(0, description="GPU Index to use")
 
     onnx_type: Optional[ONNXType] = Field(None, description="ONNX Model Type")
 
