@@ -8,7 +8,7 @@ program_name="mlapi_run"
 exec 2>&1
 
 # Move mlapi-config logic here for now
-# Why do mmjmnj km 8juni8m,nt oneshot r6 services obey timeout configs?
+# Why dont oneshot r6 services obey timeout configs?
 if [[ ! -f /zm_ml/conf/server.yml ]]; then
   echo "[${program_name}] Creating default ZM ML Server CONFIGURATION file by envsubst'ing \${ML_INSTALL_XYZ} templates"
   eval "python3.9 /opt/zm_ml/src/examples/install.py --dir-config /zm_ml/conf --dir-data /zm_ml/data --dir-log /zm_ml/logs --config-only --install-type server --debug --user www-data --group www-data"
@@ -30,7 +30,7 @@ fi
 
 if [[ ! -d /zm_ml/data/models/yolo && ! -d /zm_ml/data/models/coral_tpu ]]; then
   echo "[${program_name}] No yolo and coral_tpu model directory found, downloading ALL available models..."
-  DL_ALL_MODELS='true'
+#  DL_ALL_MODELS='true'
 fi
 
 if [[ "${DL_ALL_MODELS}" == 'true' || "${DL_ALL_MODELS}" -eq 1 || "${DL_ALL_MODELS}" == "1" ]]; then
