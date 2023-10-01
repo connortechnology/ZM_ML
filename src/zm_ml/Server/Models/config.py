@@ -255,7 +255,7 @@ class FaceRecognitionLibModelTrainingOptions(BaseModelOptions):
 
 class ALPRModelOptions(BaseModelOptions):
     max_size: Optional[int] = Field(
-        600,
+        None,
         ge=1,
         description="Maximum size (Width) of image to load into memory",
     )
