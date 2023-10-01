@@ -30,7 +30,10 @@ class CV2YOLODetector(CV2Base):
 
     def __init__(self, model_config: CV2YOLOModelConfig):
         super().__init__(model_config)
-        # self.is_locked: bool = False
+        self.gpu_idx = self.config.gpu_idx
+        if self.gpu_idx is None and self.processor == ModelProcessor.GPU:
+            logger.debug(f"{LP} GPU index not set, defaulting to 0")
+            self.gpu_idx = 0
         # Model init params not initialized in super()
         self.model: Optional[cv2.dnn.DetectionModel] = None
         # logger.debug(f"{LP} configuration: {self.config}")
@@ -80,9 +83,25 @@ class CV2YOLODetector(CV2Base):
                 scale=1 / 255, size=(self.config.width, self.config.height), swapRB=True
             )
             self.cv2_processor_check()
-            logger.debug(
-                f"{LP} set CUDA/cuDNN backend and target"
-            ) if self.processor == ModelProcessor.GPU else None
+            if self.processor == ModelProcessor.GPU:
+                logger.debug(f"{LP} set CUDA/cuDNN backend and target")
+                cuda_devs = cv2.cuda.getCudaEnabledDeviceCount()
+                choices = [x for x in range(cuda_devs)]
+                if self.gpu_idx in range(cuda_devs):
+                    logger.debug(
+                        f"{LP} Using GPU {cv2.cuda.printShortCudaDeviceInfo(self.gpu_idx)}"
+                    )
+                    cv2.cuda.setDevice(self.gpu_idx)
+                else:
+                    logger.warning(
+                        f"{LP} Invalid CUDA GPU index configured: {self.gpu_idx}"
+                    )
+                    if cuda_devs > 1:
+                        logger.info(
+                            f"{LP} Valid options for GPU are {choices}:"
+                        )
+                        for cuda_device in range(cuda_devs):
+                            cv2.cuda.printShortCudaDeviceInfo(cuda_device)
 
             logger.debug(
                 f"perf:{LP} '{self.name}' loading completed in {time.perf_counter() - load_timer:.5f} s"
@@ -143,10 +162,7 @@ class CV2YOLODetector(CV2Base):
             # OpenCV 4.7.0 Weird Error fixed with rolling fix
             # OpenCV:YOLO: exception during detection -> OpenCV(4.7.0-dev) /opt/opencv/modules/dnn/src/layers/cpu_kernels/conv_winograd_f63.cpp:401: error: (-215:Assertion failed) CONV_WINO_IBLOCK == 3 && CONV_WINO_KBLOCK == 4 && CONV_WINO_ATOM_F32 == 4 in function 'winofunc_BtXB_8x8_f32'
             if err_msg.find("-215:Assertion failed") > 0:
-                if (
-                    err_msg.find("CONV_WINO_IBLOCK == 3 && CONV_WINO_KBLOCK == 4")
-                    > 0
-                ):
+                if err_msg.find("CONV_WINO_IBLOCK == 3 && CONV_WINO_KBLOCK == 4") > 0:
                     _msg = (
                         f"{LP} OpenCV 4.7.x WEIRD bug detected! "
                         f"Please update to OpenCV 4.7.1+ or 4.6.0 or less!"
@@ -179,9 +195,7 @@ class CV2YOLODetector(CV2Base):
             processor=self.processor,
             name=self.name,
             results=[
-                Result(
-                    label=labels[i], confidence=confs[i], bounding_box=b_boxes[i]
-                )
+                Result(label=labels[i], confidence=confs[i], bounding_box=b_boxes[i])
                 for i in range(len(labels))
             ],
         )
