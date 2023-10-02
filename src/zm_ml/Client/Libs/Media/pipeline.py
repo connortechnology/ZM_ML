@@ -461,26 +461,27 @@ class ZMSImagePipeLine(PipeLine):
                 #     resp_msg = f" response code={api_response.status} - response={api_response}"
                 resp_msg = f" no response received!"
                 logger.warning(f"{lp} image was not retrieved!{resp_msg}")
-                await self._grab_event_data(msg="checking if event has ended...")
-                if self.event_ended:  # Assuming event has ended
-                    logger.debug(f"{lp} event has ended, checking OOB status...")
-                    # is current frame OOB
-                    if self.current_frame > self.event_tot_frames:
-                        # We are OOB, so we are done
+                if not g.past_event:
+                    await self._grab_event_data(msg="checking if event has ended...")
+                    if self.event_ended:  # Assuming event has ended
+                        logger.debug(f"{lp} event has ended, checking OOB status...")
+                        # is current frame OOB
+                        if self.current_frame > self.event_tot_frames:
+                            # We are OOB, so we are done
+                            logger.debug(
+                                f"{lp} we are OOB in a FINISHED event (current requested fid: {self.current_frame} > "
+                                f"total frames in event: {self.event_tot_frames})"
+                            )
+                            return self._process_frame(end=True)
+                    else:
                         logger.debug(
-                            f"{lp} we are OOB in a FINISHED event (current requested fid: {self.current_frame} > "
-                            f"total frames in event: {self.event_tot_frames})"
+                            f"{lp} event has not ended yet! TRYING AGAIN - Total Frames: {self.event_tot_frames}"
                         )
-                        return self._process_frame(end=True)
-                else:
-                    logger.debug(
-                        f"{lp} event has not ended yet! TRYING AGAIN - Total Frames: {self.event_tot_frames}"
-                    )
-                if not g.past_event and (image_grab_attempt < self.max_attempts):
-                    logger.debug(
-                        f"{lp} sleeping for {self.options.delay} second(s)"
-                    )
-                    sleep(self.options.delay)
+                    if image_grab_attempt < self.max_attempts:
+                        logger.debug(
+                            f"{lp} sleeping for {self.options.delay} second(s)"
+                        )
+                        sleep(self.options.delay)
             elif isinstance(api_response, bytes):
                 if api_response.startswith(b"\xff\xd8\xff"):
                     logger.debug(f"{lp} Response is a JPEG formatted image!")
