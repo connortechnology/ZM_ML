@@ -572,6 +572,7 @@ class ZMAPI:
         :param event_id: (int) the event ID to query.
         """
         lp: str = "api::get_all_event_data::"
+        _start = time.perf_counter()
         event: Optional[Dict] = None
         monitor: Optional[Dict] = None
         frame: Optional[List] = None
@@ -582,6 +583,9 @@ class ZMAPI:
         monitor = api_event_response.get("event", {}).get("Monitor")
         frame = api_event_response.get("event", {}).get("Frame")
         event_tot_frames = len(frame)
+        logger.debug(
+            f"{lp} got event data in {time.perf_counter() - _start:.04f} seconds",
+        )
         return event, monitor, frame, event_tot_frames
 
     @property
