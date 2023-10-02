@@ -37,9 +37,14 @@ class PipeLine:
             logger.debug(f"{LP}read>event_data: {msg}")
         if not self.event_ended or not g.Frame:
             try:
+                _start = time.perf_counter()
                 g.Event, g.Monitor, g.Frame, _ = await g.api.get_all_event_data(
                     g.eid
                 )
+                logger.debug(
+                    f"perf:{LP}read>event_data: API request took {time.perf_counter() - _start:.5f)} seconds"
+                )
+
             except Exception as e:
                 logger.error(f"{LP} error grabbing event data from API -> {e}")
                 # recurse
@@ -476,6 +481,11 @@ class ZMSImagePipeLine(PipeLine):
                                 f"total frames in event: {self.event_tot_frames})"
                             )
                             return self._process_frame(end=True)
+                        else:
+                            logger.debug(
+                                f"{lp} There are supposedly more frames in this event?"
+                            )
+
                     else:
                         logger.debug(
                             f"{lp} event has not ended yet! TRYING AGAIN - Total Frames: {self.event_tot_frames}"
