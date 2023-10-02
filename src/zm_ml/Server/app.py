@@ -249,8 +249,10 @@ async def detect(
 ) -> List[Optional[DetectionResults]]:
     available_models = get_global_config().available_models
     _model_hints = [normalize_id(model_hint) for model_hint in _model_hints]
-    logger.debug(f"threaded_detect: model_hints -> {_model_hints}")
+    # logger.debug(f"threaded_detect: model_hints -> {_model_hints}")
     detectors: List[APIDetector] = []
+    detections: List[Optional[List[DetectionResults]]] = []
+
     found_models = []
     for model in available_models:
         identifiers = {model.name, str(model.id)}
@@ -260,29 +262,52 @@ async def detect(
             detector = get_global_config().get_detector(model)
             detectors.append(detector)
             found_models.append(f"<'{model.name}' ({model.id})>")
-    logger.info(f"Found models: {found_models}")
-    images = [load_image_into_numpy_array(await image.read()) for image in images]
-    detections: List[List[DetectionResults]] = []
-    # logger.info(f"Detectors ({len(Detectors)}) -> {Detectors}")
-    #### async
-    for image in images:
-        img_dets = []
-        for detector in detectors:
-            # logger.info(f"Starting detection for {detector}")
-            img_dets.append(await detector.detect(image))
-        detections.append(img_dets)
-    ##### ThreadPool
-    # futures = []
-    # import concurrent.futures
-    #
-    # with concurrent.futures.ThreadPoolExecutor() as executor:
-    #     for image in images:
-    #         for detector in detectors:
-    #             # logger.info(f"Starting detection for {detector}")
-    #             futures.append(executor.submit(detector.detect, image))
-    # for future in futures:
-    #     detections.append(future.result())
-    # logger.info(f"{LP} ThreadPool detections -> {detections}")
+        else:
+            pass
+
+            # todo: implement this code to find closest string match
+            import difflib
+
+            def find_closest_strings(input_str, list_of_strs):
+                close_strings = difflib.get_close_matches(input_str, list_of_strs, n=3, cutoff=0.6)
+
+                if not close_strings:
+                    message = f"It looks like your input of '{input_str}' wasn't found, but it is close to these options: {', '.join(list_of_strs)}"
+                else:
+                    message = f"Found close strings: {', '.join(close_strings)}"
+
+                return message
+
+            # Example usage
+            list_of_strs = ['yolo-nas-l trt', 'yolo-nas-s trt', 'yolo-nas-m onnx']
+            input_str = 'yolo-nas-m trt'
+            result = find_closest_strings(input_str, list_of_strs)
+            print(result)
+
+    if found_models:
+        logger.info(f"Found models: {found_models}")
+        images = [load_image_into_numpy_array(await image.read()) for image in images]
+        for image in images:
+            img_dets = []
+            for detector in detectors:
+                # logger.info(f"Starting detection for {detector}")
+                img_dets.append(await detector.detect(image))
+            detections.append(img_dets)
+        ##### ThreadPool
+        # futures = []
+        # import concurrent.futures
+        #
+        # with concurrent.futures.ThreadPoolExecutor() as executor:
+        #     for image in images:
+        #         for detector in detectors:
+        #             # logger.info(f"Starting detection for {detector}")
+        #             futures.append(executor.submit(detector.detect, image))
+        # for future in futures:
+        #     detections.append(future.result())
+        # logger.info(f"{LP} ThreadPool detections -> {detections}")
+    else:
+        # return supplied images
+        images = [x.read() for x in images]
     if return_image:
         return detections, images
     return detections
@@ -595,7 +620,7 @@ async def get_annotated_image2(
 )
 async def run_detection(
     user_obj=Depends(verify_token),
-    hints_model: List[str] = Body(
+    hints_model: List[Optional[str]] = Body(
         ...,
         description="List of model names/UUIDs",
         example="yolov4,97acd7d4-270c-4667-9d56-910e1510e8e8,yolov7 tiny",
@@ -606,6 +631,8 @@ async def run_detection(
     start = time.perf_counter()
     if not images:
         raise HTTPException(status_code=400, detail="No image(s) provided")
+    split_hints: Optional[List[str]] = None
+    orig_hints = list(hints_model)
     if hints_model:
         if isinstance(hints_model, str):
             # decode from json
@@ -623,16 +650,17 @@ async def run_detection(
 
         if len(hints_model) == 1:
             split_hints = hints_model[0].split(",")
-            logger.debug(f"{split_hints = }")
             if len(split_hints) > 0:
                 hints_model = split_hints
-        logger.debug(f"FINAL: {hints_model = }")
+        logger.debug(f"FINAL: hints: {hints_model } -- {split_hints = } -- orig: {orig_hints}")
         detections = await detect(hints_model, images)
-        logger.debug(f"{LP}DBG>>> /detect results: {detections}")
+        if detections:
+            logger.debug(f"{LP} /detect results: {detections}")
+        else:
+            logger.debug(f"{LP} /detect NO RESULTS!")
     else:
         detections = {"error": "No models specified"}
-    end = time.perf_counter()
-    logger.info(f"perf:{LP} /detect took {end - start:.5f} s")
+    logger.info(f"perf:{LP} /detect took {time.perf_counter() - start:.5f} s")
     return detections
 
 

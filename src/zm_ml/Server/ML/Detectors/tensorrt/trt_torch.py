@@ -59,9 +59,11 @@ if TYPE_CHECKING:
 g: Optional[GlobalConfig] = None
 LP: str = "TRT:torch::"
 
+if trt is not None:
+    from .trt_base import TrtLogger
+
 
 class TensorRtTorchDetector(FileLock):
-    from .trt_base import TensorRtDetector
 
     class TRTModule(torch.nn.Module):
         dtypeMapping = {
@@ -251,7 +253,7 @@ class TensorRtTorchDetector(FileLock):
 
         self.conf_th = self.options.confidence
         self.nms_threshold = self.options.nms
-        self.trt_logger: TensorRtTorchDetector.TensorRtDetector.TrtLogger = self.TensorRtDetector.TrtLogger()
+        self.trt_logger: TrtLogger = TrtLogger()
         logger.debug(f"{LP} about to call _load_engine()")
 
         self.engine = self.TRTModule(self.config.input, self.device)
@@ -286,8 +288,8 @@ class TensorRtTorchDetector(FileLock):
             # if no bounding box
             logger.debug(f'{LP} no object!')
             return DetectionResults()
-        bboxes -= dwdh
-        bboxes /= ratio
+        # bboxes -= dwdh
+        # bboxes /= ratio
 
     def _postprocess(self, data: Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]):
         assert len(data) == 4

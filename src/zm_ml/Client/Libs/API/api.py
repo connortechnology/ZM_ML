@@ -666,23 +666,22 @@ class ZMAPI:
                     _resp = await resp.text()
 
                 elif content_type.startswith("multipart/x-mixed-replace"):
-                    logger.debug(
-                        f"{lp} Content-Type='{content_type}' (ZMS CGI?)"
-                    )
-                    logger.debug(f"DBG FOR ZMS >>>>> HEADERS: {resp.headers}")
+                    # logger.debug(
+                    #     f"{lp} Content-Type='{content_type}' (ZMS CGI?)"
+                    # )
 
                     if "boundary=" in content_type:
                         boundary = f"{content_type.split('boundary=')[1]}".encode()
-                        logger.debug(
-                            f"{lp} boundary found in content-type header: {boundary}"
-                        )
+                        # logger.debug(
+                        #     f"{lp} boundary found in content-type header: {boundary}"
+                        # )
                         # RFC calls for a leading '--' on the boundary
                         boundary = b"--" + boundary
 
                     if transfer_encoding == "chunked":
-                        logger.debug(
-                            f"{lp} 'Transfer-Encoding'={transfer_encoding}, iterating chunks"
-                        )
+                        # logger.debug(
+                        #     f"{lp} 'Transfer-Encoding'={transfer_encoding}, iterating chunks"
+                        # )
                         chunk_size = 1024
                         _resp = b""
                         _begin = False
@@ -716,24 +715,16 @@ class ZMAPI:
                     # example_response = b"Content-Type: image/jpeg\r\nContent-Length: 373781\r\n\r\n\xff\xd8\xff\xe0"
 
                     if _resp:
-                        # only show the first 100 chars if it is that long
-                        logger.debug(
-                            f"{lp} DBG>>> ZMS CGI response: {_resp[:min(100, len(_resp)-1)]}"
-                        )
                         # remove boundary from response
                         if boundary:
                             if _resp.startswith(boundary):
                                 _resp = _resp.split(boundary + b"\r\n")[1]
-                                logger.debug(
-                                    f"{lp} stripping out boundary from response ---- AFTER: {_resp[:min(100, len(_resp) - 1)]}"
-                                )
                         # b'--ZoneMinderFrame\r\nContent-Typ
                         #   e: image/jpeg\r\nContent-Length: 134116\r\n\r\n\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xdb\x00C\x00\n\
                         #   x07\x07\x08'
                         if _resp.startswith(b'Content-Type: image/jpeg'):
                             split_resp = _resp.split(b"\r\n\r\n")
-                            logger.debug(f"{lp} stripping out nph headers from response - {len(split_resp) = }")
-                            logger.debug(f"{lp} {[ x[min(75, len(x)-1)] for x in split_resp if x ]}")
+                            # logger.debug(f"{lp} stripping out nph headers from response - {len(split_resp) = }")
                             if len(split_resp)>= 2:
                                 nph_headers, _resp = split_resp[:2]
                                 if nph_headers:
@@ -747,19 +738,12 @@ class ZMAPI:
                                         and nph_headers["Content-Type"]
                                     ):
                                         content_type = nph_headers["Content-Type"]
-                                        logger.debug(
-                                            f"{lp} DBG>>> UPDATING 'content-type' header with nph response - "
-                                            f"{content_type}"
-                                        )
 
                                     if "Content-Length" in nph_headers:
                                         content_length = int(nph_headers["Content-Length"])
-                                        logger.debug(
-                                            f"{lp} DBG>>> UPDATING 'content-length' headers with nph response - "
-                                            f"{content_length}"
-                                        )
                     else:
-                        logger.warning(f"{lp} no response from ZMS CGI? {_resp = }")
+                        # logger.warning(f"{lp} no response from ZMS CGI? {_resp = }")
+                        pass
 
                 else:
                     _resp = await resp.read()

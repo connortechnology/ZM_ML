@@ -763,7 +763,11 @@ class ZMClient:
                 cause = self.db.cause_from_eid(eid)
                 _cont = True
                 if cause:
-                    if cause.find("Motion") == -1 and cause.find("Trigger") == -1 and cause.find("ONVIF"):
+                    if (
+                        cause.find("Motion") == -1
+                        and cause.find("Trigger") == -1
+                        and cause.find("ONVIF")
+                    ):
                         _cont = False
                     else:
                         _cont = True
@@ -929,8 +933,23 @@ class ZMClient:
         image_loop = 0
         # todo: add relogin logic if the token is rejected.
         # Use an async generator to get images from the image pipeline
+        break_out: bool = False
+        image_start: perf_counter = perf_counter()
         async for image, image_name in self.image_pipeline.image_generator():
             image_loop += 1
+            if break_out is True:
+                logger.debug(
+                    f"perf:{LP} IMAGE LOOP #{image_loop} ({image_name}) took {perf_counter() - image_start:.5f} s"
+                )
+                break
+
+            if strategy == MatchStrategy.first and matched_l:
+                logger.debug(
+                    f"Strategy is 'first' and there is a filtered match, breaking out of IMAGE loop {image_loop}"
+                )
+                break_out = True
+                continue
+
             if image is None:
                 # None is returned if no image was returned by API
                 logger.warning(f"{lp} No image returned! trying again...")
@@ -1057,7 +1076,7 @@ class ZMClient:
                     continue
 
             logger.debug(
-                f"{lp}perf:: HTTP Detection request to '{route.name}' completed in "
+                f"perf:{lp} Detection request to '{route.name}' completed in "
                 f"{perf_counter() - _perf:.5f} seconds"
             )
 
@@ -1090,8 +1109,17 @@ class ZMClient:
                 result: DetectionResults
                 for result in results:
                     res_loop += 1
+                    if break_out is True:
+                        continue
+                    if strategy == MatchStrategy.first and matched_l:
+                        logger.debug(
+                            f"Strategy is 'first' and there is a filtered match, breaking out of RESULT loop {res_loop}"
+                        )
+                        break_out = True
+                        continue
+
                     logger.debug(
-                        f"{LP} starting to process results from model: {result.name}"
+                        f"{LP} starting to process results from model: '{result.name}'"
                     )
 
                     if result.success is True:
@@ -1187,33 +1215,22 @@ class ZMClient:
                             final_detections[str(image_name)].append(filtered_result)
 
                         logger.debug(
-                            f"perf:: Filtering for {image_name}:{result.name} took "
+                            f"perf:{LP} Filtering for model: '{result.name}' image name: {image_name} took "
                             f"{perf_counter() - filter_start:.5f} seconds"
                         )
 
                     else:
-                        logger.warning(f"Result was not successful, not filtering")
+                        logger.warning(f"{LP} Result was not successful, not filtering")
 
-                    if strategy == MatchStrategy.first and matched_l:
-                        logger.debug(
-                            f"Strategy is 'first' and there is a filtered match, breaking RESULT "
-                            f"LOOP {res_loop}"
-                        )
-                        break
-                if strategy == MatchStrategy.first and matched_l:
-                    logger.debug(
-                        f"Strategy is 'first' and there is a filtered match, breaking IMAGE loop {image_loop}"
-                    )
-                    break
+            logger.debug(
+                f"perf:{LP} IMAGE #{image_loop} ({image_name}) TOTAL: took {perf_counter() - image_start:.5f} seconds"
+            )
+            image_start = perf_counter()
 
-            if strategy == MatchStrategy.first and matched_l:
-                logger.debug(
-                    f"Strategy is 'first' and there is a filtered match, breaking out of image loop {image_loop}"
-                )
-                break
-        logger.debug(f"{lp} OUT OF IMAGE GENERATOR LOOP")
+
         logger.debug(
-            f"perf:: MID: {g.mid} :: Total detections time {perf_counter() - _start:.5f} seconds"
+            f"perf:{LP} Camera: '{g.mon_name}' (ID: {g.mid}) :: TOTAL detections took "
+            f"{perf_counter() - _start:.5f} seconds"
         )
         # logger.debug(f"\n\n\nFINAL RESULTS: {final_detections}\n\n\n")
         if matched_l:

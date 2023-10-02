@@ -481,6 +481,8 @@ class TensorRtDetector(FileLock):
         if output:
             # Fixme: allow for custom class length (80 is for COCO)
             output_shape = [o.shape for o in output]
+            # prettrained: (1, 84, 8400)  --- v8
+            # dfo with 2 classes and 1 background: (1, 6, 8400) --- v8
             legacy_shape = [(1, 8400, 4), (1, 8400, 80)]
             new_flat_shape = [(1, 8400, 80), (1, 8400, 4)]
             num_outputs = len(output)
@@ -493,21 +495,18 @@ class TensorRtDetector(FileLock):
                 if isinstance(output[0], np.ndarray):
                     # prettrained: (1, 84, 8400)
                     # dfo with 2 classes and 1 background: (1, 6, 8400)
-                    if output[0].shape == (1, 84, 8400):
+                    if output[0].shape[0] == 1 and output[0].shape[2] == 8400:
                         # v8
                         # (1, 84, 8400) -> (8400, 84)
                         predictions = np.squeeze(output[0]).T
                         logger.debug(
-                            f"{LP} yolov8 output shape = (1, <X>, 8400) detected!"
+                            f"{LP} '{self.name}' yolov8 output shape = (1, <X>, 8400) detected!"
                         )
                         # logger.debug(f"{LP} predictions.shape = {predictions.shape} --- {predictions =}")
                         # Filter out object confidence scores below threshold
                         scores = np.max(predictions[:, 4:], axis=1)
 
                         if len(scores) == 0:
-                            logger.debug(
-                                f"{LP} '{self.name}' no scores above confidence threshold"
-                            )
                             return_empty = True
 
                         # Get bounding boxes for each object
@@ -619,7 +618,7 @@ class TensorRtDetector(FileLock):
         """Extract boxes from predictions, scale them and convert from xywh to xyxy format"""
         # Extract boxes from predictions
         boxes = predictions[:, :4]
-        logger.debug(f"{LP} {boxes.shape = }")
+        logger.debug(f"{LP} '{self.name}' {boxes.shape = }")
         # Scale boxes to original image dimensions
         boxes = self.rescale_boxes(boxes)
         # Convert boxes to xyxy format
