@@ -423,7 +423,9 @@ async def get_annotated_image(
                 if detection and isinstance(detection, DetectionResults):
                     rand_color = random.randrange(len(SLATE_COLORS) - 1)
                     rand_color2 = random.randrange(len(SLATE_COLORS) - 1)
-                    logger.debug(f"DBG>>> ANNOTATE: colors chosen randomly: {rand_color} {rand_color2}")
+                    logger.debug(
+                        f"DBG>>> ANNOTATE: colors chosen randomly: {rand_color} {rand_color2}"
+                    )
                     logger.debug(
                         f"DBG>>> ANNOTATE:detection: is a DetectionResults object, num results: {len(detection.results)}"
                     )
@@ -602,12 +604,29 @@ async def run_detection(
 ):
     """FastAPI endpoint. Detect objects in images using a set of threaded models referenced by name/UUID"""
     start = time.perf_counter()
+    if not images:
+        raise HTTPException(status_code=400, detail="No image(s) provided")
     if hints_model:
-        hints_model = [hint.strip("'").strip('"').strip() for hint in hints_model]
+        if isinstance(hints_model, str):
+            # decode from json
+            if hints_model.startswith('['):
+                hints_model = json.loads(hints_model)
+        elif isinstance(hints_model, list):
+            if len(hints_model):
+                if hints_model[0].startswith("["):
+                    hints_model = json.loads(hints_model[0])
+                else:
+                    hints_model = [
+                        hint.strip("'").strip('"').strip().lstrip("[").rstrip("]")
+                        for hint in hints_model
+                    ]
+
         if len(hints_model) == 1:
             split_hints = hints_model[0].split(",")
-            if len(split_hints) > 1:
+            logger.debug(f"{split_hints = }")
+            if len(split_hints) > 0:
                 hints_model = split_hints
+        logger.debug(f"FINAL: {hints_model = }")
         detections = await detect(hints_model, images)
         logger.debug(f"{LP}DBG>>> /detect results: {detections}")
     else:
@@ -727,9 +746,7 @@ class MLAPI:
         forward_ips = self.cached_settings.uvicorn.forwarded_allow_ips
         forwarded_allow = []
         if forward_ips:
-            forwarded_allow = [
-                str(x) for x in forward_ips if x
-            ]
+            forwarded_allow = [str(x) for x in forward_ips if x]
             logger.debug(f"Added {len(forwarded_allow)} forwarded_allow hosts")
         if self.cached_settings.uvicorn.grab_cloudflare_ips:
             forwarded_allow += self._get_cf_ip_list()
@@ -801,8 +818,6 @@ async def login_for_access_token(
 
     if not user:
         raise credentials_exception
-    access_token = create_access_token(
-        data={"sub": user.username}
-    )
+    access_token = create_access_token(data={"sub": user.username})
 
     return access_token
