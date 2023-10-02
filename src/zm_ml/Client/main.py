@@ -788,10 +788,16 @@ class ZMClient:
                 f"ZMU: {g.config.detection_settings.images.pull_method}"
             )
             g.mid = mid
-
+        __start = perf_counter()
         await init_logs(g.config)
+        logger.debug(
+            f"perf:MAIN:: log init took {perf_counter() - __start:.5f} seconds to complete"
+        )
+        __start = perf_counter()
         await self.api.import_zones()
-
+        logger.debug(
+            f"perf:MAIN:: zone import took {perf_counter() - __start:.5f} seconds to complete"
+        )
         self.static_objects.filename = (
             g.config.system.variable_data_path / f"static-objects_m{g.mid}.pkl"
         )

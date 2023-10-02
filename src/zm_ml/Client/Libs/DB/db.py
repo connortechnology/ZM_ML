@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import glob
 import logging
+import time
 from configparser import ConfigParser, SectionProxy
 from datetime import datetime
 from decimal import Decimal
@@ -117,9 +118,9 @@ class ZMDB:
                 logger.error(f"{LP} error opening ZoneMinder .conf files: {exc}")
             else:
                 logger.debug(f"{LP} ZoneMinder .conf files -> {files}")
-                for section in config_file.sections():
-                    for key, value in config_file.items(section):
-                        logger.debug(f"{section} >>> {key} = {value}")
+                # for section in config_file.sections():
+                #     for key, value in config_file.items(section):
+                #         logger.debug(f"{section} >>> {key} = {value}")
                 return config_file["zm_root"]
 
     def init_config(self):
@@ -471,6 +472,7 @@ class ZMDB:
 
     def grab_all(self, eid: int) -> Tuple[int, str, int, int, Decimal, str, str]:
         """FIX ME!!!! A hammer to grab all the data from the DB for a given event ID"""
+        _start = time.perf_counter()
         event_exists: bool = self.eid_exists(eid)
         if not event_exists:
             raise ValueError(f"Event ID {eid} does not exist in ZoneMinder DB")
@@ -608,7 +610,7 @@ class ZMDB:
         else:
             logger.warning(f"{LP} could not calculate the storage path for this event!")
 
-        logger.debug(f"{LP} DB info -> {final_str.rstrip()}")
+        logger.debug(f"perf:{LP} Grabbing DB info took {time.perf_counter() - _start:.5f} s ----> {final_str.rstrip()}")
         return (
             mid,
             mon_name,
