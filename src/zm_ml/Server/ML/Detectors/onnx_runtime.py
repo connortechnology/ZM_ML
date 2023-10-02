@@ -323,19 +323,14 @@ class ORTDetector(FileLock):
 
         if return_empty:
             return [], [], []
-        logger.debug(
-            f"{LP} BEFORE NMS - {type(boxes) = } - {type(scores) = } - {type(class_ids) = }"
-        )
         indices = cv2.dnn.NMSBoxes(
             boxes, scores, self.options.confidence, self.options.nms
         )
         if len(indices) == 0:
-            logger.warning(
-                f"{LP} '{self.name}' no indices returned from NMSBoxes, returning top 10 boxes by confidence"
+            logger.debug(
+                f"{LP} no detections after filter by NMS ({self.options.nms}) and confidence ({self.options.confidence})"
             )
-            boxes = boxes[np.argsort(scores)[::-1]][:10]
-            scores = scores[np.argsort(scores)[::-1]][:10]
-            class_ids = class_ids[np.argsort(scores)[::-1]][:10]
+            return [], [], []
         else:
             logger.debug(f"{LP} '{self.name}' NMS indices: {indices =}")
             boxes = (boxes[indices],)
