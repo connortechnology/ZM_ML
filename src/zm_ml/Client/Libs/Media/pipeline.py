@@ -467,7 +467,7 @@ class ZMSImagePipeLine(PipeLine):
                 if not g.past_event:
                     await self._grab_event_data(msg="checking if event has ended...")
                     if self.event_ended:  # Assuming event has ended
-                        logger.debug(f"{lp} event has ended, checking OOB status...")
+                        logger.debug(f"{lp} event has ended, checking OOB status... {self.current_frame = } -- {self.event_tot_frames = } -- {self.current_frame > self.event_tot_frames = }")
                         # is current frame OOB
                         if self.current_frame > self.event_tot_frames:
                             # We are OOB, so we are done
@@ -485,6 +485,8 @@ class ZMSImagePipeLine(PipeLine):
                             f"{lp} sleeping for {self.options.delay} second(s)"
                         )
                         sleep(self.options.delay)
+                else:
+                    pass
             elif isinstance(api_response, bytes):
                 if api_response.startswith(b"\xff\xd8\xff"):
                     logger.debug(f"{lp} Response is a JPEG formatted image!")

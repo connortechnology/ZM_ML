@@ -787,9 +787,11 @@ class ZMClient:
                 f"perf:MAIN:: get_monitor_data took {perf_counter() - _start_1:.5f} seconds to complete"
             )
             _start_1 = perf_counter()
+
+            # FIXME: Use DB instead as this takes 3 seconds.....
             g.Event, _, g.Frame, _ = await self.api.get_all_event_data(eid)
             logger.debug(
-                f"perf:MAIN:: get_all_event_data took {perf_counter() - _start_1:.5f} seconds to complete"
+                f"\n\nperf:MAIN:: get_all_event_data took {perf_counter() - _start_1:.5f} seconds to complete\n"
             )
         elif not eid and mid:
             logger.info(
@@ -797,15 +799,15 @@ class ZMClient:
                 f"ZMU: {g.config.detection_settings.images.pull_method}"
             )
             g.mid = mid
-        __start = perf_counter()
+        _start_1 = perf_counter()
         await init_logs(g.config)
         logger.debug(
-            f"perf:MAIN:: log init took {perf_counter() - __start:.5f} seconds to complete"
+            f"perf:MAIN:: log init took {perf_counter() - _start_1:.5f} seconds to complete"
         )
-        __start = perf_counter()
+        _start_1 = perf_counter()
         await self.api.import_zones()
         logger.debug(
-            f"perf:MAIN:: zone import took {perf_counter() - __start:.5f} seconds to complete"
+            f"perf:MAIN:: zone import took {perf_counter() - _start_1:.5f} seconds to complete"
         )
         self.static_objects.filename = (
             g.config.system.variable_data_path / f"static-objects_m{g.mid}.pkl"
