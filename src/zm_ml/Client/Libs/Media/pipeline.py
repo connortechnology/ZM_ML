@@ -387,7 +387,10 @@ class ZMSImagePipeLine(PipeLine):
         self.url: Optional[str] = str(options.url) if options.url else None
         logger.debug(f"{lp} options: {self.options}")
 
-        self.max_attempts = options.attempts
+        self.max_attempts = 1
+        if not g.past_event:
+            self.max_attempts = options.attempts
+
         self.max_attempts_delay = options.delay
         self.sbf: Optional[int] = self.options.sbf
         self.fps: Optional[int] = self.options.fps
