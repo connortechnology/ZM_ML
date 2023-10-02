@@ -757,6 +757,7 @@ class ZMClient:
             logger.info(
                 f"{lp} Running detection for event {eid}, obtaining monitor info using DB and API..."
             )
+
             await self._get_db_data(eid)
             # Check that the cause from db has "Motion" or "Trigger" in it
             if g.config.detection_settings.motion_only is True:
@@ -780,8 +781,16 @@ class ZMClient:
                     )
                     return None
 
+            _start_1 = perf_counter()
             g.Monitor = await self.api.get_monitor_data(g.mid)
+            logger.debug(
+                f"perf:MAIN:: get_monitor_data took {perf_counter() - _start_1:.5f} seconds to complete"
+            )
+            _start_1 = perf_counter()
             g.Event, _, g.Frame, _ = await self.api.get_all_event_data(eid)
+            logger.debug(
+                f"perf:MAIN:: get_all_event_data took {perf_counter() - _start_1:.5f} seconds to complete"
+            )
         elif not eid and mid:
             logger.info(
                 f"{lp} Running detection for monitor {mid}, image pull method should be SHM or "
