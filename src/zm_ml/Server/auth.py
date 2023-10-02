@@ -199,7 +199,7 @@ class UserDB:
         logger.debug(f"{lp} Requested for: {username}")
 
         # check if the user exists
-        if self.get_user(username):
+        if self.table.contains(tinydb.Query().username == username):
             logger.warning(f"{lp} User {username} already exists, use update to change password or use enable/disable")
             return False
 
