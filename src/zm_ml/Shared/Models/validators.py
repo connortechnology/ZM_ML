@@ -98,7 +98,7 @@ def str2path(v: Union[str, Path, None], info: Optional[FieldValidationInfo] = No
     return v
 
 
-def validate_dir(v, info: FieldValidationInfo):
+def validate_dir(v, info: Optional[FieldValidationInfo] = None):
     if v:
         v = str2path(v, info)
         assert v.exists(), f"Path [{v}] does not exist"
@@ -106,7 +106,7 @@ def validate_dir(v, info: FieldValidationInfo):
     return v
 
 
-def validate_file(v, info: FieldValidationInfo):
+def validate_file(v, info: Optional[FieldValidationInfo] = None):
     if v:
         v = str2path(v, info)
         assert v.exists(), f"Path [{v}] does not exist"
