@@ -310,7 +310,7 @@ class APIImagePipeLine(PipeLine):
         fid_url = f"{portal_url}/index.php?view=image&eid={g.eid}&fid={self.current_frame}"
         timeout = g.config.detection_settings.images.pull_method.api.timeout or 15
 
-        async for image_grab_attempt in range(self.max_attempts):
+        for image_grab_attempt in range(self.max_attempts):
             image_grab_attempt += 1
             logger.debug(
                 f"{lp} attempt #{image_grab_attempt}/{self.max_attempts} to grab image ID: {self.current_frame}"
