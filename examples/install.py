@@ -1137,7 +1137,7 @@ def main():
         ],
     )
     install_dirs(
-        DEFAULT_DATA_DIR + "/face_data", "Face Data", sub_dirs=["known", "unknown"]
+        DEFAULT_DATA_DIR + "/face_data", DEFAULT_DATA_DIR, "Face Data", sub_dirs=["known", "unknown"]
     )
     install_dirs(
         cfg_dir, DEFAULT_CONFIG_DIR, "Config", sub_dirs=[], perms=cfg_create_mode
