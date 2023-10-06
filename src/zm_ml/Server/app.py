@@ -783,8 +783,11 @@ class MLAPI:
             )
         _proxy_headers = get_global_config().config.uvicorn.proxy_headers
         # logger.debug(f"\n\nforwarded_allow: {forwarded_allow}\n\n{_proxy_headers = }\n")
-        for model in get_global_config().available_models:
-            _avail[normalize_id(model.name)] = str(model.id)
+
+        available_modes = get_global_config().available_models
+        if available_models is not None:
+            for model in get_global_config().available_models:
+                _avail[normalize_id(model.name)] = str(model.id)
         logger.info(f"AVAILABLE MODELS! --> {_avail}")
         server_cfg = get_global_config().config.server
         logger.debug(f"Server Config: {server_cfg}")
