@@ -784,7 +784,7 @@ class MLAPI:
         _proxy_headers = get_global_config().config.uvicorn.proxy_headers
         # logger.debug(f"\n\nforwarded_allow: {forwarded_allow}\n\n{_proxy_headers = }\n")
 
-        available_modes = get_global_config().available_models
+        available_models = get_global_config().available_models
         if available_models is not None:
             for model in get_global_config().available_models:
                 _avail[normalize_id(model.name)] = str(model.id)
