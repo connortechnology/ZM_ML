@@ -218,11 +218,13 @@ class UserDB:
             )
         else:
             logger.info(f"{lp} Created user {username}")
-            # remove the default user, if in db
-            if self.get_user(DFLT_USER_UNAME):
-                logger.info(f"{lp} ANTI LOCKOUT RULE!!! There are other entries in the DB, so there is no need to "
-                            f"keep the default user. Removing default user: {DFLT_USER_UNAME}")
-                self.delete_user(DFLT_USER_UNAME)
+            # how many entried in db?
+            if len(self.table.all()) > 1:
+                # remove the default user, if in db
+                if self.get_user(DFLT_USER_UNAME):
+                    logger.info(f"{lp} ANTI LOCKOUT RULE!!! There are other entries in the DB, so there is no need to "
+                                f"keep the default user. Removing default user: {DFLT_USER_UNAME}")
+                    self.delete_user(DFLT_USER_UNAME)
 
             return True
         return False
