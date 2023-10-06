@@ -1434,14 +1434,13 @@ class GlobalConfig(BaseModel, arbitrary_types_allowed=True):
 
     def create_detector(self, model: BaseModelConfig) -> Optional[APIDetector]:
         logger.debug(f"Attempting to create new detector for '{model.name}'")
+        ret_ = None
         try:
             ret_ = APIDetector(model)
         except ImportError as e:
             logger.warning(e, exc_info=True)
-            _ret = None
         except Exception as e:
             logger.error(e, exc_info=True)
-            _ret = None
         else:
             self.detectors.append(ret_)
 
